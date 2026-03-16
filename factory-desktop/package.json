@@ -1,0 +1,49 @@
+{
+  "name": "factory-desktop",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "Factory Management Desktop App (Electron)",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^28.2.3",
+    "electron-builder": "^24.6.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7",
+    "electron-is-dev": "^2.0.0"
+  },
+  "build": {
+    "appId": "com.factory.desktop",
+    "productName": "Factory Desktop",
+    "files": [
+      "main.js",
+      "../factory-api/**",
+      "../factory-client/build/**"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "extraResources": [
+      {
+        "from": "../factory-api",
+        "to": "factory-api"
+      },
+      {
+        "from": "../factory-client/build",
+        "to": "factory-client/build"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

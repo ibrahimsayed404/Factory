@@ -1,0 +1,31 @@
+{
+  "name": "factory-api",
+  "version": "1.0.0",
+  "description": "Clothes Factory Management System API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "db:ensure": "node scripts/ensure-db.js",
+    "bootstrap:admin": "node scripts/bootstrap-admin.js",
+    "migrate": "npm run db:ensure && node scripts/run-migration.js",
+    "test": "jest --runInBand",
+    "test:integration": "node scripts/ensure-db.js test && jest tests/integration --runInBand"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.0",
+    "multer": "^2.1.1",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "supertest": "^7.1.0"
+  }
+}

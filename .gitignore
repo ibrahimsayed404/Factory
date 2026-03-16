@@ -1,0 +1,10 @@
+node_modules/
+build/
+dist/
+!.gitignore
+factory-desktop/dist/Factory Desktop Setup *.exe
+.env
+.DS_Store
+*.log
+uploads/
+nssm-2.24/
