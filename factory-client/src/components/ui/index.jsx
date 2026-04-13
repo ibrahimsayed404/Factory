@@ -81,49 +81,60 @@ export const Card = ({ children, style, padding = '20px' }) => (
 );
 
 /* ── Input ──────────────────────────────────────────────── */
-export const Input = ({ label, ...props }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-    {label && <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</label>}
-    <input
-      {...props}
-      style={{
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        color: 'var(--text-primary)',
-        padding: '8px 11px',
-        fontSize: 13,
-        width: '100%',
-        transition: 'border .15s',
-        ...props.style,
-      }}
-      onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-      onBlur={e => e.target.style.borderColor = 'var(--border)'}
-    />
-  </div>
-);
+import { useId } from 'react';
+export const Input = ({ label, id, ...props }) => {
+  const autoId = useId();
+  const inputId = id || autoId;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {label && <label htmlFor={inputId} style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</label>}
+      <input
+        id={inputId}
+        {...props}
+        style={{
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          color: 'var(--text-primary)',
+          padding: '8px 11px',
+          fontSize: 13,
+          width: '100%',
+          transition: 'border .15s',
+          ...props.style,
+        }}
+        onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+        onBlur={e => e.target.style.borderColor = 'var(--border)'}
+      />
+    </div>
+  );
+};
 
 /* ── Select ─────────────────────────────────────────────── */
-export const Select = ({ label, children, ...props }) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-    {label && <label style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</label>}
-    <select
-      {...props}
-      style={{
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        color: 'var(--text-primary)',
-        padding: '8px 11px',
-        fontSize: 13,
-        width: '100%',
-        ...props.style,
-      }}
-    >
-      {children}
-    </select>
-  </div>
-);
+export const Select = ({ label, id, children, ...props }) => {
+  const autoId = useId();
+  const selectId = id || autoId;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      {label && <label htmlFor={selectId} style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</label>}
+      <select
+        id={selectId}
+        {...props}
+        style={{
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          color: 'var(--text-primary)',
+          padding: '8px 11px',
+          fontSize: 13,
+          width: '100%',
+          ...props.style,
+        }}
+      >
+        {children}
+      </select>
+    </div>
+  );
+};
 
 /* ── Table ──────────────────────────────────────────────── */
 export const Table = ({ columns, data, onRowClick, emptyMsg = 'No records found' }) => (
@@ -195,35 +206,64 @@ export const PageHeader = ({ title, subtitle, action }) => (
 );
 
 /* ── Modal ──────────────────────────────────────────────── */
-export const Modal = ({ title, onClose, children, width = 480 }) => (
-  <div style={{
-    position: 'fixed', inset: 0, zIndex: 100,
-    background: 'rgba(0,0,0,0.6)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 20,
-  }} onClick={onClose}>
-    <div style={{
-      background: 'var(--bg-surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-lg)',
-      width: '100%', maxWidth: width,
-      maxHeight: '90vh', overflowY: 'auto',
-    }} onClick={e => e.stopPropagation()}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '16px 20px', borderBottom: '1px solid var(--border)',
-      }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600 }}>{title}</h2>
-        <button onClick={onClose} style={{ background: 'none', color: 'var(--text-secondary)', fontSize: 18, cursor: 'pointer' }}>✕</button>
+import { useRef, useEffect } from 'react';
+
+export const Modal = ({ title, onClose, children, width = 480 }) => {
+  const modalRef = useRef(null);
+  useEffect(() => {
+    // Focus the first focusable element in the modal
+    if (modalRef.current) {
+      const focusable = modalRef.current.querySelector(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable) focusable.focus();
+    }
+  }, []);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        ref={modalRef}
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          width: '100%', maxWidth: width,
+          maxHeight: '90vh', overflowY: 'auto',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid var(--border)',
+        }}>
+          <h2 id="modal-title" style={{ fontSize: 15, fontWeight: 600 }}>{title}</h2>
+            <button onClick={onClose} aria-label="Close modal" style={{ background: 'none', color: 'var(--text-secondary)', fontSize: 18, cursor: 'pointer' }}>&times;</button>
+        </div>
+        <div style={{ padding: 20 }}>{children}</div>
       </div>
-      <div style={{ padding: 20 }}>{children}</div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ── Spinner ────────────────────────────────────────────── */
 export const Spinner = () => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+  <div
+    role="status"
+    aria-live="polite"
+    aria-label="Loading"
+    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}
+  >
     <div style={{
       width: 28, height: 28, borderRadius: '50%',
       border: '2px solid var(--border)',
@@ -236,7 +276,11 @@ export const Spinner = () => (
 
 /* ── ErrorMsg ───────────────────────────────────────────── */
 export const ErrorMsg = ({ msg }) => (
-  <div style={{ padding: '12px 16px', background: 'var(--danger-dim)', color: 'var(--danger)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
+  <div
+    role="alert"
+    aria-live="assertive"
+    style={{ padding: '12px 16px', background: 'var(--danger-dim)', color: 'var(--danger)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}
+  >
     {msg}
   </div>
 );

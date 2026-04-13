@@ -76,7 +76,7 @@ export default function Employees() {
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState(null);
+  const [formError, setFormError] = useState('');
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setShowModal(true); };
   const openEdit = (emp) => {
@@ -91,9 +91,24 @@ export default function Employees() {
     setShowModal(true);
   };
 
+  const validateForm = () => {
+    if (!form.name.trim()) return 'Name is required.';
+    if (!form.department_id) return 'Department is required.';
+    if (!form.shift) return 'Shift is required.';
+    if (!form.shift_start) return 'Shift start is required.';
+    if (!form.shift_end) return 'Shift end is required.';
+    if (form.salary !== '' && (isNaN(Number(form.salary)) || Number(form.salary) < 0)) return 'Salary must be a non-negative number.';
+    return '';
+  };
+
   const handleSave = async () => {
+    setFormError('');
+    const err = validateForm();
+    if (err) {
+      setFormError(err);
+      return;
+    }
     setSaving(true);
-    setSaveError(null);
     // Convert empty numeric fields to null
     const cleanForm = {
       ...form,
@@ -103,20 +118,28 @@ export default function Employees() {
     try {
       if (editing) await employeeApi.update(editing, cleanForm);
       else await employeeApi.create(cleanForm);
-      setShowModal(false); refetch();
+      setShowModal(false);
+      setForm(emptyForm);
+      await refetch();
     } catch (err) {
       let msg = err?.message || 'Failed to save employee.';
       if (err?.response?.data?.error) msg = err.response.data.error;
-      setSaveError(msg);
+      setFormError(msg);
     } finally {
       setSaving(false);
     }
   };
 
+  const [deletingId, setDeletingId] = useState(null);
   const handleDelete = async (id) => {
     if (!window.confirm('Remove this employee?')) return;
-    await employeeApi.delete(id);
-    refetch();
+    setDeletingId(id);
+    try {
+      await employeeApi.delete(id);
+      refetch();
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const f = v => e => setForm({ ...form, [v]: e.target.value });
@@ -130,7 +153,7 @@ export default function Employees() {
   };
 
   const columns = [
-    { key: 'name', label: 'Name', render: (v, row) => (
+    { key: 'name', label: 'Name', render: (v) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
@@ -155,8 +178,10 @@ export default function Employees() {
     { key: 'status', label: 'Status', render: v => <Badge variant={v === 'active' ? 'success' : 'default'}>{v}</Badge> },
     { key: 'actions', label: '', render: (_, row) => (
       <div style={{ display: 'flex', gap: 6 }}>
-        <Btn size="sm" onClick={e => { e.stopPropagation(); openEdit(row); }}>Edit</Btn>
-        <Btn size="sm" variant="danger" onClick={e => { e.stopPropagation(); handleDelete(row.id); }}>Del</Btn>
+        <Btn size="sm" onClick={e => { e.stopPropagation(); openEdit(row); }} disabled={deletingId === row.id}>Edit</Btn>
+        <Btn size="sm" variant="danger" onClick={e => { e.stopPropagation(); handleDelete(row.id); }} disabled={deletingId === row.id} aria-busy={deletingId === row.id}>
+          {deletingId === row.id ? <Spinner /> : 'Del'}
+        </Btn>
       </div>
     )},
   ];
@@ -172,9 +197,9 @@ export default function Employees() {
 
       {showModal && (
         <Modal title={editing ? 'Edit employee' : 'Add employee'} onClose={() => setShowModal(false)} width={520}>
-          {saveError && (
+          {formError && (
             <div style={{ color: 'var(--danger)', marginBottom: 12, fontWeight: 600, gridColumn: '1/-1' }}>
-              {saveError}
+              {formError}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

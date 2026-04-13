@@ -5,8 +5,7 @@ const { deviceAuthenticate } = require('../middleware/deviceAuth');
 const { paymentEvidenceUpload, validateEvidenceSignature } = require('../middleware/upload');
 const v = require('../middleware/validation');
 
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
 
 const auth = require('../controllers/authController');
 const inventory = require('../controllers/inventoryController');
@@ -14,6 +13,8 @@ const employees = require('../controllers/employeeController');
 const payroll = require('../controllers/payrollController');
 const sales = require('../controllers/salesController');
 const production = require('../controllers/productionController');
+const productionTracking = require('../controllers/productionTrackingController');
+const settings = require('../controllers/settingsController');
 const dashboard = require('../controllers/dashboardController');
 const reports   = require('../controllers/reportsController');
 const device = require('../controllers/deviceController');
@@ -24,6 +25,7 @@ router.post('/device/punch-events', deviceAuthenticate, device.ingestPunchEvents
 // Auth (public)
 router.post('/auth/register', v.authRegister, auth.register);
 router.post('/auth/login', v.authLogin, auth.login);
+router.post('/auth/refresh', v.authRefresh, auth.refresh);
 router.get('/auth/me', authenticate, auth.me);
 router.post('/auth/logout', authenticate, auth.logout);
 
@@ -59,6 +61,10 @@ router.get('/payroll', authenticate, payroll.getAll);
 router.post('/payroll', authenticate, authorizeAdmin, v.payrollCreate, payroll.create);
 router.put('/payroll/:id/pay', authenticate, authorizeAdmin, v.idParam, payroll.markPaid);
 
+// Settings (protected)
+router.get('/settings/attendance-payroll', authenticate, settings.getAttendancePayroll);
+router.put('/settings/attendance-payroll', authenticate, authorizeAdmin, settings.updateAttendancePayroll);
+
 // Customers & Sales (protected)
 router.get('/customers', authenticate, sales.getCustomers);
 router.post('/customers', authenticate, authorizeAdmin, v.customerCreate, sales.createCustomer);
@@ -68,6 +74,7 @@ router.get('/sales', authenticate, sales.getOrders);
 router.get('/sales/:id', authenticate, sales.getOrder);
 router.post('/sales', authenticate, authorizeAdmin, v.salesCreate, sales.createOrder);
 router.put('/sales/:id/status', authenticate, authorizeAdmin, v.idParam, v.salesStatusUpdate, sales.updateStatus);
+router.delete('/sales/:id', authenticate, authorizeAdmin, v.idParam, sales.deleteOrder);
 
 // Production (protected)
 router.get('/production', authenticate, production.getAll);
@@ -75,16 +82,35 @@ router.get('/production/:id', authenticate, production.getOne);
 router.post('/production', authenticate, authorizeAdmin, v.productionCreate, production.create);
 router.put('/production/:id/status', authenticate, authorizeAdmin, v.idParam, v.productionStatusUpdate, production.updateStatus);
 
+// Production tracking (multi-phase)
+router.get('/production-orders', authenticate, productionTracking.list);
+router.get('/production-orders/machines', authenticate, productionTracking.listMachines);
+router.get('/production-orders/:id/report', authenticate, v.idParam, productionTracking.getReport);
+router.post('/production-orders', authenticate, authorizeAdmin, v.productionTrackingCreate, productionTracking.createOrder);
+router.post('/production-orders/:id/sorting', authenticate, authorizeAdmin, v.idParam, v.productionTrackingPhase, productionTracking.addSortingPhase);
+router.post('/production-orders/:id/final', authenticate, authorizeAdmin, v.idParam, v.productionTrackingPhase, productionTracking.addFinalPhase);
+
+
+
 // Authenticated evidence file download (admin only)
-router.get('/uploads/payment-evidence/:filename', authenticate, authorizeAdmin, (req, res) => {
-  const { filename } = req.params;
-  // Prevent path traversal: reject any name that contains a path separator or dots leading to parent
-  if (!filename || /[/\\]/.test(filename) || filename.includes('..')) {
-    return res.status(400).json({ error: 'Invalid filename' });
+const fsPromises = require('node:fs').promises;
+router.get('/uploads/payment-evidence/:filename', authenticate, authorizeAdmin, async (req, res, next) => {
+  try {
+    const { filename } = req.params;
+    // Prevent path traversal: reject any name that contains a path separator or dots leading to parent
+    if (!filename || /[/\\]/.test(filename) || filename.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+    const filePath = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence', filename);
+    try {
+      await fsPromises.access(filePath);
+    } catch {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    res.sendFile(filePath);
+  } catch (err) {
+    next(err);
   }
-  const filePath = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence', filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
-  res.sendFile(filePath);
 });
 
 module.exports = router;

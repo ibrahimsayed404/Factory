@@ -1,6 +1,35 @@
+
 const pool = require('../../config/db');
-const { randomBytes } = require('crypto');
-const fs = require('fs');
+const { randomBytes } = require('node:crypto');
+const fs = require('node:fs');
+
+// DELETE /api/sales/:id
+const deleteOrder = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Only allow deleting if not paid or shipped
+    const orderRes = await client.query('SELECT * FROM sales_orders WHERE id = $1', [req.params.id]);
+    if (!orderRes.rows.length) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const order = orderRes.rows[0];
+    if (order.payment_status === 'paid' || order.status === 'shipped' || order.status === 'delivered') {
+      return res.status(400).json({ error: 'Cannot delete a paid or shipped order' });
+    }
+    // Delete order items
+    await client.query('DELETE FROM sales_order_items WHERE sales_order_id = $1', [req.params.id]);
+    // Delete the order
+    await client.query('DELETE FROM sales_orders WHERE id = $1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+};
 
 const buildOrderNumber = (prefix) => {
   const ts = Date.now().toString().slice(-8);
@@ -74,10 +103,18 @@ const createProductionOrderForItem = async (client, salesOrder, item, notes) => 
   throw err;
 };
 
-// GET /api/customers
+// GET /api/customers (with pagination)
 const getCustomers = async (req, res, next) => {
   try {
-    const result = await pool.query(
+    const { page, limit: limitParam } = req.query;
+    const pageNum  = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.min(1000, Math.max(1, Number.parseInt(limitParam, 10) || 50));
+    const offset   = (pageNum - 1) * pageSize;
+
+    const countResult = await pool.query('SELECT COUNT(*) FROM customers');
+    const total = Number.parseInt(countResult.rows[0].count, 10);
+
+    const dataResult = await pool.query(
       `SELECT
          c.*,
          COALESCE(so.total_ordered, 0)::float AS total_ordered,
@@ -96,9 +133,11 @@ const getCustomers = async (req, res, next) => {
          FROM customer_payments
          GROUP BY customer_id
        ) cp ON cp.customer_id = c.id
-       ORDER BY c.name`
+       ORDER BY c.name
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
     );
-    res.json(result.rows);
+    res.json({ data: dataResult.rows, total, page: pageNum, limit: pageSize });
   } catch (err) { next(err); }
 };
 
@@ -221,9 +260,19 @@ const createCustomerPayment = async (req, res, next) => {
   } catch (err) {
     await client.query('ROLLBACK');
     if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
-      try { fs.unlinkSync(uploadedFilePath); } catch (_unlinkErr) {}
+      try {
+        fs.unlinkSync(uploadedFilePath);
+      } catch (unlinkErr) {
+        console.warn('Failed to remove uploaded evidence after rollback:', unlinkErr.message);
+      }
     }
-    next(err);
+      console.error('Error in createCustomerPayment:', {
+        message: err.message,
+        stack: err.stack,
+        error: err,
+        body: req.body
+      });
+      next(err);
   } finally {
     client.release();
   }
@@ -233,8 +282,8 @@ const createCustomerPayment = async (req, res, next) => {
 const getOrders = async (req, res, next) => {
   try {
     const { status, payment_status, customer_id, page, limit: limitParam } = req.query;
-    const pageNum  = Math.max(1, parseInt(page, 10) || 1);
-    const pageSize = Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 50));
+    const pageNum  = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.min(1000, Math.max(1, Number.parseInt(limitParam, 10) || 50));
     const offset   = (pageNum - 1) * pageSize;
 
     let baseWhere = 'WHERE 1=1';
@@ -246,7 +295,7 @@ const getOrders = async (req, res, next) => {
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM sales_orders so ${baseWhere}`, params
     );
-    const total = parseInt(countResult.rows[0].count, 10);
+    const total = Number.parseInt(countResult.rows[0].count, 10);
 
     const dataParams = [...params, pageSize, offset];
     const dataResult = await pool.query(
@@ -361,4 +410,5 @@ module.exports = {
   getOrder,
   createOrder,
   updateStatus,
+  deleteOrder,
 };

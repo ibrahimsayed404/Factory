@@ -46,6 +46,7 @@ const getStats = async (req, res, next) => {
       monthly_revenue:   monthlyRevenue,
       monthly_spent:     totalSpent,
       payroll_spent:     payrollSpent,
+      paid_payroll_spent: payrollSpent,
       materials_spent:   materialsSpent,
       extra_spent:       extraSpent,
       monthly_net:       monthlyRevenue - totalSpent,

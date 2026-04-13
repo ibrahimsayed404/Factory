@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  key VARCHAR(120) PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- ============================================================
 -- INVENTORY MODULE
 -- ============================================================
@@ -89,13 +95,16 @@ CREATE TABLE IF NOT EXISTS payroll (
   employee_id INT REFERENCES employees(id) ON DELETE CASCADE,
   month INT NOT NULL,
   year INT NOT NULL,
+  week_start DATE,
+  week_end DATE,
   base_salary NUMERIC(10,2),
   bonus NUMERIC(10,2) DEFAULT 0,
   deductions NUMERIC(10,2) DEFAULT 0,
   net_salary NUMERIC(10,2),
   paid_at TIMESTAMP,
   status VARCHAR(30) DEFAULT 'pending', -- pending, paid
-  UNIQUE(employee_id, month, year)
+  UNIQUE(employee_id, month, year),
+  UNIQUE(employee_id, week_start)
 );
 
 -- ============================================================
@@ -163,6 +172,8 @@ CREATE TABLE IF NOT EXISTS business_expenses (
 CREATE TABLE IF NOT EXISTS production_orders (
   id SERIAL PRIMARY KEY,
   order_number VARCHAR(30) UNIQUE NOT NULL,
+  model_number VARCHAR(100),
+  planned_quantity INT,
   product_name VARCHAR(150) NOT NULL,
   quantity INT NOT NULL,
   produced_qty INT DEFAULT 0,
@@ -176,11 +187,43 @@ CREATE TABLE IF NOT EXISTS production_orders (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS machines (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL UNIQUE,
+  code VARCHAR(60) UNIQUE,
+  status VARCHAR(30) DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS production_materials (
   id SERIAL PRIMARY KEY,
   production_order_id INT REFERENCES production_orders(id) ON DELETE CASCADE,
   material_id INT REFERENCES materials(id) ON DELETE SET NULL,
   quantity_used NUMERIC(10,2) NOT NULL
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'production_phase_name'
+  ) THEN
+    CREATE TYPE production_phase_name AS ENUM ('input', 'sorting', 'final');
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS production_phases (
+  id SERIAL PRIMARY KEY,
+  order_id INT NOT NULL REFERENCES production_orders(id) ON DELETE CASCADE,
+  phase_name production_phase_name NOT NULL,
+  quantity INT NOT NULL CHECK (quantity >= 0),
+  loss_reason TEXT,
+  employee_id INT REFERENCES employees(id) ON DELETE SET NULL,
+  machine_id INT REFERENCES machines(id) ON DELETE SET NULL,
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- ============================================================

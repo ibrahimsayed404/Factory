@@ -9,18 +9,9 @@ const {
   toMinutes,
   resolveShiftWindow,
 } = require('../utils/attendanceMetrics');
+const { getAttendancePayrollPolicy } = require('../utils/policySettings');
 
 const WEEKEND_PRESENT_NOTE = 'present vacation';
-
-const pad = (n) => String(n).padStart(2, '0');
-
-const localDateParts = (d) => ({
-  y: d.getFullYear(),
-  m: d.getMonth() + 1,
-  day: d.getDate(),
-});
-
-const toDateStr = ({ y, m, day }) => `${y}-${pad(m)}-${pad(day)}`;
 
 const normalizePunchTimestamp = (input) => {
   const raw = String(input || '').trim();
@@ -75,7 +66,7 @@ const buildExternalEventId = (event, employeeId) => {
   return crypto.createHash('sha256').update(base).digest('hex').slice(0, 32);
 };
 
-const recalculateAttendanceFromEvents = async (client, employee, attendanceDate) => {
+const recalculateAttendanceFromEvents = async (client, employee, attendanceDate, policy) => {
   const punches = await client.query(
     `SELECT punched_at, TO_CHAR(punched_at, 'HH24:MI') AS punch_time
      FROM attendance_punch_events
@@ -100,9 +91,9 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate)
       overtime_minutes: workedMinutes || 0,
     }
     : hasCheckout
-    ? calculateShiftMetrics(employee, checkIn, checkOut)
+    ? calculateShiftMetrics(employee, checkIn, checkOut, { lateGraceMinutes: policy.attendanceLateGraceMinutes })
     : {
-      late_minutes: calculateLateMinutesOnly(employee, checkIn),
+      late_minutes: calculateLateMinutesOnly(employee, checkIn, { lateGraceMinutes: policy.attendanceLateGraceMinutes }),
       early_leave_minutes: 0,
       overtime_minutes: 0,
     };
@@ -156,6 +147,7 @@ const ingestPunchEvents = async (req, res, next) => {
     }
 
     const results = [];
+    const policy = await getAttendancePayrollPolicy();
     await client.query('BEGIN');
 
     for (const event of incoming) {
@@ -209,7 +201,7 @@ const ingestPunchEvents = async (req, res, next) => {
         ]
       );
 
-      const attendance = await recalculateAttendanceFromEvents(client, employee, attendanceDate);
+      const attendance = await recalculateAttendanceFromEvents(client, employee, attendanceDate, policy);
       results.push({ ok: true, external_event_id: externalId, employee_id: employee.id, attendance_date: attendanceDate, attendance });
     }
 

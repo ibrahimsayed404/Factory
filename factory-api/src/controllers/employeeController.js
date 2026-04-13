@@ -5,6 +5,7 @@ const {
   calculateWorkedMinutes,
   isWeekendDate,
 } = require('../utils/attendanceMetrics');
+const { getAttendancePayrollPolicy } = require('../utils/policySettings');
 
 const WEEKEND_PRESENT_NOTE = 'present vacation';
 
@@ -131,6 +132,7 @@ const logAttendance = async (req, res, next) => {
     if (!employee.rows.length) return res.status(404).json({ error: 'Employee not found' });
 
     const employeeRecord = employee.rows[0];
+    const policy = await getAttendancePayrollPolicy();
     const isWeekendAttendance = isWeekendDate(employeeRecord, date) && Boolean(check_in || check_out);
     const workedMinutes = calculateWorkedMinutes(check_in, check_out);
     const metrics = isWeekendAttendance
@@ -139,7 +141,7 @@ const logAttendance = async (req, res, next) => {
         early_leave_minutes: 0,
         overtime_minutes: workedMinutes || 0,
       }
-      : calculateShiftMetrics(employeeRecord, check_in, check_out);
+      : calculateShiftMetrics(employeeRecord, check_in, check_out, { lateGraceMinutes: policy.attendanceLateGraceMinutes });
     const resolvedHoursWorked = calculateHoursWorked(check_in, check_out, hours_worked);
     const resolvedLateMinutes = isWeekendAttendance
       ? 0

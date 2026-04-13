@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Input, Btn, ErrorMsg } from '../components/ui';
+import { Input, Btn, ErrorMsg, Spinner } from '../components/ui';
+import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
+import { useLanguage } from '../context/LanguageContext';
+import FabriCoreLogo from '../components/brand/FabriCoreLogo';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,22 +32,17 @@ export default function Login() {
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'var(--bg-base)', padding: 20,
     }}>
-      <div style={{ width: '100%', maxWidth: 380 }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <LanguageSwitcher compact />
+        </div>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
-          <div style={{
-            width: 36, height: 36, background: 'var(--accent)', borderRadius: 8,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 18, color: '#0a1a14', fontWeight: 700,
-          }}>F</div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>FabriCore</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Factory Management</div>
-          </div>
+        <div style={{ marginBottom: 28 }}>
+          <FabriCoreLogo style={{ width: '100%', height: 'auto' }} />
         </div>
 
-        <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Sign in</h1>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Welcome back. Enter your credentials to continue.</p>
+        <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>{t('signIn', 'Sign in')}</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>{t('welcomeBack', 'Welcome back. Enter your credentials to continue.')}</p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Input label="Email" type="email" placeholder="you@factory.com"
@@ -51,8 +50,8 @@ export default function Login() {
           <Input label="Password" type="password" placeholder="••••••••"
             value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
           {error && <ErrorMsg msg={error} />}
-          <Btn type="submit" variant="primary" disabled={loading} style={{ marginTop: 4, justifyContent: 'center', padding: '10px 0', width: '100%' }}>
-            {loading ? 'Signing in…' : 'Sign in'}
+          <Btn type="submit" variant="primary" disabled={loading} aria-busy={loading} style={{ marginTop: 4, justifyContent: 'center', padding: '10px 0', width: '100%' }}>
+            {loading ? <Spinner /> : t('signIn', 'Sign in')}
           </Btn>
         </form>
       </div>

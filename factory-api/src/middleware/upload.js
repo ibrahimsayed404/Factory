@@ -76,7 +76,7 @@ const validateEvidenceSignature = (req, res, next) => {
     }
     next();
   } catch (e) {
-    try { fs.unlinkSync(filePath); } catch (_) {}
+    try { fs.unlinkSync(filePath); } catch (_) { void 0; }
     next(e);
   }
 };

@@ -1,12 +1,19 @@
+
 const { body, param, validationResult } = require('express-validator');
+const ApiError = require('../utils/ApiError');
+const { translateValidationMessage } = require('../utils/i18n');
 
 const handleValidation = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({
-      error: 'Validation failed',
-      details: errors.array().map((e) => ({ field: e.path, message: e.msg })),
-    });
+    // Optionally log validation errors here
+    return next(
+      new ApiError(
+        400,
+        req.t('errors.validation_failed', 'Validation failed'),
+        errors.array().map((e) => ({ field: e.path, message: translateValidationMessage(req.lang, e.msg) }))
+      )
+    );
   }
   next();
 };
@@ -26,6 +33,11 @@ const authRegister = [
 const authLogin = [
   body('email').isEmail().withMessage('valid email is required').normalizeEmail(),
   body('password').isString().notEmpty().withMessage('password is required'),
+  handleValidation,
+];
+
+const authRefresh = [
+  body('refreshToken').isString().notEmpty().withMessage('refreshToken is required'),
   handleValidation,
 ];
 
@@ -61,8 +73,18 @@ const attendanceUpsert = [
 
 const payrollCreate = [
   body('employee_id').isInt({ min: 1 }).withMessage('employee_id is required'),
-  body('month').isInt({ min: 1, max: 12 }).withMessage('month must be between 1 and 12'),
-  body('year').isInt({ min: 2000, max: 2100 }).withMessage('year must be valid'),
+  body('week_start').optional({ checkFalsy: true }).isISO8601().withMessage('week_start must be YYYY-MM-DD'),
+  body('month').optional({ checkFalsy: true }).isInt({ min: 1, max: 12 }).withMessage('month must be between 1 and 12'),
+  body('year').optional({ checkFalsy: true }).isInt({ min: 2000, max: 2100 }).withMessage('year must be valid'),
+  body().custom((value) => {
+    const hasWeekStart = Boolean(value.week_start);
+    const hasMonth = value.month !== undefined && value.month !== null && value.month !== '';
+    const hasYear = value.year !== undefined && value.year !== null && value.year !== '';
+    if (!hasWeekStart && hasMonth !== hasYear) {
+      throw new Error('Provide both month and year together, or omit both for default weekly Saturday period');
+    }
+    return true;
+  }),
   body('bonus').optional({ nullable: true }).isFloat().withMessage('bonus must be numeric'),
   body('deductions').optional({ nullable: true }).isFloat().withMessage('deductions must be numeric'),
   handleValidation,
@@ -123,11 +145,50 @@ const productionStatusUpdate = [
   handleValidation,
 ];
 
+const productionTrackingCreate = [
+  body('model_number').trim().isLength({ min: 1, max: 100 }).withMessage('model_number is required'),
+  body('quantity').isInt({ min: 1 }).withMessage('quantity must be at least 1'),
+  body('materials').optional().isArray().withMessage('materials must be an array'),
+  body('materials.*.material_id').optional().isInt({ min: 1 }).withMessage('material_id must be valid'),
+  body('materials.*.quantity').optional().isFloat({ min: 0.01 }).withMessage('quantity must be > 0'),
+  handleValidation,
+];
+
+const productionTrackingPhase = [
+  body('quantity').isInt({ min: 0 }).withMessage('quantity must be >= 0'),
+  body('loss_reason').optional({ nullable: true, checkFalsy: true }).isLength({ max: 500 }).withMessage('loss_reason is too long'),
+  body('employee_id').isInt({ min: 1 }).withMessage('employee_id is required'),
+  body('machine_id').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage('machine_id must be valid'),
+  body('started_at').isISO8601().withMessage('started_at must be a valid ISO timestamp'),
+  body('completed_at').isISO8601().withMessage('completed_at must be a valid ISO timestamp'),
+  body().custom((value) => {
+    const started = new Date(value.started_at);
+    const completed = new Date(value.completed_at);
+    if (Number.isNaN(started.getTime()) || Number.isNaN(completed.getTime())) {
+      throw new TypeError('started_at and completed_at must be valid ISO timestamps');
+    }
+    if (completed <= started) {
+      throw new Error('completed_at must be greater than started_at');
+    }
+    return true;
+  }),
+  handleValidation,
+];
+
+const settingsAttendancePayrollUpdate = [
+  body('attendance_late_grace_minutes').optional().isInt({ min: 0, max: 180 }).withMessage('attendance_late_grace_minutes must be between 0 and 180'),
+  body('payroll_overtime_multiplier').optional().isFloat({ min: 1, max: 5 }).withMessage('payroll_overtime_multiplier must be between 1 and 5'),
+  body('payroll_vacation_overtime_multiplier').optional().isFloat({ min: 0, max: 5 }).withMessage('payroll_vacation_overtime_multiplier must be between 0 and 5'),
+  body('payroll_weeks_per_month').optional().isFloat({ min: 1, max: 6 }).withMessage('payroll_weeks_per_month must be between 1 and 6'),
+  handleValidation,
+];
+
 module.exports = {
   handleValidation,
   idParam,
   authRegister,
   authLogin,
+  authRefresh,
   inventoryUpsert,
   employeeUpsert,
   attendanceUpsert,
@@ -139,4 +200,7 @@ module.exports = {
   salesStatusUpdate,
   productionCreate,
   productionStatusUpdate,
+  productionTrackingCreate,
+  productionTrackingPhase,
+  settingsAttendancePayrollUpdate,
 };

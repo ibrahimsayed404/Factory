@@ -4,15 +4,26 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area, CartesianGrid,
 } from 'recharts';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { reportsApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../components/ui';
 
+let reportExportModules;
+const loadReportExportModules = async () => {
+  if (!reportExportModules) {
+    const [{ jsPDF }, { default: autoTable }, { default: writeXlsxFile }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+      import('write-excel-file/browser'),
+    ]);
+    reportExportModules = { jsPDF, autoTable, writeXlsxFile };
+  }
+  return reportExportModules;
+};
+
 /* ── Export helpers ─────────────────────────────────── */
 const exportPDF = async (filename, title, sections) => {
+  const { jsPDF, autoTable } = await loadReportExportModules();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
 
@@ -86,13 +97,17 @@ const exportPDF = async (filename, title, sections) => {
 };
 
 const exportExcel = async (filename, sheets) => {
-  const wb = XLSX.utils.book_new();
-  sheets.forEach(({ sheetName, headers, rows }) => {
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 14) }));
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const { writeXlsxFile } = await loadReportExportModules();
+  const data = sheets.map(({ headers, rows }) => [headers, ...rows]);
+  const sheetNames = sheets.map(({ sheetName }, index) => {
+    const fallback = `Sheet ${index + 1}`;
+    return (sheetName || fallback).slice(0, 31);
   });
-  XLSX.writeFile(wb, filename);
+
+  await writeXlsxFile(data, {
+    sheets: sheetNames,
+    fileName: filename,
+  });
 };
 
 /* ── Colour palette ─────────────────────────────────── */

@@ -4,6 +4,8 @@ const SHIFT_SCHEDULES = {
   night: { start: '22:00', end: '06:00' },
 };
 
+const getLateGraceMinutes = () => Math.max(0, Number(process.env.ATTENDANCE_LATE_GRACE_MINUTES || 10));
+
 const toMinutes = (value) => {
   if (!value) return null;
   const [h, m] = String(value).slice(0, 5).split(':').map(Number);
@@ -61,16 +63,20 @@ const calculateHoursWorked = (checkIn, checkOut, providedHours) => {
   return Number(hours.toFixed(2));
 };
 
-const calculateLateMinutesOnly = (employee, checkIn) => {
+const calculateLateMinutesOnly = (employee, checkIn, options = {}) => {
   const inMinRaw = toMinutes(checkIn);
   const { shiftStart, shiftEnd, overnightShift } = resolveShiftWindow(employee);
   if (inMinRaw === null || shiftStart === null || shiftEnd === null) return 0;
 
   const inMin = normalizeShiftMinute(inMinRaw, shiftStart, shiftEnd, overnightShift);
-  return Math.max(0, inMin - shiftStart);
+  const lateWithoutGrace = Math.max(0, inMin - shiftStart);
+  const graceMinutes = Number.isFinite(Number(options.lateGraceMinutes))
+    ? Number(options.lateGraceMinutes)
+    : getLateGraceMinutes();
+  return Math.max(0, lateWithoutGrace - Math.max(0, graceMinutes));
 };
 
-const calculateShiftMetrics = (employee, checkIn, checkOut) => {
+const calculateShiftMetrics = (employee, checkIn, checkOut, options = {}) => {
   const inMinRaw = toMinutes(checkIn);
   const outMinRaw = toMinutes(checkOut);
   const { shiftStart, shiftEnd, overnightShift } = resolveShiftWindow(employee);
@@ -84,8 +90,13 @@ const calculateShiftMetrics = (employee, checkIn, checkOut) => {
   let normalizedOut = normalizeShiftMinute(outMinRaw, shiftStart, shiftEnd, overnightShift);
   if (normalizedOut < normalizedIn) normalizedOut += 24 * 60;
 
+  const lateWithoutGrace = Math.max(0, normalizedIn - shiftStart);
+  const graceMinutes = Number.isFinite(Number(options.lateGraceMinutes))
+    ? Number(options.lateGraceMinutes)
+    : getLateGraceMinutes();
+
   return {
-    late_minutes: Math.max(0, normalizedIn - shiftStart),
+    late_minutes: Math.max(0, lateWithoutGrace - Math.max(0, graceMinutes)),
     early_leave_minutes: Math.max(0, normalizedShiftEnd - normalizedOut),
     overtime_minutes: Math.max(0, normalizedOut - normalizedShiftEnd),
   };

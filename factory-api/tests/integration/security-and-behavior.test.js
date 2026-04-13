@@ -1,12 +1,14 @@
+/* eslint-env jest */
 require('dotenv').config();
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_value';
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 process.env.DEVICE_INGEST_API_KEY = process.env.DEVICE_INGEST_API_KEY || 'test_device_ingest_key';
-process.env.DB_NAME = process.env.TEST_DB_NAME || process.env.DB_NAME || 'factory_db';
+process.env.REGISTER_INVITE_CODE = process.env.REGISTER_INVITE_CODE || 'test-invite-code';
+process.env.DB_NAME = process.env.TEST_DB_NAME || process.env.DB_NAME || 'factory_test_db';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
@@ -85,6 +87,7 @@ describe('Auth flow', () => {
         name: 'Staff User',
         email: 'staff@test.com',
         password: 'Password123!',
+        invite: process.env.REGISTER_INVITE_CODE,
         role: 'admin',
       });
 
@@ -270,7 +273,7 @@ describe('Production stock deduction safety', () => {
     const production = await agent.get('/api/production');
     expect(production.status).toBe(200);
 
-    const linkedOrders = production.body.filter((row) => row.sales_order_id === salesOrder.body.id);
+    const linkedOrders = production.body.data.filter((row) => row.sales_order_id === salesOrder.body.id);
     expect(linkedOrders).toHaveLength(2);
     expect(linkedOrders.every((row) => row.assigned_to === null)).toBe(true);
     expect(linkedOrders.map((row) => row.product_name).sort()).toEqual(['1231-t-shirt', 'Polo Shirt']);
@@ -320,29 +323,30 @@ describe('Payroll auto-adjustments', () => {
 
     expect(payroll.status).toBe(201);
     expect(payroll.body.payroll_breakdown).toBeDefined();
-    expect(payroll.body.payroll_breakdown.late_minutes).toBe(30);
+    expect(payroll.body.payroll_breakdown.late_minutes).toBe(20);
     expect(payroll.body.payroll_breakdown.overtime_minutes).toBe(60);
     expect(payroll.body.payroll_breakdown.regular_overtime_minutes).toBe(60);
     expect(payroll.body.payroll_breakdown.weekend_overtime_minutes).toBe(0);
     expect(payroll.body.payroll_breakdown.absent_days).toBe(1);
     expect(payroll.body.payroll_breakdown.half_days).toBe(1);
 
-    // salary=3000 => daily=100, minute≈0.2083
-    // auto deductions = late(30m)=6.25 + absent(1d)=100 + half-day(0.5d)=50 => 156.25
-    // auto bonus = overtime(60m)*minute*1.25 => 15.63
-    // final bonus = 15.63 + 10(manual) => 25.63
-    // final deductions = 156.25 + 5(manual) => 161.25
-    // net = 3000 + 25.63 - 161.25 => 2864.38
-    expect(Number(payroll.body.bonus)).toBeCloseTo(25.63, 2);
-    expect(Number(payroll.body.deductions)).toBeCloseTo(161.25, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(2864.38, 2);
+    // salary=3000 => daily=100, minute~=0.2083
+    // weighted late = first 15m at 1x + remaining 5m at 1.5x => 22.5m
+    // auto deductions = weighted-late(22.5m)=4.69 + absent(1d)=100 + half-day(0.5d)=50 => 154.69
+    // auto bonus = overtime(60m)*minute*1.5 => 18.75
+    // final bonus = 18.75 + 10(manual) => 28.75
+    // final deductions = 154.69 + 5(manual) => 159.69
+    // net = 3000 + 28.75 - 159.69 => 2869.06
+    expect(Number(payroll.body.bonus)).toBeCloseTo(28.75, 2);
+    expect(Number(payroll.body.deductions)).toBeCloseTo(159.69, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(2869.06, 2);
 
     const list = await agent.get('/api/payroll?month=3&year=2026');
     expect(list.status).toBe(200);
-    expect(list.body).toHaveLength(1);
-    expect(list.body[0].payroll_breakdown).toBeDefined();
-    expect(Number(list.body[0].payroll_breakdown.auto_bonus)).toBeCloseTo(15.63, 2);
-    expect(Number(list.body[0].payroll_breakdown.auto_deductions)).toBeCloseTo(156.25, 2);
+    expect(list.body.data).toHaveLength(1);
+    expect(list.body.data[0].payroll_breakdown).toBeDefined();
+    expect(Number(list.body.data[0].payroll_breakdown.auto_bonus)).toBeCloseTo(18.75, 2);
+    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(154.69, 2);
   });
 
   test('treats weekend attendance as overtime bonus and marks note as present vacation', async () => {
@@ -384,13 +388,13 @@ describe('Payroll auto-adjustments', () => {
     expect(payroll.body.payroll_breakdown.overtime_minutes).toBe(480);
     expect(payroll.body.payroll_breakdown.regular_overtime_minutes).toBe(0);
     expect(payroll.body.payroll_breakdown.weekend_overtime_minutes).toBe(480);
-    expect(Number(payroll.body.bonus)).toBeCloseTo(125, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(3125, 2);
+    expect(Number(payroll.body.bonus)).toBeCloseTo(100, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(3100, 2);
 
     const list = await agent.get('/api/payroll?month=3&year=2026');
     expect(list.status).toBe(200);
-    expect(list.body[0].payroll_breakdown.weekend_overtime_minutes).toBe(480);
-    expect(list.body[0].payroll_breakdown.regular_overtime_minutes).toBe(0);
+    expect(list.body.data[0].payroll_breakdown.weekend_overtime_minutes).toBe(480);
+    expect(list.body.data[0].payroll_breakdown.regular_overtime_minutes).toBe(0);
   });
 
   test('infers missing non-weekend gap day as absent for payroll deductions', async () => {
@@ -487,7 +491,7 @@ describe('Device punch ingestion', () => {
     expect(list.status).toBe(200);
     expect(list.body).toHaveLength(1);
     expect(list.body[0].status).toBe('late');
-    expect(Number(list.body[0].late_minutes)).toBe(30);
+    expect(Number(list.body[0].late_minutes)).toBe(20);
     expect(Number(list.body[0].overtime_minutes)).toBe(45);
   });
 
@@ -704,7 +708,7 @@ describe('Customer payment ledger', () => {
     fs.unlinkSync(fixturePath);
 
     expect(payment.status).toBe(201);
-    expect(payment.body.evidence_url).toMatch(/^\/uploads\/payment-evidence\//);
+    expect(payment.body.evidence_url).toMatch(/^\/api\/uploads\/payment-evidence\//);
     expect(payment.body.evidence_name).toBe('proof.pdf');
     expect(payment.body.evidence_mime).toBe('application/pdf');
 

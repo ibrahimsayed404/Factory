@@ -1,5 +1,5 @@
 const pool = require('../../config/db');
-const { randomBytes } = require('crypto');
+const { randomBytes } = require('node:crypto');
 
 const buildOrderNumber = (prefix) => {
   const ts = Date.now().toString().slice(-8);
@@ -16,7 +16,12 @@ const makeError = (status, message) => {
 // GET /api/production
 const getAll = async (req, res, next) => {
   try {
-    const { status } = req.query;
+    const { status, page, limit: limitParam } = req.query;
+    const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
+    const pageSize = Math.min(1000, Math.max(1, Number.parseInt(limitParam, 10) || 50));
+    const offset = (pageNum - 1) * pageSize;
+
+    let countQuery = 'SELECT COUNT(*) FROM production_orders po WHERE 1=1';
     let query = `
       SELECT po.*, e.name AS assigned_to_name, so.order_number AS sales_order_number
       FROM production_orders po
@@ -25,10 +30,19 @@ const getAll = async (req, res, next) => {
       WHERE 1=1
     `;
     const params = [];
-    if (status) { params.push(status); query += ` AND po.status = $${params.length}`; }
-    query += ' ORDER BY po.due_date ASC';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    if (status) {
+      params.push(status);
+      countQuery += ` AND po.status = $${params.length}`;
+      query += ` AND po.status = $${params.length}`;
+    }
+
+    const countResult = await pool.query(countQuery, params);
+    const total = Number.parseInt(countResult.rows[0].count, 10);
+
+    const dataParams = [...params, pageSize, offset];
+    query += ` ORDER BY po.due_date ASC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`;
+    const result = await pool.query(query, dataParams);
+    res.json({ data: result.rows, total, page: pageNum, limit: pageSize });
   } catch (err) { next(err); }
 };
 

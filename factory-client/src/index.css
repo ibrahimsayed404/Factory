@@ -2,6 +2,8 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Default (dark) theme */
+
 :root {
   --font-sans: 'DM Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
@@ -36,6 +38,33 @@
 
   --sidebar-w: 230px;
   --topbar-h: 58px;
+}
+
+/* Light theme overrides */
+[data-theme="light"] {
+  --bg-base:       #f7f8fa;
+  --bg-surface:    #fff;
+  --bg-elevated:   #f3f6fa;
+  --bg-hover:      #e9eef6;
+  --bg-active:     #e0e7ef;
+
+  --border:        rgba(0,0,0,0.08);
+  --border-hover:  rgba(0,0,0,0.16);
+
+  --text-primary:  #1a2332;
+  --text-secondary:#4e5769;
+  --text-muted:    #8a95aa;
+
+  --accent:        #22d3a0;
+  --accent-dim:    rgba(34,211,160,0.10);
+  --accent-hover:  #1ab88a;
+
+  --warn:          #f5a623;
+  --warn-dim:      rgba(245,166,35,0.10);
+  --danger:        #f05252;
+  --danger-dim:    rgba(240,82,82,0.10);
+  --info:          #60a5fa;
+  --info-dim:      rgba(96,165,250,0.10);
 }
 
 html, body, #root { height: 100%; }

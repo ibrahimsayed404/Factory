@@ -3,7 +3,7 @@ import { employeeApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import {
   PageHeader, Card, Table, Badge, Btn,
-  Modal, Input, Select, Spinner, ErrorMsg, MetricCard
+  Modal, Input, Select, Spinner, MetricCard
 } from '../components/ui';
 
 const STATUS_OPTS = ['present', 'absent', 'late', 'half-day'];
@@ -529,9 +529,9 @@ export default function Attendance() {
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-            <Btn onClick={() => setShowLog(false)}>Cancel</Btn>
-            <Btn variant="primary" onClick={handleLog} disabled={saving}>
-              {saving ? 'Saving…' : 'Save record'}
+            <Btn onClick={() => setShowLog(false)} disabled={saving}>Cancel</Btn>
+            <Btn variant="primary" onClick={handleLog} disabled={saving} aria-busy={saving}>
+              {saving ? <Spinner /> : 'Save record'}
             </Btn>
           </div>
         </Modal>
