@@ -1,0 +1,54 @@
+name: Release Desktop Artifact
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build_desktop_release:
+    name: Build And Publish Desktop EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install client deps
+        run: npm ci
+        working-directory: factory-client
+
+      - name: Install desktop deps
+        run: npm ci
+        working-directory: factory-desktop
+
+      - name: Build desktop distributable
+        shell: pwsh
+        run: |
+          $env:CI = 'true'
+          npm run dist
+        working-directory: factory-desktop
+
+      - name: Locate desktop executable
+        id: artifact
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path factory-desktop/dist -Filter '*.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $exe) {
+            throw 'Desktop executable not found in factory-desktop/dist'
+          }
+          "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub release with desktop artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.exe_path }}
+          generate_release_notes: true
