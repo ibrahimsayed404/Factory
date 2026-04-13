@@ -25,6 +25,7 @@
     "productName": "Factory Desktop",
     "files": [
       "main.js",
+      "auto-updater.js",
       "../factory-api/**",
       "../factory-client/build/**"
     ],
