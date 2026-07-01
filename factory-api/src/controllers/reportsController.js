@@ -1,4 +1,53 @@
-﻿const pool = require('../../config/db');
+const pool = require('../db/pool');
+
+const toIsoDate = (date) => date.toISOString().slice(0, 10);
+
+const parseIsoDate = (value) => {
+  const text = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const parsed = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const getYearRange = (yearInput) => {
+  const year = Number.parseInt(yearInput, 10) || new Date().getUTCFullYear();
+  const start = new Date(Date.UTC(year, 0, 1));
+  const end = new Date(Date.UTC(year, 11, 31));
+  return { startDate: toIsoDate(start), endDate: toIsoDate(end) };
+};
+
+const getMonthRange = (yearInput, monthInput) => {
+  const year = Number.parseInt(yearInput, 10) || new Date().getUTCFullYear();
+  const month = Number.parseInt(monthInput, 10) || (new Date().getUTCMonth() + 1);
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0));
+  return { startDate: toIsoDate(start), endDate: toIsoDate(end) };
+};
+
+const resolveDateRange = ({ startDateInput, endDateInput, yearInput, monthInput, fallback = 'year' }) => {
+  if (startDateInput || endDateInput) {
+    const start = parseIsoDate(startDateInput);
+    const end = parseIsoDate(endDateInput);
+    if (!start || !end) {
+      const err = new Error('start_date and end_date must be valid dates in YYYY-MM-DD format');
+      err.status = 400;
+      throw err;
+    }
+    if (start > end) {
+      const err = new Error('start_date must be before or equal to end_date');
+      err.status = 400;
+      throw err;
+    }
+    return { startDate: toIsoDate(start), endDate: toIsoDate(end) };
+  }
+
+  if (fallback === 'month') {
+    return getMonthRange(yearInput, monthInput);
+  }
+
+  return getYearRange(yearInput);
+};
 
 // POST /api/reports/sales/expenses
 const createSalesExpense = async (req, res, next) => {
@@ -20,70 +69,80 @@ const createSalesExpense = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// GET /api/reports/sales?year=2026
+// GET /api/reports/sales?start_date=2026-01-01&end_date=2026-03-31
 const salesOverview = async (req, res, next) => {
   try {
-    const year = req.query.year || new Date().getFullYear();
+    const { startDate, endDate } = resolveDateRange({
+      startDateInput: req.query.start_date,
+      endDateInput: req.query.end_date,
+      yearInput: req.query.year,
+      fallback: 'year',
+    });
 
     const [monthly, topCustomers, paymentBreakdown, orderStatuses, expenseSummary] = await Promise.all([
-      // Monthly full sales cashflow report (booked revenue, collections, spend, and net)
+      // Monthly full sales cashflow report, limited to selected date range.
       pool.query(`
         WITH months AS (
-          SELECT generate_series(1, 12)::int AS month
+          SELECT generate_series(
+            date_trunc('month', $1::date),
+            date_trunc('month', $2::date),
+            interval '1 month'
+          )::date AS month_start
         ),
         order_stats AS (
           SELECT
-            EXTRACT(MONTH FROM order_date)::int AS month,
+            date_trunc('month', order_date)::date AS month_start,
             COUNT(*)::int AS orders,
             COALESCE(SUM(total_amount), 0)::float AS revenue
           FROM sales_orders
-          WHERE order_date >= make_date($1::int, 1, 1)
-            AND order_date <  make_date($1::int + 1, 1, 1)
+          WHERE order_date >= $1::date
+            AND order_date <  ($2::date + interval '1 day')
             AND status != 'cancelled'
           GROUP BY 1
         ),
         collections AS (
           SELECT
-            EXTRACT(MONTH FROM payment_date)::int AS month,
+            date_trunc('month', payment_date)::date AS month_start,
             COALESCE(SUM(amount), 0)::float AS collected
           FROM customer_payments
-          WHERE payment_date >= make_date($1::int, 1, 1)
-            AND payment_date <  make_date($1::int + 1, 1, 1)
+          WHERE payment_date >= $1::date
+            AND payment_date <  ($2::date + interval '1 day')
           GROUP BY 1
         ),
         payroll_spend AS (
           SELECT
-            EXTRACT(MONTH FROM paid_at)::int AS month,
+            date_trunc('month', paid_at)::date AS month_start,
             COALESCE(SUM(net_salary), 0)::float AS payroll_spent
           FROM payroll
           WHERE status = 'paid'
             AND paid_at IS NOT NULL
-            AND paid_at >= make_date($1::int, 1, 1)::timestamp
-            AND paid_at <  make_date($1::int + 1, 1, 1)::timestamp
+            AND paid_at >= $1::date
+            AND paid_at <  ($2::date + interval '1 day')
           GROUP BY 1
         ),
         material_spend AS (
           SELECT
-            EXTRACT(MONTH FROM po.created_at)::int AS month,
+            date_trunc('month', po.created_at)::date AS month_start,
             COALESCE(SUM(pm.quantity_used * COALESCE(m.cost_per_unit, 0)), 0)::float AS materials_spent
           FROM production_materials pm
           JOIN production_orders po ON po.id = pm.production_order_id
           LEFT JOIN materials m ON m.id = pm.material_id
-          WHERE po.created_at >= make_date($1::int, 1, 1)::timestamp
-            AND po.created_at <  make_date($1::int + 1, 1, 1)::timestamp
+          WHERE po.created_at >= $1::date
+            AND po.created_at <  ($2::date + interval '1 day')
           GROUP BY 1
         ),
         extra_spend AS (
           SELECT
-            EXTRACT(MONTH FROM expense_date)::int AS month,
+            date_trunc('month', expense_date)::date AS month_start,
             COALESCE(SUM(amount), 0)::float AS extra_spent
           FROM business_expenses
-          WHERE expense_date >= make_date($1::int, 1, 1)
-            AND expense_date <  make_date($1::int + 1, 1, 1)
+          WHERE expense_date >= $1::date
+            AND expense_date <  ($2::date + interval '1 day')
           GROUP BY 1
         )
         SELECT
-          m.month,
+          m.month_start::text AS month_start,
+          to_char(m.month_start, 'Mon YYYY') AS month_label,
           COALESCE(os.orders, 0)::int AS orders,
           COALESCE(os.revenue, 0)::float AS revenue,
           COALESCE(c.collected, 0)::float AS collected,
@@ -94,13 +153,13 @@ const salesOverview = async (req, res, next) => {
           (COALESCE(c.collected, 0) - (COALESCE(ps.payroll_spent, 0) + COALESCE(ms.materials_spent, 0) + COALESCE(es.extra_spent, 0)))::float AS net_value,
           (COALESCE(os.revenue, 0) - (COALESCE(ps.payroll_spent, 0) + COALESCE(ms.materials_spent, 0) + COALESCE(es.extra_spent, 0)))::float AS accrual_net_value
         FROM months m
-        LEFT JOIN order_stats os ON os.month = m.month
-        LEFT JOIN collections c ON c.month = m.month
-        LEFT JOIN payroll_spend ps ON ps.month = m.month
-        LEFT JOIN material_spend ms ON ms.month = m.month
-        LEFT JOIN extra_spend es ON es.month = m.month
-        ORDER BY m.month
-      `, [year]),
+        LEFT JOIN order_stats os ON os.month_start = m.month_start
+        LEFT JOIN collections c ON c.month_start = m.month_start
+        LEFT JOIN payroll_spend ps ON ps.month_start = m.month_start
+        LEFT JOIN material_spend ms ON ms.month_start = m.month_start
+        LEFT JOIN extra_spend es ON es.month_start = m.month_start
+        ORDER BY m.month_start
+      `, [startDate, endDate]),
 
       // Top 5 customers by collections (with booked revenue too)
       pool.query(`
@@ -113,39 +172,39 @@ const salesOverview = async (req, res, next) => {
         FROM customers c
         LEFT JOIN sales_orders so
           ON so.customer_id = c.id
-         AND so.order_date >= make_date($1::int, 1, 1)
-         AND so.order_date <  make_date($1::int + 1, 1, 1)
+           AND so.order_date >= $1::date
+           AND so.order_date <  ($2::date + interval '1 day')
         LEFT JOIN (
           SELECT customer_id, COALESCE(SUM(amount),0)::float AS collected
           FROM customer_payments
-          WHERE payment_date >= make_date($1::int, 1, 1)
-            AND payment_date <  make_date($1::int + 1, 1, 1)
+            WHERE payment_date >= $1::date
+              AND payment_date <  ($2::date + interval '1 day')
           GROUP BY customer_id
         ) cp ON cp.customer_id = c.id
         WHERE so.id IS NOT NULL OR cp.customer_id IS NOT NULL
         GROUP BY c.id, c.name, cp.collected
         ORDER BY collected DESC, revenue DESC
         LIMIT 5
-      `, [year]),
+        `, [startDate, endDate]),
 
       // Payment status breakdown
       pool.query(`
         SELECT payment_status AS status, COUNT(*)::int AS count,
                COALESCE(SUM(total_amount),0)::float AS amount
         FROM sales_orders
-        WHERE order_date >= make_date($1::int, 1, 1)
-          AND order_date <  make_date($1::int + 1, 1, 1)
+        WHERE order_date >= $1::date
+          AND order_date <  ($2::date + interval '1 day')
         GROUP BY payment_status
-      `, [year]),
+      `, [startDate, endDate]),
 
       // Order status breakdown
       pool.query(`
         SELECT status, COUNT(*)::int AS count
         FROM sales_orders
-        WHERE order_date >= make_date($1::int, 1, 1)
-          AND order_date <  make_date($1::int + 1, 1, 1)
+        WHERE order_date >= $1::date
+          AND order_date <  ($2::date + interval '1 day')
         GROUP BY status
-      `, [year]),
+      `, [startDate, endDate]),
 
       // Yearly spend and net summary
       pool.query(`
@@ -153,14 +212,14 @@ const salesOverview = async (req, res, next) => {
           COALESCE((
             SELECT SUM(amount)
             FROM customer_payments
-            WHERE payment_date >= make_date($1::int, 1, 1)
-              AND payment_date <  make_date($1::int + 1, 1, 1)
+            WHERE payment_date >= $1::date
+              AND payment_date <  ($2::date + interval '1 day')
           ),0)::float AS total_collected,
           COALESCE((
             SELECT SUM(total_amount)
             FROM sales_orders
-            WHERE order_date >= make_date($1::int, 1, 1)
-              AND order_date <  make_date($1::int + 1, 1, 1)
+            WHERE order_date >= $1::date
+              AND order_date <  ($2::date + interval '1 day')
               AND status != 'cancelled'
           ),0)::float AS total_revenue,
           COALESCE((
@@ -168,24 +227,24 @@ const salesOverview = async (req, res, next) => {
             FROM payroll
             WHERE status = 'paid'
               AND paid_at IS NOT NULL
-              AND paid_at >= make_date($1::int, 1, 1)::timestamp
-              AND paid_at <  make_date($1::int + 1, 1, 1)::timestamp
+              AND paid_at >= $1::date
+              AND paid_at <  ($2::date + interval '1 day')
           ),0)::float AS payroll_spent,
           COALESCE((
             SELECT SUM(pm.quantity_used * COALESCE(m.cost_per_unit, 0))
             FROM production_materials pm
             JOIN production_orders po ON po.id = pm.production_order_id
             LEFT JOIN materials m ON m.id = pm.material_id
-            WHERE po.created_at >= make_date($1::int, 1, 1)::timestamp
-              AND po.created_at <  make_date($1::int + 1, 1, 1)::timestamp
+            WHERE po.created_at >= $1::date
+              AND po.created_at <  ($2::date + interval '1 day')
           ),0)::float AS materials_spent,
           COALESCE((
             SELECT SUM(amount)
             FROM business_expenses
-            WHERE expense_date >= make_date($1::int, 1, 1)
-              AND expense_date <  make_date($1::int + 1, 1, 1)
+            WHERE expense_date >= $1::date
+              AND expense_date <  ($2::date + interval '1 day')
           ),0)::float AS extra_spent
-      `, [year]),
+      `, [startDate, endDate]),
     ]);
 
     const summary = expenseSummary.rows[0] || {};
@@ -202,6 +261,8 @@ const salesOverview = async (req, res, next) => {
       payment_breakdown: paymentBreakdown.rows,
       order_statuses:   orderStatuses.rows,
       summary: {
+        start_date: startDate,
+        end_date: endDate,
         total_revenue: totalRevenue,
         total_collected: totalCollected,
         payroll_spent: payrollSpent,
@@ -215,25 +276,32 @@ const salesOverview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// GET /api/reports/production?year=2026
+// GET /api/reports/production?start_date=2026-01-01&end_date=2026-03-31
 const productionOverview = async (req, res, next) => {
   try {
-    const year = req.query.year || new Date().getFullYear();
+    const { startDate, endDate } = resolveDateRange({
+      startDateInput: req.query.start_date,
+      endDateInput: req.query.end_date,
+      yearInput: req.query.year,
+      fallback: 'year',
+    });
 
     const [monthly, byEmployee, statusBreakdown, completion, productProgress, lateProducts] = await Promise.all([
       // Monthly orders created + completed
       pool.query(`
         SELECT
-          EXTRACT(MONTH FROM created_at)::int AS month,
+          date_trunc('month', created_at)::date AS month_start,
+          to_char(date_trunc('month', created_at), 'Mon YYYY') AS month_label,
           COUNT(*)::int AS total,
           SUM(CASE WHEN status IN ('done','shipped') THEN 1 ELSE 0 END)::int AS completed,
           COALESCE(SUM(quantity), 0)::int AS units_ordered,
           COALESCE(SUM(produced_qty), 0)::int AS units_produced
         FROM production_orders
-        WHERE created_at >= make_date($1::int, 1, 1)::timestamp
-          AND created_at <  make_date($1::int + 1, 1, 1)::timestamp
-        GROUP BY month ORDER BY month
-      `, [year]),
+        WHERE created_at >= $1::date
+          AND created_at <  ($2::date + interval '1 day')
+        GROUP BY 1, 2
+        ORDER BY 1
+      `, [startDate, endDate]),
 
       // Top 5 employees by orders assigned
       pool.query(`
@@ -242,20 +310,20 @@ const productionOverview = async (req, res, next) => {
                COALESCE(SUM(po.produced_qty),0)::int AS units_produced
         FROM employees e
         JOIN production_orders po ON po.assigned_to = e.id
-        WHERE po.created_at >= make_date($1::int, 1, 1)::timestamp
-          AND po.created_at <  make_date($1::int + 1, 1, 1)::timestamp
+        WHERE po.created_at >= $1::date
+          AND po.created_at <  ($2::date + interval '1 day')
         GROUP BY e.id, e.name
         ORDER BY orders DESC LIMIT 5
-      `, [year]),
+      `, [startDate, endDate]),
 
       // Status breakdown
       pool.query(`
         SELECT status, COUNT(*)::int AS count
         FROM production_orders
-        WHERE created_at >= make_date($1::int, 1, 1)::timestamp
-          AND created_at <  make_date($1::int + 1, 1, 1)::timestamp
+        WHERE created_at >= $1::date
+          AND created_at <  ($2::date + interval '1 day')
         GROUP BY status
-      `, [year]),
+      `, [startDate, endDate]),
 
       // Overall completion rate
       pool.query(`
@@ -265,9 +333,9 @@ const productionOverview = async (req, res, next) => {
           COALESCE(SUM(quantity),0)::int    AS total_units,
           COALESCE(SUM(produced_qty),0)::int AS produced_units
         FROM production_orders
-        WHERE created_at >= make_date($1::int, 1, 1)::timestamp
-          AND created_at <  make_date($1::int + 1, 1, 1)::timestamp
-      `, [year]),
+        WHERE created_at >= $1::date
+          AND created_at <  ($2::date + interval '1 day')
+      `, [startDate, endDate]),
 
       // Detailed product progress for the year
       pool.query(`
@@ -302,11 +370,11 @@ const productionOverview = async (req, res, next) => {
               AND status NOT IN ('done','shipped')
           )::date AS earliest_late_due_date
         FROM production_orders
-        WHERE created_at >= make_date($1::int, 1, 1)::timestamp
-          AND created_at <  make_date($1::int + 1, 1, 1)::timestamp
+        WHERE created_at >= $1::date
+          AND created_at <  ($2::date + interval '1 day')
         GROUP BY product_name
         ORDER BY units_remaining DESC, product_name ASC
-      `, [year]),
+      `, [startDate, endDate]),
 
       // Late products snapshot
       pool.query(`
@@ -316,17 +384,19 @@ const productionOverview = async (req, res, next) => {
           COALESCE(SUM(GREATEST(quantity - produced_qty, 0)),0)::int AS late_units,
           MIN(due_date)::date AS oldest_due_date
         FROM production_orders
-        WHERE created_at >= make_date($1::int, 1, 1)::timestamp
-          AND created_at <  make_date($1::int + 1, 1, 1)::timestamp
+        WHERE created_at >= $1::date
+          AND created_at <  ($2::date + interval '1 day')
           AND due_date IS NOT NULL
           AND due_date < CURRENT_DATE
           AND status NOT IN ('done','shipped')
         GROUP BY product_name
         ORDER BY oldest_due_date ASC, late_units DESC
-      `, [year]),
+      `, [startDate, endDate]),
     ]);
 
     res.json({
+      start_date:       startDate,
+      end_date:         endDate,
       monthly:          monthly.rows,
       by_employee:      byEmployee.rows,
       status_breakdown: statusBreakdown.rows,
@@ -337,21 +407,26 @@ const productionOverview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-// GET /api/reports/hr?year=2026&month=3
+// GET /api/reports/hr?start_date=2026-03-01&end_date=2026-03-31
 const hrOverview = async (req, res, next) => {
   try {
-    const year  = req.query.year  || new Date().getFullYear();
-    const month = req.query.month || new Date().getMonth() + 1;
+    const { startDate, endDate } = resolveDateRange({
+      startDateInput: req.query.start_date,
+      endDateInput: req.query.end_date,
+      yearInput: req.query.year,
+      monthInput: req.query.month,
+      fallback: 'month',
+    });
 
     const [attendanceSummary, byDepartment, payrollSummary, topHours, payrollHistory] = await Promise.all([
-      // Attendance breakdown for month â€” date range avoids function wrapper on indexed date column
+      // Attendance breakdown for selected date range.
       pool.query(`
         SELECT status, COUNT(*)::int AS count
         FROM attendance
-        WHERE date >= make_date($2::int, $1::int, 1)
-          AND date <  make_date($2::int, $1::int, 1) + INTERVAL '1 month'
+        WHERE date >= $1::date
+          AND date <  ($2::date + interval '1 day')
         GROUP BY status
-      `, [month, year]),
+      `, [startDate, endDate]),
 
       // Attendance by department
       pool.query(`
@@ -363,13 +438,13 @@ const hrOverview = async (req, res, next) => {
         FROM attendance a
         JOIN employees e ON a.employee_id = e.id
         JOIN departments d ON e.department_id = d.id
-        WHERE a.date >= make_date($2::int, $1::int, 1)
-          AND a.date <  make_date($2::int, $1::int, 1) + INTERVAL '1 month'
+        WHERE a.date >= $1::date
+          AND a.date <  ($2::date + interval '1 day')
         GROUP BY d.id, d.name
         ORDER BY present DESC
-      `, [month, year]),
+      `, [startDate, endDate]),
 
-      // Payroll summary for month (month/year are integer columns â€” no EXTRACT needed)
+      // Payroll summary for the selected date range.
       pool.query(`
         SELECT
           COUNT(*)::int AS total_records,
@@ -380,8 +455,16 @@ const hrOverview = async (req, res, next) => {
           COALESCE(SUM(deductions),0)::float AS total_deductions,
           SUM(CASE WHEN status='paid' THEN 1 ELSE 0 END)::int AS paid_count
         FROM payroll
-        WHERE month = $1 AND year = $2
-      `, [month, year]),
+        WHERE (
+          week_start IS NOT NULL
+          AND week_start <= $2::date
+          AND COALESCE(week_end, week_start) >= $1::date
+        ) OR (
+          week_start IS NULL
+          AND make_date(year, month, 1) <= $2::date
+          AND (make_date(year, month, 1) + interval '1 month' - interval '1 day') >= $1::date
+        )
+      `, [startDate, endDate]),
 
       // Top 5 employees by hours worked
       pool.query(`
@@ -390,29 +473,41 @@ const hrOverview = async (req, res, next) => {
                COUNT(a.id)::int AS days_logged
         FROM employees e
         LEFT JOIN attendance a ON a.employee_id = e.id
-          AND a.date >= make_date($2::int, $1::int, 1)
-          AND a.date <  make_date($2::int, $1::int, 1) + INTERVAL '1 month'
+          AND a.date >= $1::date
+          AND a.date <  ($2::date + interval '1 day')
         GROUP BY e.id, e.name
         ORDER BY total_hours DESC LIMIT 5
-      `, [month, year]),
+      `, [startDate, endDate]),
 
-      // Monthly payroll spend history for the selected year (integer columns â€” no EXTRACT needed)
+      // Monthly payroll history inside selected date range.
       pool.query(`
         SELECT
-          month::int,
+          EXTRACT(MONTH FROM COALESCE(week_start, make_date(year, month, 1)))::int AS month,
+          date_trunc('month', COALESCE(week_start, make_date(year, month, 1)))::date::text AS month_start,
+          to_char(date_trunc('month', COALESCE(week_start, make_date(year, month, 1))), 'Mon YYYY') AS month_label,
           COUNT(*)::int AS total_records,
           SUM(CASE WHEN status='paid' THEN 1 ELSE 0 END)::int AS paid_records,
           COALESCE(SUM(net_salary),0)::float AS total_payout,
           COALESCE(SUM(CASE WHEN status='paid' THEN net_salary ELSE 0 END),0)::float AS paid_payout,
           COALESCE(SUM(CASE WHEN status='pending' THEN net_salary ELSE 0 END),0)::float AS pending_payout
         FROM payroll
-        WHERE year = $1
-        GROUP BY month
-        ORDER BY month
-      `, [year]),
+        WHERE (
+          week_start IS NOT NULL
+          AND week_start <= $2::date
+          AND COALESCE(week_end, week_start) >= $1::date
+        ) OR (
+          week_start IS NULL
+          AND make_date(year, month, 1) <= $2::date
+          AND (make_date(year, month, 1) + interval '1 month' - interval '1 day') >= $1::date
+        )
+        GROUP BY 1, 2, 3
+        ORDER BY 2
+      `, [startDate, endDate]),
     ]);
 
     res.json({
+      start_date:         startDate,
+      end_date:           endDate,
       attendance_summary: attendanceSummary.rows,
       by_department:      byDepartment.rows,
       payroll_summary:    payrollSummary.rows[0],

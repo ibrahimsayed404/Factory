@@ -1,4 +1,4 @@
-const pool = require('../../config/db');
+const pool = require('../db/pool');
 
 const getStats = async (req, res, next) => {
   try {

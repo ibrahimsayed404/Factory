@@ -1,7 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const pool = require('../config/db');
+const pool = require('../src/db/pool');
 
 const defaultMigration = path.join(__dirname, '..', 'migrations', '20260315_security_and_indexes.sql');
 const baseSchema = path.join(__dirname, '..', 'src', 'db', 'schema.sql');

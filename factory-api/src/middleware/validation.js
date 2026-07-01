@@ -26,7 +26,15 @@ const idParam = [
 const authRegister = [
   body('name').trim().isLength({ min: 2, max: 100 }).withMessage('name is required'),
   body('email').isEmail().withMessage('valid email is required').normalizeEmail(),
-  body('password').isLength({ min: 8 }).withMessage('password must be at least 8 characters'),
+  // SECURITY: Enforce strong password policy (OWASP A07).
+  // Requires minimum 8 chars with at least 1 lowercase, 1 uppercase, 1 number, and 1 symbol.
+  body('password').isStrongPassword({
+    minLength: 8,
+    minLowercase: 1,
+    minUppercase: 1,
+    minNumbers: 1,
+    minSymbols: 1,
+  }).withMessage('password must be at least 8 characters with uppercase, lowercase, number, and symbol'),
   handleValidation,
 ];
 
@@ -128,14 +136,60 @@ const salesStatusUpdate = [
   handleValidation,
 ];
 
+const accountCreate = [
+  body('code').trim().isLength({ min: 2, max: 30 }).withMessage('code is required'),
+  body('name').trim().isLength({ min: 2, max: 150 }).withMessage('name is required'),
+  body('account_type').isIn(['asset', 'liability', 'equity', 'revenue', 'expense']).withMessage('invalid account_type'),
+  body('opening_balance').optional({ nullable: true }).isFloat().withMessage('opening_balance must be numeric'),
+  handleValidation,
+];
+
+const accountUpdate = [
+  body('name').optional().trim().isLength({ min: 2, max: 150 }).withMessage('name is required'),
+  body('account_type').optional().isIn(['asset', 'liability', 'equity', 'revenue', 'expense']).withMessage('invalid account_type'),
+  body('opening_balance').optional({ nullable: true }).isFloat().withMessage('opening_balance must be numeric'),
+  handleValidation,
+];
+
+const journalEntryCreate = [
+  body('entry_date').optional({ checkFalsy: true }).isISO8601().withMessage('entry_date must be YYYY-MM-DD'),
+  body('description').optional({ nullable: true }).isLength({ max: 500 }).withMessage('description is too long'),
+  body('lines').isArray({ min: 2 }).withMessage('lines must contain at least two rows'),
+  body('lines.*.account_id').optional({ nullable: true }).isInt({ min: 1 }).withMessage('account_id must be valid'),
+  body('lines.*.account_code').optional({ nullable: true }).isLength({ min: 1, max: 30 }).withMessage('account_code is required'),
+  body('lines.*.debit').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('debit must be >= 0'),
+  body('lines.*.credit').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('credit must be >= 0'),
+  handleValidation,
+];
+
+const accountingExpenseCreate = [
+  body('expense_date').optional({ checkFalsy: true }).isISO8601().withMessage('expense_date must be YYYY-MM-DD'),
+  body('amount').isFloat({ min: 0.01 }).withMessage('amount must be greater than 0'),
+  body('account_id').optional({ nullable: true }).isInt({ min: 1 }).withMessage('account_id must be valid'),
+  body('account_code').optional({ nullable: true }).isLength({ min: 1, max: 30 }).withMessage('account_code is invalid'),
+  body('paid_from_account_id').optional({ nullable: true }).isInt({ min: 1 }).withMessage('paid_from_account_id must be valid'),
+  body('paid_from_account_code').optional({ nullable: true }).isLength({ min: 1, max: 30 }).withMessage('paid_from_account_code is invalid'),
+  body('notes').optional({ nullable: true }).isLength({ max: 500 }).withMessage('notes is too long'),
+  handleValidation,
+];
+
 const productionCreate = [
-  body('product_name').trim().isLength({ min: 1, max: 150 }).withMessage('product_name is required'),
   body('quantity').isInt({ min: 1 }).withMessage('quantity must be at least 1'),
-  body('assigned_to').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage('assigned_to must be valid'),
-  body('sales_order_id').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage('sales_order_id must be valid'),
-  body('materials').optional().isArray().withMessage('materials must be an array'),
-  body('materials.*.material_id').optional().isInt({ min: 1 }).withMessage('material_id must be valid'),
-  body('materials.*.quantity_used').optional().isFloat({ min: 0.01 }).withMessage('quantity_used must be > 0'),
+  body('product_id').optional({ nullable: true }).isInt({ min: 1 }).withMessage('product_id must be an integer'),
+  body('product_name').optional({ nullable: true }).isLength({ min: 1, max: 150 }).withMessage('product_name is invalid'),
+  body('bom_id').optional({ nullable: true }).isInt({ min: 1 }).withMessage('bom_id must be an integer'),
+  body('routing_id').optional({ nullable: true }).isInt({ min: 1 }).withMessage('routing_id must be an integer'),
+  body('start_date').optional().isISO8601().toDate(),
+  body('due_date').optional().isISO8601().toDate(),
+  body().custom((value) => {
+    if (!value.product_id && !value.product_name) {
+      throw new Error('product_id or product_name is required');
+    }
+    if (value.product_id && (!value.bom_id || !value.routing_id)) {
+      throw new Error('bom_id and routing_id are required when product_id is provided');
+    }
+    return true;
+  }),
   handleValidation,
 ];
 
@@ -198,6 +252,10 @@ module.exports = {
   salesExpenseCreate,
   salesCreate,
   salesStatusUpdate,
+  accountCreate,
+  accountUpdate,
+  journalEntryCreate,
+  accountingExpenseCreate,
   productionCreate,
   productionStatusUpdate,
   productionTrackingCreate,

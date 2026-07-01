@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { productionTrackingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { Badge, Card, ErrorMsg, PageHeader, Select, Spinner, Table } from '../components/ui';
+import { Badge, Card, ErrorMsg, PageHeader, Select, Spinner, Table, Btn, Modal } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 
 const efficiencyVariant = (efficiency) => {
@@ -14,8 +14,11 @@ const efficiencyVariant = (efficiency) => {
 
 export default function ProductionTrackingReport() {
   const { t } = useLanguage();
-  const { data: orders, loading, error } = useFetch(productionTrackingApi.list);
+  const { data: orders, loading, error, refetch } = useFetch(productionTrackingApi.list);
   const [selectedOrderId, setSelectedOrderId] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const { data: report, loading: reportLoading, error: reportError } = useFetch(
     () => (selectedOrderId ? productionTrackingApi.getReport(selectedOrderId) : null),
     [selectedOrderId]
@@ -25,6 +28,30 @@ export default function ProductionTrackingReport() {
     () => (orders || []).find((o) => String(o.id) === String(selectedOrderId)) || null,
     [orders, selectedOrderId]
   );
+
+  const cycleStarted = Boolean(report?.sorting || report?.final);
+  const canDelete = Boolean(selectedOrderId && report && !cycleStarted);
+
+  useEffect(() => {
+    if (cycleStarted) {
+      setShowDeleteConfirm(false);
+    }
+  }, [cycleStarted]);
+
+  const handleDeleteOrder = async () => {
+    if (!selectedOrderId) return;
+    if (cycleStarted) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+    setDeleting(true);
+    setDeleteError('');
+    await productionTrackingApi.deleteOrder(selectedOrderId);
+    setShowDeleteConfirm(false);
+    setSelectedOrderId('');
+    await refetch();
+    setDeleting(false);
+  };
 
   const warning = (report?.loss_percentage || 0) > 10;
 
@@ -79,7 +106,31 @@ export default function ProductionTrackingReport() {
             </option>
           ))}
         </Select>
+        {canDelete && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <Btn size="sm" variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+              {t('delete', 'Delete Order')}
+            </Btn>
+          </div>
+        )}
       </Card>
+
+      {showDeleteConfirm && (
+        <Modal title={t('deleteOrder', 'Delete Production Order?')} onClose={() => setShowDeleteConfirm(false)} width={400}>
+          <div style={{ marginBottom: 16, fontSize: 14 }}>
+            {t('deleteWarning', 'This will delete the production order and restore all deducted inventory. This action cannot be undone.')}
+          </div>
+          {deleteError && <ErrorMsg msg={deleteError} />}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <Btn onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
+              {t('cancel', 'Cancel')}
+            </Btn>
+            <Btn variant="danger" onClick={handleDeleteOrder} disabled={deleting}>
+              {deleting ? t('deleting', 'Deleting...') : t('delete', 'Delete')}
+            </Btn>
+          </div>
+        </Modal>
+      )}
 
       {selected && report && (
         <>

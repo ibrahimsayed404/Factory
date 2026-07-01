@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { productionApi, employeeApi } from '../api';
+import { productionApi, productApi, manufacturingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant } from '../components/ui';
 
-const emptyForm = { product_name: '', quantity: '', assigned_to: '', start_date: '', due_date: '', notes: '' };
+const emptyForm = { product_id: '', quantity: '', bom_id: '', routing_id: '', start_date: '', due_date: '' };
 
 const statusLabel = { pending: 'Pending', in_progress: 'In Progress', done: 'Done', shipped: 'Shipped' };
 
 export default function Production() {
   const { data: orders, loading, error, refetch } = useFetch(productionApi.list);
-  const { data: employees } = useFetch(employeeApi.list);
+  const { data: products } = useFetch(productApi.list);
+  const { data: boms } = useFetch(manufacturingApi.boms);
+  const { data: routings } = useFetch(manufacturingApi.routings);
   const [showModal, setShowModal] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -152,22 +154,36 @@ export default function Production() {
       {showModal && (
         <Modal title="New production order" onClose={() => setShowModal(false)} width={520}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1/-1' }}><Input label="Product name" value={form.product_name} onChange={f('product_name')} /></div>
-            <Input label="Quantity" type="number" value={form.quantity} onChange={f('quantity')} />
-            <Select label="Assign to" value={form.assigned_to} onChange={f('assigned_to')}>
-              <option value="">Select employee</option>
-              {employees?.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </Select>
-            <Input label="Start date" type="date" value={form.start_date} onChange={f('start_date')} />
-            <Input label="Due date" type="date" value={form.due_date} onChange={f('due_date')} />
             <div style={{ gridColumn: '1/-1' }}>
-              <Input label="Notes" value={form.notes} onChange={f('notes')} />
+              <Select label="Product" value={form.product_id} onChange={f('product_id')}>
+                <option value="">Select product...</option>
+                {(products || []).map(p => <option key={p.id} value={p.id}>{p.name} {p.sku ? `(${p.sku})` : ''}</option>)}
+              </Select>
             </div>
+            
+            <Input label="Quantity" type="number" value={form.quantity} onChange={f('quantity')} />
+            
+            <Select label="BOM" value={form.bom_id} onChange={f('bom_id')}>
+              <option value="">Select BOM...</option>
+              {(boms || []).filter(b => b.product_id === Number(form.product_id) || !form.product_id).map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+
+            <Select label="Routing" value={form.routing_id} onChange={f('routing_id')}>
+              <option value="">Select Routing...</option>
+              {(routings || []).filter(r => r.product_id === Number(form.product_id) || !form.product_id).map(r => (
+                <option key={r.id} value={r.id}>{r.name}</option>
+              ))}
+            </Select>
+
+            <Input label="Start Date" type="date" value={form.start_date} onChange={f('start_date')} />
+            <Input label="Due Date" type="date" value={form.due_date} onChange={f('due_date')} />
           </div>
-          {createError && <div style={{ marginTop: 12 }}><ErrorMsg msg={createError} /></div>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          {createError && <div style={{marginTop:12}}><ErrorMsg msg={createError} /></div>}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24 }}>
             <Btn onClick={() => setShowModal(false)}>Cancel</Btn>
-            <Btn variant="primary" onClick={handleCreate} disabled={saving}>{saving ? 'Creating…' : 'Create order'}</Btn>
+            <Btn variant="primary" onClick={handleCreate} disabled={saving}>{saving ? <Spinner /> : 'Create order'}</Btn>
           </div>
         </Modal>
       )}

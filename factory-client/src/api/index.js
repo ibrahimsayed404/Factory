@@ -194,6 +194,8 @@ export const api = {
   delete: (path)         => request('DELETE', path),
 };
 
+export default api;
+
 // Auth
 export const authApi = {
   login:    async (body) => {
@@ -224,6 +226,15 @@ export const inventoryApi = {
   create: (body)        => api.post('/inventory', body),
   update: (id, body)    => api.put(`/inventory/${id}`, body),
   delete: (id)          => api.delete(`/inventory/${id}`),
+};
+
+// Products
+export const productApi = {
+  list:   (params = '?limit=1000') => api.get(`/products${params}`).then(r => Array.isArray(r) ? r : r?.data || []),
+  get:    (id)          => api.get(`/products/${id}`),
+  create: (body)        => api.post('/products', body),
+  update: (id, body)    => api.put(`/products/${id}`, body),
+  delete: (id)          => api.delete(`/products/${id}`),
 };
 
 // Employees
@@ -266,20 +277,59 @@ export const salesApi = {
   createOrder:    (body)    => api.post('/sales', body),
   updateStatus:   (id, body)=> api.put(`/sales/${id}/status`, body),
   delete:         (id)      => api.delete(`/sales/${id}`),
+  analytics:      ()        => api.get('/sales/analytics'),
+  outstanding:    ()        => api.get('/sales/outstanding-balances'),
+  quotations:     (params = '?limit=1000') => api.get(`/sales-quotations${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
+  createQuotation:(body)    => api.post('/sales-quotations', body),
+  convertQuotation:(id)     => api.post(`/sales-quotations/${id}/convert`),
+  invoices:       (params = '?limit=1000') => api.get(`/sales-invoices${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
+  createInvoice:  (body)    => api.post('/sales-invoices', body),
+  deliveryNotes:  (params = '?limit=1000') => api.get(`/delivery-notes${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
+  createDeliveryNote:(body) => api.post('/delivery-notes', body),
+  returns:        (params = '?limit=1000') => api.get(`/sales-returns${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
+  createReturn:   (body)    => api.post('/sales-returns', body),
+  creditNotes:    (params = '?limit=1000') => api.get(`/credit-notes${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
+  createCreditNote:(body)   => api.post('/credit-notes', body),
 };
 
 // Reports
 export const reportsApi = {
-  sales:      (year)         => api.get(`/reports/sales?year=${year}`),
+  sales:      (params)       => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return api.get(`/reports/sales${query}`);
+  },
   addSalesExpense: (body)    => api.post('/reports/sales/expenses', body),
-  production: (year)         => api.get(`/reports/production?year=${year}`),
-  hr:         (year, month)  => api.get(`/reports/hr?year=${year}&month=${month}`),
+  production: (params)       => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return api.get(`/reports/production${query}`);
+  },
+  hr:         (params)       => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return api.get(`/reports/hr${query}`);
+  },
   inventory:  ()             => api.get('/reports/inventory'),
 };
 
 export const settingsApi = {
   getAttendancePayrollPolicy: () => api.get('/settings/attendance-payroll'),
   updateAttendancePayrollPolicy: (body) => api.put('/settings/attendance-payroll', body),
+};
+
+export const accountingApi = {
+  accounts: (params = '') => api.get(`/accounting/accounts${params}`),
+  createAccount: (body) => api.post('/accounting/accounts', body),
+  cashAccounts: () => api.get('/accounting/cash-accounts'),
+  createCashAccount: (body) => api.post('/accounting/cash-accounts', body),
+  bankAccounts: () => api.get('/accounting/bank-accounts'),
+  createBankAccount: (body) => api.post('/accounting/bank-accounts', body),
+  journalEntries: (params = '') => api.get(`/accounting/journal-entries${params}`),
+  journalEntry: (id) => api.get(`/accounting/journal-entries/${id}`),
+  createJournalEntry: (body) => api.post('/accounting/journal-entries', body),
+  generalLedger: (params = '') => api.get(`/accounting/general-ledger${params}`),
+  trialBalance: (params = '') => api.get(`/accounting/trial-balance${params}`),
+  profitLoss: (params = '') => api.get(`/accounting/profit-loss${params}`),
+  balanceSheet: (params = '') => api.get(`/accounting/balance-sheet${params}`),
+  createExpense: (body) => api.post('/accounting/expenses', body),
 };
 
 // Production
@@ -292,6 +342,18 @@ export const productionApi = {
   get:          (id)          => api.get(`/production/${id}`),
   create:       (body)        => api.post('/production', body),
   updateStatus: (id, body)    => api.put(`/production/${id}/status`, body),
+  completeWorkOrder: (workOrderId, body) => api.put(`/production/work-orders/${workOrderId}/complete`, body),
+};
+
+export const manufacturingApi = {
+  boms: () => api.get('/manufacturing/boms').then(r => Array.isArray(r) ? r : r?.data || []),
+  createBom: (body) => api.post('/manufacturing/boms', body),
+  
+  stages: () => api.get('/manufacturing/stages').then(r => Array.isArray(r) ? r : r?.data || []),
+  createStage: (body) => api.post('/manufacturing/stages', body),
+  
+  routings: () => api.get('/manufacturing/routings').then(r => Array.isArray(r) ? r : r?.data || []),
+  createRouting: (body) => api.post('/manufacturing/routings', body),
 };
 
 export const productionTrackingApi = {
@@ -307,4 +369,17 @@ export const productionTrackingApi = {
   addSorting: (id, body) => api.post(`/production-orders/${id}/sorting`, body),
   addFinal: (id, body) => api.post(`/production-orders/${id}/final`, body),
   getReport: (id) => api.get(`/production-orders/${id}/report`),
+  deleteOrder: (id) => api.delete(`/production-orders/${id}`),
+};
+
+export const qcApi = {
+  inspections: (params = '') => api.get(`/qc/inspections${params}`).then(r => Array.isArray(r) ? r : r?.data || []),
+  getInspection: (id) => api.get(`/qc/inspections/${id}`).then(r => r?.data || r),
+  createInspection: (body) => api.post('/qc/inspections', body),
+  updateResults: (id, body) => api.put(`/qc/inspections/${id}/results`, body),
+  uploadPhoto: (id, formData) => api.post(`/qc/inspections/${id}/photos`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  defectCategories: () => api.get('/qc/defect-categories').then(r => Array.isArray(r) ? r : r?.data || []),
+  reports: () => api.get('/qc/reports').then(r => r?.data || r),
 };

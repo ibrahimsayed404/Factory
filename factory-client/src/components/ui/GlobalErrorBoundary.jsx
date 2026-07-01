@@ -12,7 +12,7 @@ export class GlobalErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // You can log error info here if needed
-    if (import.meta.env.DEV) {
+    if (process.env.NODE_ENV !== 'production') {
       console.error('GlobalErrorBoundary caught:', error, errorInfo);
     }
   }

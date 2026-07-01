@@ -1,6 +1,6 @@
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
-const pool = require('../config/db');
+const pool = require('../src/db/pool');
 
 const ADMIN_NAME = process.env.BOOTSTRAP_ADMIN_NAME;
 const ADMIN_EMAIL = process.env.BOOTSTRAP_ADMIN_EMAIL;

@@ -16,12 +16,21 @@ const Payroll    = lazy(() => import('./pages/Payroll'));
 const Sales      = lazy(() => import('./pages/Sales'));
 const Customers  = lazy(() => import('./pages/Customers'));
 const Production = lazy(() => import('./pages/Production'));
+const ProductionPipeline = lazy(() => import('./pages/ProductionPipeline'));
 const ProductionOrderCreate = lazy(() => import('./pages/ProductionOrderCreate'));
 const ProductionSorting = lazy(() => import('./pages/ProductionSorting'));
 const ProductionFinal = lazy(() => import('./pages/ProductionFinal'));
 const ProductionTrackingReport = lazy(() => import('./pages/ProductionTrackingReport'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const Reports    = lazy(() => import('./pages/Reports'));
+const Accounting = lazy(() => import('./pages/Accounting'));
+const Products   = lazy(() => import('./pages/Products'));
+const Purchasing = lazy(() => import('./pages/Purchasing'));
+const Bom        = lazy(() => import('./pages/BOM'));
+const Routings   = lazy(() => import('./pages/Routings'));
+const QCInspections = lazy(() => import('./pages/QCInspections'));
+const QCInspectionDetail = lazy(() => import('./pages/QCInspectionDetail'));
+const QCReports = lazy(() => import('./pages/QCReports'));
 
 const Protected = ({ children }) => {
   const { user, loading } = useAuth();
@@ -42,16 +51,25 @@ export default function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/"           element={<Protected><Dashboard /></Protected>} />
                   <Route path="/inventory"  element={<Protected><Inventory /></Protected>} />
+                  <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
+                  <Route path="/products"   element={<Protected><Products /></Protected>} />
                   <Route path="/employees"  element={<Protected><Employees /></Protected>} />
                   <Route path="/payroll"    element={<Protected><Payroll /></Protected>} />
                   <Route path="/sales"      element={<Protected><Sales /></Protected>} />
                   <Route path="/customers"  element={<Protected><Customers /></Protected>} />
+                  <Route path="/accounting" element={<Protected><Accounting /></Protected>} />
                   <Route path="/production"  element={<Protected><Production /></Protected>} />
+                  <Route path="/production-pipeline" element={<Protected><ProductionPipeline /></Protected>} />
                   <Route path="/production-orders/create" element={<Protected><ProductionOrderCreate /></Protected>} />
                   <Route path="/production-orders/sorting" element={<Protected><ProductionSorting /></Protected>} />
                   <Route path="/production-orders/final" element={<Protected><ProductionFinal /></Protected>} />
                   <Route path="/production-orders/report" element={<Protected><ProductionTrackingReport /></Protected>} />
+                  <Route path="/manufacturing/boms" element={<Protected><Bom /></Protected>} />
+                  <Route path="/manufacturing/routings" element={<Protected><Routings /></Protected>} />
                   <Route path="/attendance" element={<Protected><Attendance /></Protected>} />
+                  <Route path="/qc/inspections" element={<Protected><QCInspections /></Protected>} />
+                  <Route path="/qc/inspections/:id" element={<Protected><QCInspectionDetail /></Protected>} />
+                  <Route path="/qc/reports" element={<Protected><QCReports /></Protected>} />
                   <Route path="/reports"    element={<Protected><Reports /></Protected>} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>

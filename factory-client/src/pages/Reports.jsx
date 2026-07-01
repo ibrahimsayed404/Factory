@@ -114,10 +114,23 @@ const exportExcel = async (filename, sheets) => {
 const COLORS = ['#22d3a0','#60a5fa','#f5a623','#f05252','#a78bfa','#fb923c'];
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-const fill12 = (rows) => {
-  const map = {};
-  rows.forEach(r => { map[r.month] = r; });
-  return MONTH_LABELS.map((name, i) => ({ name, ...(map[i + 1] || {}) }));
+const normalizeMonthlyRows = (rows = []) => rows.map((row) => {
+  const fallbackName = row.month && MONTH_LABELS[Number(row.month) - 1]
+    ? MONTH_LABELS[Number(row.month) - 1]
+    : (row.month_start || '');
+  return {
+    ...row,
+    name: row.month_label || row.name || fallbackName,
+  };
+});
+
+const getInitialRange = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const start = `${y}-${m}-01`;
+  const end = `${y}-${m}-${String(new Date(y, now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+  return { start, end };
 };
 
 const TT = ({ active, payload, label, prefix = '', suffix = '' }) => {
@@ -141,8 +154,11 @@ const SectionTitle = ({ children }) => (
 );
 
 /* ── TAB: Sales ─────────────────────────────────────── */
-const SalesTab = ({ year }) => {
-  const { data, loading, error, refetch } = useFetch(() => reportsApi.sales(year), [year]);
+const SalesTab = ({ startDate, endDate }) => {
+  const { data, loading, error, refetch } = useFetch(
+    () => reportsApi.sales({ start_date: startDate, end_date: endDate }),
+    [startDate, endDate]
+  );
   const [exporting, setExporting] = useState('');
   const [netMode, setNetMode] = useState('cash');
   const [addingExpense, setAddingExpense] = useState(false);
@@ -156,11 +172,11 @@ const SalesTab = ({ year }) => {
   const handlePDF = async () => {
     setExporting('pdf');
     try {
-      const monthly = fill12(data?.monthly || []);
+      const monthly = normalizeMonthlyRows(data?.monthly || []);
       const totalRevenue = (data?.monthly||[]).reduce((a,r) => a+(r.revenue||0),0);
       const totalSpent = (data?.monthly||[]).reduce((a,r) => a+(r.total_spent||0),0);
       const totalNet = (data?.monthly||[]).reduce((a,r) => a+(netMode === 'cash' ? (r.net_value||0) : (r.accrual_net_value||0)),0);
-      await exportPDF(`sales-report-${year}.pdf`, `Sales Report — ${year}`, [
+      await exportPDF(`sales-report-${startDate}-to-${endDate}.pdf`, `Sales Report — ${startDate} to ${endDate}`, [
         {
           title: 'Summary',
           metrics: [
@@ -211,8 +227,8 @@ const SalesTab = ({ year }) => {
   const handleExcel = async () => {
     setExporting('excel');
     try {
-      const monthly = fill12(data?.monthly || []);
-      await exportExcel(`sales-report-${year}.xlsx`, [
+      const monthly = normalizeMonthlyRows(data?.monthly || []);
+      await exportExcel(`sales-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Monthly Revenue',
           headers: ['Month', 'Orders', 'Revenue ($)', 'Collected ($)', 'Spent ($)', 'Cash Net ($)', 'Accrual Net ($)', 'Payroll Spent ($)', 'Materials Spent ($)', 'Extra Spent ($)'],
@@ -272,7 +288,7 @@ const SalesTab = ({ year }) => {
     }
   };
 
-  const monthly = fill12(data.monthly || []);
+  const monthly = normalizeMonthlyRows(data.monthly || []);
   const totalRevenue   = (data.monthly||[]).reduce((a,r) => a+(r.revenue||0),0);
   const totalOrders    = (data.monthly||[]).reduce((a,r) => a+(r.orders||0),0);
   const totalCollected = (data.monthly||[]).reduce((a,r) => a+(r.collected||0),0);
@@ -294,7 +310,7 @@ const SalesTab = ({ year }) => {
 
       <Card>
         <SectionTitle>Add extra spent money</SectionTitle>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 2fr auto', gap:10, alignItems:'end' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10, alignItems:'end' }}>
           <input type="date" value={expenseForm.expense_date} onChange={e => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
             style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
           <input type="number" min="0.01" placeholder="Amount" value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
@@ -308,17 +324,17 @@ const SalesTab = ({ year }) => {
         {expenseError && <div style={{ marginTop: 10 }}><ErrorMsg msg={expenseError} /></div>}
       </Card>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,minmax(0,1fr))', gap:14 }}>
-        <MetricCard label="Total revenue"    value={`$${totalRevenue.toLocaleString()}`}   color="var(--accent)" sub={`${year}`} />
-        <MetricCard label="Total orders"     value={totalOrders}                            sub={`${year}`} />
-        <MetricCard label="Amount collected" value={`$${totalCollected.toLocaleString()}`} sub={`${year}`} />
-        <MetricCard label="Total spent"      value={`$${totalSpent.toLocaleString()}`}     color="var(--danger)" sub={`${year}`} />
-        <MetricCard label={netMode === 'cash' ? 'Net value (cash)' : 'Net value (accrual)'} value={`$${netValue.toLocaleString()}`} color={netValue >= 0 ? 'var(--accent)' : 'var(--danger)'} sub={`${year}`} />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
+        <MetricCard label="Total revenue"    value={`$${totalRevenue.toLocaleString()}`}   color="var(--accent)" sub={`${startDate} to ${endDate}`} />
+        <MetricCard label="Total orders"     value={totalOrders}                            sub={`${startDate} to ${endDate}`} />
+        <MetricCard label="Amount collected" value={`$${totalCollected.toLocaleString()}`} sub={`${startDate} to ${endDate}`} />
+        <MetricCard label="Total spent"      value={`$${totalSpent.toLocaleString()}`}     color="var(--danger)" sub={`${startDate} to ${endDate}`} />
+        <MetricCard label={netMode === 'cash' ? 'Net value (cash)' : 'Net value (accrual)'} value={`$${netValue.toLocaleString()}`} color={netValue >= 0 ? 'var(--accent)' : 'var(--danger)'} sub={`${startDate} to ${endDate}`} />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
-          <SectionTitle>Monthly sales cashflow — {year}</SectionTitle>
+          <SectionTitle>Monthly sales cashflow — {startDate} to {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={monthly}>
               <defs>
@@ -374,7 +390,7 @@ const SalesTab = ({ year }) => {
         </Card>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
           <SectionTitle>Top customers by collections</SectionTitle>
           {(data.top_customers||[]).map((c,i) => (
@@ -409,8 +425,11 @@ const SalesTab = ({ year }) => {
 };
 
 /* ── TAB: Production ────────────────────────────────── */
-const ProductionTab = ({ year }) => {
-  const { data, loading, error } = useFetch(() => reportsApi.production(year), [year]);
+const ProductionTab = ({ startDate, endDate }) => {
+  const { data, loading, error } = useFetch(
+    () => reportsApi.production({ start_date: startDate, end_date: endDate }),
+    [startDate, endDate]
+  );
   const [exporting, setExporting] = useState('');
 
   const handlePDF = async () => {
@@ -418,7 +437,7 @@ const ProductionTab = ({ year }) => {
     try {
       const c = data?.completion || {};
       const rate = c.total > 0 ? Math.round((c.done/c.total)*100) : 0;
-      await exportPDF(`production-report-${year}.pdf`, `Production Report — ${year}`, [
+      await exportPDF(`production-report-${startDate}-to-${endDate}.pdf`, `Production Report — ${startDate} to ${endDate}`, [
         {
           title: 'Summary',
           metrics: [
@@ -430,7 +449,7 @@ const ProductionTab = ({ year }) => {
         {
           title: 'Monthly Output',
           head: ['Month','Orders','Completed','Units Ordered','Units Produced'],
-          rows: fill12(data?.monthly||[]).map(r => [r.name, r.total||0, r.completed||0, r.units_ordered||0, r.units_produced||0]),
+          rows: normalizeMonthlyRows(data?.monthly||[]).map(r => [r.name, r.total||0, r.completed||0, r.units_ordered||0, r.units_produced||0]),
         },
         {
           title: 'Top Employees by Output',
@@ -468,11 +487,11 @@ const ProductionTab = ({ year }) => {
   const handleExcel = async () => {
     setExporting('excel');
     try {
-      await exportExcel(`production-report-${year}.xlsx`, [
+      await exportExcel(`production-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Monthly Output',
           headers: ['Month','Orders','Completed','Units Ordered','Units Produced'],
-          rows: fill12(data?.monthly||[]).map(r => [r.name, r.total||0, r.completed||0, r.units_ordered||0, r.units_produced||0]),
+          rows: normalizeMonthlyRows(data?.monthly||[]).map(r => [r.name, r.total||0, r.completed||0, r.units_ordered||0, r.units_produced||0]),
         },
         {
           sheetName: 'By Employee',
@@ -512,7 +531,7 @@ const ProductionTab = ({ year }) => {
   if (error) return <ErrorMsg msg={error} />;
   if (!data) return null;
 
-  const monthly = fill12(data.monthly||[]);
+  const monthly = normalizeMonthlyRows(data.monthly||[]);
   const completion = data.completion||{};
   const productProgress = data.product_progress || [];
   const lateProducts = data.late_products || [];
@@ -527,7 +546,7 @@ const ProductionTab = ({ year }) => {
         <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,minmax(0,1fr))', gap:14 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
         <MetricCard label="Total orders"    value={completion.total||0} />
         <MetricCard label="Completed"       value={completion.done||0}  color="var(--accent)" />
         <MetricCard label="Completion rate" value={`${completionRate}%`} color={completionRate>70?'var(--accent)':'var(--warn)'} />
@@ -535,9 +554,9 @@ const ProductionTab = ({ year }) => {
         <MetricCard label="Late units"      value={lateUnitsTotal}        color={lateUnitsTotal > 0 ? 'var(--danger)' : 'var(--accent)'} />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
-          <SectionTitle>Units ordered vs produced — {year}</SectionTitle>
+          <SectionTitle>Units ordered vs produced — {startDate} to {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={monthly} barCategoryGap="25%">
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -632,7 +651,7 @@ const ProductionTab = ({ year }) => {
         {(lateProducts||[]).length === 0 ? (
           <div style={{ color:'var(--accent)', fontSize:13 }}>No late products right now.</div>
         ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:12 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:12 }}>
             {(lateProducts||[]).map((p, i) => (
               <div key={`${p.product_name}-${i}`} style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px' }}>
                 <div style={{ fontSize:13, fontWeight:600, marginBottom:6 }}>{p.product_name}</div>
@@ -655,21 +674,24 @@ const ProductionTab = ({ year }) => {
 };
 
 /* ── TAB: HR ────────────────────────────────────────── */
-const HRTab = ({ year, month }) => {
-  const { data, loading, error } = useFetch(() => reportsApi.hr(year, month), [year, month]);
+const HRTab = ({ startDate, endDate }) => {
+  const { data, loading, error } = useFetch(
+    () => reportsApi.hr({ start_date: startDate, end_date: endDate }),
+    [startDate, endDate]
+  );
   const [exporting, setExporting] = useState('');
 
   const handlePDF = async () => {
     setExporting('pdf');
     try {
       const pr = data?.payroll_summary || {};
-      const payrollHistory = fill12(data?.payroll_history || []).map((row) => ({
+      const payrollHistory = normalizeMonthlyRows(data?.payroll_history || []).map((row) => ({
         name: row.name,
         paid_payout: row.paid_payout || 0,
         pending_payout: row.pending_payout || 0,
         total_payout: row.total_payout || 0,
       }));
-      await exportPDF(`hr-report-${MONTH_LABELS[month-1]}-${year}.pdf`, `HR & Payroll Report — ${MONTH_LABELS[month-1]} ${year}`, [
+      await exportPDF(`hr-report-${startDate}-to-${endDate}.pdf`, `HR & Payroll Report — ${startDate} to ${endDate}`, [
         {
           title: 'Payroll Summary',
           metrics: [
@@ -706,11 +728,11 @@ const HRTab = ({ year, month }) => {
   const handleExcel = async () => {
     setExporting('excel');
     try {
-      await exportExcel(`hr-report-${MONTH_LABELS[month-1]}-${year}.xlsx`, [
+      await exportExcel(`hr-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Payroll History',
           headers: ['Month','Paid Payroll ($)','Pending Payroll ($)','Total Payroll ($)','Paid Records','Total Records'],
-          rows: fill12(data?.payroll_history||[]).map(r => [r.name, r.paid_payout||0, r.pending_payout||0, r.total_payout||0, r.paid_records||0, r.total_records||0]),
+          rows: normalizeMonthlyRows(data?.payroll_history||[]).map(r => [r.name, r.paid_payout||0, r.pending_payout||0, r.total_payout||0, r.paid_records||0, r.total_records||0]),
         },
         {
           sheetName: 'Attendance by Dept',
@@ -736,7 +758,7 @@ const HRTab = ({ year, month }) => {
   if (!data) return null;
 
   const pr = data.payroll_summary || {};
-  const payrollHistory = fill12(data.payroll_history || []).map((row) => ({
+  const payrollHistory = normalizeMonthlyRows(data.payroll_history || []).map((row) => ({
     name: row.name,
     paid_payout: row.paid_payout || 0,
     pending_payout: row.pending_payout || 0,
@@ -750,16 +772,16 @@ const HRTab = ({ year, month }) => {
         <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,minmax(0,1fr))', gap:14 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
         <MetricCard label="Payroll payout" value={`$${Number(pr.total_payout||0).toLocaleString()}`} color="var(--accent)" />
         <MetricCard label="Paid payroll"   value={`$${Number(pr.paid_payout||0).toLocaleString()}`} color="var(--danger)" />
         <MetricCard label="Pending payroll" value={`$${Number(pr.pending_payout||0).toLocaleString()}`} />
         <MetricCard label="Paid employees" value={`${pr.paid_count||0} / ${pr.total_records||0}`} />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
-          <SectionTitle>Payroll spend history — {year}</SectionTitle>
+          <SectionTitle>Payroll spend history — {startDate} to {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={payrollHistory} barCategoryGap="25%">
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -773,7 +795,7 @@ const HRTab = ({ year, month }) => {
           </ResponsiveContainer>
         </Card>
         <Card>
-          <SectionTitle>Attendance breakdown — {MONTH_LABELS[month-1]} {year}</SectionTitle>
+          <SectionTitle>Attendance breakdown — {startDate} to {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={data.attendance_summary||[]} dataKey="count" nameKey="status"
@@ -806,7 +828,7 @@ const HRTab = ({ year, month }) => {
       </div>
 
       <Card>
-        <SectionTitle>Top employees by hours — {MONTH_LABELS[month-1]}</SectionTitle>
+        <SectionTitle>Top employees by hours — {startDate} to {endDate}</SectionTitle>
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {(data.top_hours||[]).map((e,i) => (
             <div key={i} style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -911,13 +933,13 @@ const InventoryTab = () => {
         <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:14 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
         <MetricCard label="Total stock value" value={`$${totalValue.toLocaleString()}`} color="var(--accent)" />
         <MetricCard label="Categories"        value={(data.by_category||[]).length} />
         <MetricCard label="Low stock items"   value={(data.low_stock||[]).length} color={(data.low_stock||[]).length>0?'var(--danger)':undefined} />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
           <SectionTitle>Stock value by category</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
@@ -952,7 +974,7 @@ const InventoryTab = () => {
 
       <Card>
         <SectionTitle>Most used materials in production</SectionTitle>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,minmax(0,1fr))', gap:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:12 }}>
           {(data.usage_by_production||[]).map((m,i) => (
             <div key={i} style={{ background:'var(--bg-elevated)', borderRadius:10, padding:'12px 14px', border:'1px solid var(--border)' }}>
               <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>{m.orders} production orders</div>
@@ -971,49 +993,70 @@ const InventoryTab = () => {
 const TABS = ['Sales', 'Production', 'HR & Payroll', 'Inventory'];
 
 export default function Reports() {
-  const now = new Date();
   const [tab,   setTab]   = useState(0);
-  const [year,  setYear]  = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const initialRange = getInitialRange();
+  const [startDate, setStartDate] = useState(initialRange.start);
+  const [endDate, setEndDate] = useState(initialRange.end);
 
   return (
-    <div style={{ padding:'28px 28px 40px' }}>
+    <div style={{ padding:'28px 30px 40px' }}>
       <PageHeader
         title="Reports & Analytics"
         subtitle="Business intelligence across all modules"
         action={
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            {tab === 2 && (
-              <select value={month} onChange={e => setMonth(Number(e.target.value))}
-                style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6,
-                  color:'var(--text-primary)', padding:'7px 10px', fontSize:13 }}>
-                {MONTH_LABELS.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
-              </select>
-            )}
             {tab !== 3 && (
-              <input type="number" value={year} onChange={e => setYear(Number(e.target.value))}
-                style={{ width:80, background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6,
-                  color:'var(--text-primary)', padding:'7px 10px', fontSize:13 }} />
+              <>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                  style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)',
+                    color:'var(--text-primary)', padding:'8px 12px', fontSize:13, transition:'border .2s var(--ease-out)' }}
+                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                />
+                <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)}
+                  style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)',
+                    color:'var(--text-primary)', padding:'8px 12px', fontSize:13, transition:'border .2s var(--ease-out)' }}
+                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
+                />
+              </>
+            )}
+            {tab !== 3 && startDate > endDate && (
+              <span style={{ color:'var(--danger)', fontSize:12, fontWeight:500 }}>End date must be after start date</span>
             )}
           </div>
         }
       />
 
-      <div style={{ display:'flex', gap:4, marginBottom:24, borderBottom:'1px solid var(--border)', paddingBottom:0 }}>
+      {/* Tab bar */}
+      <div style={{
+        display:'flex', gap:2, marginBottom:28,
+        borderBottom:'1px solid var(--border)', paddingBottom:0,
+      }}>
         {TABS.map((t,i) => (
           <button key={i} onClick={() => setTab(i)} style={{
-            padding:'9px 18px', fontSize:13, fontWeight:500,
-            background:'transparent', color: tab===i ? 'var(--accent)' : 'var(--text-secondary)',
-            border:'none', borderBottom: tab===i ? '2px solid var(--accent)' : '2px solid transparent',
-            marginBottom:-1, cursor:'pointer', transition:'all .15s',
-          }}>{t}</button>
+            padding:'10px 20px', fontSize:13, fontWeight: tab===i ? 700 : 500,
+            background: tab===i ? 'var(--accent-dim)' : 'transparent',
+            color: tab===i ? 'var(--accent)' : 'var(--text-secondary)',
+            border:'none',
+            borderBottom: tab===i ? '2px solid var(--accent)' : '2px solid transparent',
+            borderRadius:'var(--radius-sm) var(--radius-sm) 0 0',
+            marginBottom:-1, cursor:'pointer',
+            transition:'all .2s var(--ease-out)',
+            letterSpacing:'-0.01em',
+          }}
+            onMouseEnter={e => { if (tab !== i) e.currentTarget.style.color = 'var(--text-primary)'; }}
+            onMouseLeave={e => { if (tab !== i) e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          >{t}</button>
         ))}
       </div>
 
-      {tab === 0 && <SalesTab      year={year} />}
-      {tab === 1 && <ProductionTab year={year} />}
-      {tab === 2 && <HRTab         year={year} month={month} />}
-      {tab === 3 && <InventoryTab  />}
+      <div className="animate-in">
+        {tab === 0 && <SalesTab      startDate={startDate} endDate={endDate} />}
+        {tab === 1 && <ProductionTab startDate={startDate} endDate={endDate} />}
+        {tab === 2 && <HRTab         startDate={startDate} endDate={endDate} />}
+        {tab === 3 && <InventoryTab  />}
+      </div>
     </div>
   );
 }

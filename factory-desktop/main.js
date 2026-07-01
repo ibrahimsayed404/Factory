@@ -71,14 +71,19 @@ function startBackend() {
   }
   // Use VITE_API_SECRET for JWT_SECRET, and VITE_API_URL for frontend
   envVars.JWT_SECRET = envVars.VITE_API_SECRET || envVars.JWT_SECRET;
-  envVars.JWT_EXPIRES_IN = envVars.JWT_EXPIRES_IN || '7d';
+  // SECURITY: Do NOT override JWT_EXPIRES_IN here. The backend default (15m)
+  // combined with refresh tokens is the correct architecture.
   envVars.NODE_ENV = 'production';
   envVars.DB_HOST = envVars.DB_HOST || 'localhost';
   envVars.DB_PORT = envVars.DB_PORT || '5432';
   envVars.DB_NAME = envVars.DB_NAME || 'factory_db';
   envVars.VITE_API_URL = envVars.VITE_API_URL || 'http://localhost:5000/api';
   process.env.VITE_API_URL = envVars.VITE_API_URL;
-  backendProcess = spawn('node', [backendPath], {
+  const backendCommand = app.isPackaged ? process.execPath : 'node';
+  if (app.isPackaged) {
+    envVars.ELECTRON_RUN_AS_NODE = '1';
+  }
+  backendProcess = spawn(backendCommand, [backendPath], {
     cwd: path.join(__dirname, '../factory-api'),
     env: envVars,
     stdio: 'inherit',
@@ -86,6 +91,9 @@ function startBackend() {
   });
   backendProcess.on('close', (code) => {
     console.log(`Backend process exited with code ${code}`);
+  });
+  backendProcess.on('error', (err) => {
+    console.error('Backend process failed to start:', err);
   });
 }
 

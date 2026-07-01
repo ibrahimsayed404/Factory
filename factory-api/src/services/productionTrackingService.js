@@ -1,6 +1,7 @@
 const { randomBytes } = require('node:crypto');
-const pool = require('../../config/db');
+const pool = require('../db/pool');
 const ApiError = require('../utils/ApiError');
+const inventoryService = require('./inventoryService');
 
 const PHASE_INPUT = 'input';
 const PHASE_SORTING = 'sorting';
@@ -15,13 +16,19 @@ const ensureTrackingSchema = async () => {
   await pool.query(`
     ALTER TABLE production_orders
       ADD COLUMN IF NOT EXISTS model_number VARCHAR(100),
-      ADD COLUMN IF NOT EXISTS planned_quantity INT
+      ADD COLUMN IF NOT EXISTS planned_quantity INT,
+      ADD COLUMN IF NOT EXISTS product_id INT REFERENCES products(id) ON DELETE SET NULL
   `);
 
   await pool.query(`
     UPDATE production_orders
     SET model_number = COALESCE(model_number, product_name)
-    WHERE model_number IS NULL
+    WHERE model_number IS NULL;
+    
+    UPDATE production_orders po
+    SET product_id = p.id
+    FROM products p
+    WHERE po.product_name = p.name AND po.product_id IS NULL;
   `);
 
   await pool.query(`
@@ -330,13 +337,21 @@ const listProductionOrders = async ({ page = 1, limit = 50 }) => {
   };
 };
 
-const createProductionOrder = async ({ modelNumber, quantity, materials = [] }) => {
+const createProductionOrder = async ({ modelNumber, quantity, product_id, materials = [] }) => {
   await ensureTrackingSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const plannedQuantity = Number.parseInt(quantity, 10);
+    
+    // Resolve product_id if not provided
+    let productId = product_id || null;
+    if (!productId && modelNumber) {
+      const pRes = await client.query('SELECT id FROM products WHERE name = $1', [modelNumber]);
+      if (pRes.rows.length) productId = pRes.rows[0].id;
+    }
+
     let order = null;
 
     for (let i = 0; i < 5; i += 1) {
@@ -344,10 +359,10 @@ const createProductionOrder = async ({ modelNumber, quantity, materials = [] }) 
       try {
         const orderResult = await client.query(
           `INSERT INTO production_orders
-           (order_number, model_number, planned_quantity, product_name, quantity, status)
-           VALUES ($1, $2, $3, $4, $5, 'pending')
+           (order_number, model_number, planned_quantity, product_name, quantity, status, product_id)
+           VALUES ($1, $2, $3, $4, $5, 'pending', $6)
            RETURNING *`,
-          [orderNumber, modelNumber, plannedQuantity, modelNumber, plannedQuantity]
+          [orderNumber, modelNumber, plannedQuantity, modelNumber, plannedQuantity, productId]
         );
         order = orderResult.rows[0];
         break;
@@ -387,10 +402,14 @@ const createProductionOrder = async ({ modelNumber, quantity, materials = [] }) 
         [order.id, materialId, requiredQty]
       );
 
-      await client.query(
-        'UPDATE materials SET quantity = quantity - $1, updated_at = NOW() WHERE id = $2',
-        [requiredQty, materialId]
-      );
+      await inventoryService.issueStock({
+        item_type: 'material',
+        item_id: materialId,
+        quantity: requiredQty,
+        reference_type: 'production_order',
+        reference_id: order.id,
+        notes: `Production usage for order ${order.order_number}`
+      }, client);
     }
 
     await client.query(
@@ -515,6 +534,17 @@ const addProductionPhase = async ({
          WHERE id = $1`,
         [orderId, nextQty]
       );
+
+      if (order.product_id) {
+        await inventoryService.receiveStock({
+          item_type: 'product',
+          item_id: order.product_id,
+          quantity: nextQty,
+          reference_type: 'production_order',
+          reference_id: orderId,
+          notes: `Finished production for order ${order.order_number}`
+        }, client);
+      }
     }
 
     await client.query('COMMIT');
@@ -571,12 +601,66 @@ const listMachines = async () => {
   return result.rows;
 };
 
+const deleteOrder = async (orderId) => {
+  await ensureTrackingSchema();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const order = await client.query(
+      'SELECT id, order_number FROM production_orders WHERE id = $1',
+      [orderId]
+    );
+    if (!order.rows.length) {
+      throw new ApiError(404, 'Production order not found');
+    }
+
+    // Check if order has any production phases started beyond input (sorting or final)
+    const phases = await client.query(
+      `SELECT id FROM production_phases WHERE order_id = $1 AND phase_name IN ('sorting', 'final') LIMIT 1`,
+      [orderId]
+    );
+    if (phases.rows.length > 0) {
+      throw new ApiError(400, 'Cannot delete order - sorting or final phase has already started. You can only delete new orders.');
+    }
+
+    const materials = await client.query(
+      `SELECT material_id, quantity_used FROM production_materials WHERE production_order_id = $1`,
+      [orderId]
+    );
+
+    for (const mat of materials.rows) {
+      if (mat.material_id && mat.quantity_used) {
+        await client.query(
+          'UPDATE materials SET quantity = quantity + $1, updated_at = NOW() WHERE id = $2',
+          [Number(mat.quantity_used), mat.material_id]
+        );
+      }
+    }
+
+    await client.query(
+      'DELETE FROM production_orders WHERE id = $1',
+      [orderId]
+    );
+
+    await client.query('COMMIT');
+
+    return { id: orderId, order_number: order.rows[0].order_number, message: 'Production order deleted and inventory restored' };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   listProductionOrders,
   createProductionOrder,
   addProductionPhase,
   getProductionOrderReport,
   listMachines,
+  deleteOrder,
   PHASE_SORTING,
   PHASE_FINAL,
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { salesApi } from '../api';
+import { salesApi, productApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
@@ -15,6 +15,7 @@ export default function Sales() {
   const { t } = useLanguage();
   const { data: orders, loading, error, refetch } = useFetch(salesApi.orders);
   const { data: customers } = useFetch(salesApi.customers);
+  const { data: products } = useFetch(productApi.list);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ customer_id: '', delivery_date: '', notes: '' });
   const [items, setItems] = useState([createEmptyItem()]);
@@ -100,7 +101,15 @@ export default function Sales() {
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('orderItems', 'ORDER ITEMS')}</div>
           {items.map((item, i) => (
             <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'flex-end' }}>
-              <Input placeholder={t('productNamePlaceholder', 'Product name')} value={item.product_name} onChange={e => updateItem(i, 'product_name', e.target.value)} />
+              <Select value={item.product_name} onChange={e => {
+                const val = e.target.value;
+                const prod = products?.find(p => p.name === val);
+                updateItem(i, 'product_name', val);
+                if (prod && !item.unit_price) updateItem(i, 'unit_price', prod.default_price);
+              }}>
+                <option value="">{t('selectProduct', 'Select product')}</option>
+                {products?.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </Select>
               <Input placeholder={t('qtyPlaceholder', 'Qty')} type="number" value={item.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)} />
               <Input placeholder={t('unitPricePlaceholder', 'Unit price')} type="number" value={item.unit_price} onChange={e => updateItem(i, 'unit_price', e.target.value)} />
               <Btn size="sm" variant="danger" onClick={() => removeItem(i)}>✕</Btn>

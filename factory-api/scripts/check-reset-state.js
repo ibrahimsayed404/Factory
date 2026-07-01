@@ -1,5 +1,5 @@
 require('dotenv').config();
-const pool = require('../config/db');
+const pool = require('../src/db/pool');
 
 const main = async () => {
   const result = await pool.query(`

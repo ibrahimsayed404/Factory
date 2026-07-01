@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  token VARCHAR(500) PRIMARY KEY,
+  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW()
+);

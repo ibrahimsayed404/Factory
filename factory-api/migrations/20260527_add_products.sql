@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS products (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(150) UNIQUE NOT NULL,
+  sku VARCHAR(50) UNIQUE,
+  description TEXT,
+  default_price NUMERIC(10,2),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);

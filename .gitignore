@@ -4,7 +4,17 @@ dist/
 !.gitignore
 factory-desktop/dist/Factory Desktop Setup *.exe
 .env
+.env.*
+!.env.example
 .DS_Store
+Thumbs.db
 *.log
 uploads/
 nssm-2.24/
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+

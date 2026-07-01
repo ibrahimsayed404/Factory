@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const pool = require('../../config/db');
+const pool = require('../db/pool');
 const {
   calculateHoursWorked,
   calculateWorkedMinutes,
@@ -150,6 +150,22 @@ const ingestPunchEvents = async (req, res, next) => {
     const policy = await getAttendancePayrollPolicy();
     await client.query('BEGIN');
 
+    // SECURITY & PERF: Pre-fetch employees to prevent N+1 queries
+    const employeeIds = [...new Set(incoming.filter(e => e.employee_id).map(e => e.employee_id))];
+    const deviceUserIds = [...new Set(incoming.filter(e => e.device_user_id && !e.employee_id).map(e => String(e.device_user_id)))];
+    
+    const employeeMap = new Map();
+
+    if (employeeIds.length > 0) {
+      const { rows } = await client.query('SELECT id, shift, shift_start, shift_end, weekend_days FROM employees WHERE id = ANY($1)', [employeeIds]);
+      rows.forEach(r => employeeMap.set(`id:${r.id}`, r));
+    }
+
+    if (deviceUserIds.length > 0) {
+      const { rows } = await client.query('SELECT id, shift, shift_start, shift_end, weekend_days, device_user_id FROM employees WHERE device_user_id = ANY($1)', [deviceUserIds]);
+      rows.forEach(r => employeeMap.set(`dev:${r.device_user_id}`, r));
+    }
+
     for (const event of incoming) {
       const missing = [];
       if (!event?.punched_at) missing.push('punched_at');
@@ -160,19 +176,15 @@ const ingestPunchEvents = async (req, res, next) => {
         continue;
       }
 
-      const employeeRes = event.employee_id
-        ? await client.query('SELECT id, shift, shift_start, shift_end, weekend_days FROM employees WHERE id = $1', [event.employee_id])
-        : await client.query(
-          'SELECT id, shift, shift_start, shift_end, weekend_days FROM employees WHERE device_user_id = $1',
-          [String(event.device_user_id)]
-        );
+      const employee = event.employee_id
+        ? employeeMap.get(`id:${event.employee_id}`)
+        : employeeMap.get(`dev:${String(event.device_user_id)}`);
 
-      if (!employeeRes.rows.length) {
+      if (!employee) {
         results.push({ ok: false, error: 'Employee mapping not found', event });
         continue;
       }
 
-      const employee = employeeRes.rows[0];
       const normalized = normalizePunchTimestamp(event.punched_at);
       if (!normalized) {
         results.push({ ok: false, error: 'Invalid punched_at timestamp', event });

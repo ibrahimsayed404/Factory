@@ -14,7 +14,7 @@ const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
 const app = require('../../src/app');
-const pool = require('../../config/db');
+const pool = require('../../src/db/pool');
 
 const schemaPath = path.join(__dirname, '..', '..', 'src', 'db', 'schema.sql');
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
@@ -22,8 +22,12 @@ const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 const resetData = async () => {
   await pool.query(`
     TRUNCATE TABLE
-      production_phases,
       machines,
+      inventory_transactions,
+      inventory_balances,
+      warehouse_locations,
+      warehouses,
+      production_phases,
       production_materials,
       production_orders,
       sales_order_items,
@@ -33,6 +37,7 @@ const resetData = async () => {
       attendance,
       employees,
       materials,
+      products,
       departments,
       users
     RESTART IDENTITY CASCADE
@@ -44,6 +49,10 @@ const resetData = async () => {
       ('Quality Control'),
       ('Warehouse'),
       ('Administration')
+  `);
+  await pool.query(`
+    INSERT INTO warehouses (id, name, type) VALUES (1, 'Main Warehouse', 'internal') ON CONFLICT DO NOTHING;
+    INSERT INTO warehouse_locations (id, warehouse_id, code) VALUES (1, 1, 'DEF-LOC') ON CONFLICT DO NOTHING;
   `);
 };
 
@@ -71,6 +80,8 @@ beforeAll(async () => {
   await pool.query('ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS evidence_url TEXT');
   await pool.query('ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS evidence_name VARCHAR(255)');
   await pool.query('ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS evidence_mime VARCHAR(100)');
+  await pool.query(`ALTER TABLE sales_order_items ADD COLUMN IF NOT EXISTS product_id INT REFERENCES products(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE production_orders ADD COLUMN IF NOT EXISTS product_id INT REFERENCES products(id) ON DELETE SET NULL`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS machines (
       id SERIAL PRIMARY KEY,

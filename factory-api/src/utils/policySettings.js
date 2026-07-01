@@ -1,4 +1,4 @@
-const pool = require('../../config/db');
+const pool = require('../db/pool');
 
 const DEFAULTS = {
   attendanceLateGraceMinutes: Number(process.env.ATTENDANCE_LATE_GRACE_MINUTES || 10),

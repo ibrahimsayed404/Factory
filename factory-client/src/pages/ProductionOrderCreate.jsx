@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { inventoryApi, productionTrackingApi } from '../api';
+import { inventoryApi, productionTrackingApi, productApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Btn, Input, Select, Spinner, ErrorMsg, Table } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
@@ -12,7 +12,9 @@ const createEmptyMaterial = () => ({
 
 export default function ProductionOrderCreate() {
   const { t } = useLanguage();
-  const { data: materials, loading } = useFetch(inventoryApi.list);
+  const { data: materials, loading: materialsLoading } = useFetch(inventoryApi.list);
+  const { data: products, loading: productsLoading } = useFetch(productApi.list);
+  const loading = materialsLoading || productsLoading;
   const [modelNumber, setModelNumber] = useState('');
   const [quantity, setQuantity] = useState('');
   const [rows, setRows] = useState([createEmptyMaterial()]);
@@ -96,7 +98,10 @@ export default function ProductionOrderCreate() {
 
       <Card>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <Input label={t('modelNumber', 'Model Number')} value={modelNumber} onChange={(e) => setModelNumber(e.target.value)} />
+          <Select label={t('modelNumber', 'Model Number / Product')} value={modelNumber} onChange={(e) => setModelNumber(e.target.value)}>
+            <option value="">{t('selectProduct', 'Select product')}</option>
+            {(products || []).map(p => <option key={p.id} value={p.name}>{p.name} {p.sku ? `(${p.sku})` : ''}</option>)}
+          </Select>
           <Input label={t('plannedQuantity', 'Planned Quantity')} type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         </div>
 
@@ -105,7 +110,7 @@ export default function ProductionOrderCreate() {
         {rows.map((row, index) => (
           <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 10, marginBottom: 10 }}>
             <Select value={row.material_id} onChange={(e) => updateRow(index, 'material_id', e.target.value)}>
-              <option value="">{t('selectEmployee', 'Select material')}</option>
+              <option value="">{t( 'Select Material')}</option>
               {(materials || []).map((m) => (
                 <option key={m.id} value={m.id}>{m.name} (stock: {m.quantity})</option>
               ))}

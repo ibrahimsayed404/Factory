@@ -1,5 +1,5 @@
 require('dotenv').config();
-const pool = require('../config/db');
+const pool = require('../src/db/pool');
 
 const TABLES_TO_CLEAR = [
   'production_phases',

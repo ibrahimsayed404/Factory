@@ -1,4 +1,6 @@
-const pool = require('../../config/db');
+const pool = require('../db/pool');
+const inventoryService = require('../services/inventoryService');
+const auditService = require('../services/auditService');
 
 // GET /api/inventory — list all materials (with optional low-stock filter)
 const getAll = async (req, res, next) => {
@@ -77,3 +79,94 @@ const remove = async (req, res, next) => {
 };
 
 module.exports = { getAll, getOne, create, update, remove };
+
+const createWarehouse = async (req, res, next) => {
+  try {
+    const warehouse = await inventoryService.createWarehouse(req.body);
+    await auditService.log(req.user.id, 'CREATE', 'warehouses', warehouse.id, { name: warehouse.name }, req);
+    res.status(201).json(warehouse);
+  } catch (err) { next(err); }
+};
+
+const getWarehouses = async (req, res, next) => {
+  try {
+    const warehouses = await inventoryService.getWarehouses();
+    res.json(warehouses);
+  } catch (err) { next(err); }
+};
+
+const createLocation = async (req, res, next) => {
+  try {
+    const location = await inventoryService.createLocation(req.body);
+    await auditService.log(req.user.id, 'CREATE', 'warehouse_locations', location.id, { code: location.code }, req);
+    res.status(201).json(location);
+  } catch (err) { next(err); }
+};
+
+const getLocations = async (req, res, next) => {
+  try {
+    const locations = await inventoryService.getLocations(req.query.warehouse_id);
+    res.json(locations);
+  } catch (err) { next(err); }
+};
+
+const receiveStock = async (req, res, next) => {
+  try {
+    const payload = { ...req.body, user_id: req.user.id };
+    const tx = await inventoryService.receiveStock(payload);
+    await auditService.log(req.user.id, 'RECEIVE_STOCK', 'inventory', tx.id, payload, req);
+    res.status(201).json(tx);
+  } catch (err) { next(err); }
+};
+
+const issueStock = async (req, res, next) => {
+  try {
+    const payload = { ...req.body, user_id: req.user.id };
+    const tx = await inventoryService.issueStock(payload);
+    await auditService.log(req.user.id, 'ISSUE_STOCK', 'inventory', tx.id, payload, req);
+    res.status(201).json(tx);
+  } catch (err) { next(err); }
+};
+
+const transferStock = async (req, res, next) => {
+  try {
+    const payload = { ...req.body, user_id: req.user.id };
+    await inventoryService.transferStock(payload);
+    await auditService.log(req.user.id, 'TRANSFER_STOCK', 'inventory', null, payload, req);
+    res.status(200).json({ message: 'Transfer successful' });
+  } catch (err) { next(err); }
+};
+
+const adjustStock = async (req, res, next) => {
+  try {
+    const payload = { ...req.body, user_id: req.user.id };
+    const tx = await inventoryService.adjustStock(payload);
+    if (tx) {
+      await auditService.log(req.user.id, 'ADJUST_STOCK', 'inventory', tx.id, payload, req);
+      res.status(201).json(tx);
+    } else {
+      res.status(200).json({ message: 'No adjustment needed' });
+    }
+  } catch (err) { next(err); }
+};
+
+const getBalances = async (req, res, next) => {
+  try {
+    const balances = await inventoryService.getBalances(req.query);
+    res.json(balances);
+  } catch (err) { next(err); }
+};
+
+const getLedger = async (req, res, next) => {
+  try {
+    const ledger = await inventoryService.getLedger(req.query);
+    res.json(ledger);
+  } catch (err) { next(err); }
+};
+
+module.exports = {
+  getAll, getOne, create, update, remove,
+  createWarehouse, getWarehouses, createLocation, getLocations,
+  receiveStock, issueStock, transferStock, adjustStock,
+  getBalances, getLedger
+};

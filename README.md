@@ -1,31 +1,30 @@
 # Factory Management System
 
-## Setup
+Factory is a clothes manufacturing ERP covering sales, accounting, inventory, purchasing, production, payroll, HR, QC, and reporting.
 
-1. Clone the repo
-2. Install dependencies:
-   - `cd factory-api && npm install`
-   - `cd ../factory-client && npm install`
-3. Set up environment variables:
-   - Copy `.env.example` to `.env` in `factory-api` and fill in DB/JWT values
-4. Start backend:
-   - `cd factory-api && npm start`
-5. Start frontend:
-   - `cd factory-client && npm start`
+## Documentation
 
-## Testing
+- [System Overview](docs/system-overview.md)
+- [Backend Reference](docs/backend-reference.md)
+- [Frontend Reference](docs/frontend-reference.md)
+- [Database and Automation](docs/database-and-automation.md)
+- [Operations Guide](docs/operations.md)
+
+## Quick Start
+
+1. Install backend dependencies in `factory-api`
+2. Install frontend dependencies in `factory-client`
+3. Copy `.env.example` to `factory-api/.env` and configure database and JWT values
+4. Start the backend and frontend
+
+## API Documentation
+
+- Swagger UI: http://localhost:5000/api/docs
+
+## Verification
 
 - Backend: `cd factory-api && npm test`
-- Frontend: `cd factory-client && npm test`
-
-## Linting & Formatting
-
-- Lint: `npm run lint`
-- Format: `npm run format`
-
-## API Docs
-
-- Swagger UI: [http://localhost:5000/api/docs](http://localhost:5000/api/docs)
+- Frontend: `cd factory-client && npm run build`
 
 ## CI/CD
 

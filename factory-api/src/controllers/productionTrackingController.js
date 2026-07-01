@@ -1,4 +1,5 @@
 const productionTrackingService = require('../services/productionTrackingService');
+const auditService = require('../services/auditService');
 
 const list = async (req, res, next) => {
   try {
@@ -17,6 +18,7 @@ const createOrder = async (req, res, next) => {
       quantity,
       materials,
     });
+    await auditService.log(req.user.id, 'CREATE', 'production_orders', data.id, { model_number: modelNumber, quantity }, auditService.extractReqContext(req));
     res.status(201).json(data);
   } catch (err) {
     next(err);
@@ -35,6 +37,7 @@ const addSortingPhase = async (req, res, next) => {
       startedAt: req.body.started_at,
       completedAt: req.body.completed_at,
     });
+    await auditService.log(req.user.id, 'CREATE_PHASE', 'production_phases', req.params.id, { phase: 'sorting', quantity: req.body.quantity }, auditService.extractReqContext(req));
     res.status(201).json(data);
   } catch (err) {
     next(err);
@@ -53,6 +56,7 @@ const addFinalPhase = async (req, res, next) => {
       startedAt: req.body.started_at,
       completedAt: req.body.completed_at,
     });
+    await auditService.log(req.user.id, 'CREATE_PHASE', 'production_phases', req.params.id, { phase: 'final', quantity: req.body.quantity }, auditService.extractReqContext(req));
     res.status(201).json(data);
   } catch (err) {
     next(err);
@@ -77,6 +81,16 @@ const getReport = async (req, res, next) => {
   }
 };
 
+const deleteOrder = async (req, res, next) => {
+  try {
+    const data = await productionTrackingService.deleteOrder(req.params.id);
+    await auditService.log(req.user.id, 'DELETE', 'production_orders', req.params.id, null, auditService.extractReqContext(req));
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   list,
   createOrder,
@@ -84,4 +98,5 @@ module.exports = {
   addFinalPhase,
   getReport,
   listMachines,
+  deleteOrder,
 };

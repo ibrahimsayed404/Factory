@@ -14,6 +14,30 @@ const storage = multer.diskStorage({
   },
 });
 
+const qcPhotoDir = path.join(__dirname, '..', '..', 'uploads', 'qc-photos');
+fs.mkdirSync(qcPhotoDir, { recursive: true });
+
+const qcStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, qcPhotoDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const safeExt = ext || '.bin';
+    cb(null, `qc-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+  },
+});
+
+const hrDocDir = path.join(__dirname, '..', '..', 'uploads', 'hr-documents');
+fs.mkdirSync(hrDocDir, { recursive: true });
+
+const hrStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, hrDocDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const safeExt = ext || '.bin';
+    cb(null, `hr-${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+  },
+});
+
 const allowedMimes = new Set([
   'application/pdf',
   'image/png',
@@ -28,6 +52,17 @@ const paymentEvidenceUpload = multer({
   fileFilter: (_req, file, cb) => {
     if (allowedMimes.has(file.mimetype)) return cb(null, true);
     const err = new Error('Evidence file must be a PDF or image (png, jpg, jpeg, webp)');
+    err.status = 400;
+    return cb(err);
+  },
+});
+
+const qcPhotoUpload = multer({
+  storage: qcStorage,
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (allowedMimes.has(file.mimetype)) return cb(null, true);
+    const err = new Error('Photo must be a PDF or image (png, jpg, jpeg, webp)');
     err.status = 400;
     return cb(err);
   },
@@ -81,7 +116,20 @@ const validateEvidenceSignature = (req, res, next) => {
   }
 };
 
+const hrDocUpload = multer({
+  storage: hrStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    if (allowedMimes.has(file.mimetype)) return cb(null, true);
+    const err = new Error('Document must be a PDF or image (png, jpg, jpeg, webp)');
+    err.status = 400;
+    return cb(err);
+  },
+});
+
 module.exports = {
-  paymentEvidenceUpload,
-  validateEvidenceSignature,
+  paymentEvidenceUpload: paymentEvidenceUpload,
+  validateEvidenceSignature: validateEvidenceSignature,
+  qcPhotoUpload: qcPhotoUpload,
+  single: (field) => hrDocUpload.single(field),
 };
