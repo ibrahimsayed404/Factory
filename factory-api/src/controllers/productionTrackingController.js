@@ -44,6 +44,25 @@ const addSortingPhase = async (req, res, next) => {
   }
 };
 
+const addOutsourcingPhase = async (req, res, next) => {
+  try {
+    const data = await productionTrackingService.addProductionPhase({
+      orderId: req.params.id,
+      phaseName: productionTrackingService.PHASE_OUTSOURCING,
+      quantity: req.body.quantity,
+      lossReason: req.body.loss_reason,
+      employeeId: req.body.employee_id,
+      machineId: req.body.machine_id,
+      startedAt: req.body.started_at,
+      completedAt: req.body.completed_at,
+    });
+    await auditService.log(req.user.id, 'CREATE_PHASE', 'production_phases', req.params.id, { phase: 'outsourcing', quantity: req.body.quantity }, auditService.extractReqContext(req));
+    res.status(201).json(data);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const addFinalPhase = async (req, res, next) => {
   try {
     const data = await productionTrackingService.addProductionPhase({
@@ -95,6 +114,7 @@ module.exports = {
   list,
   createOrder,
   addSortingPhase,
+  addOutsourcingPhase,
   addFinalPhase,
   getReport,
   listMachines,

@@ -145,7 +145,7 @@ describe('Production tracking phases', () => {
     expect(Array.isArray(report.body.phases)).toBe(true);
   });
 
-  test('validates sorting and final quantities and computes phase losses', async () => {
+  test('validates sorting, outsourcing, and final quantities and computes phase losses', async () => {
     const agent = await createAdminAndLogin();
 
     const employeeOne = await agent
@@ -157,6 +157,11 @@ describe('Production tracking phases', () => {
       .post('/api/employees')
       .send({ name: 'Final 1', email: 'final1@test.com', role: 'Final', shift: 'morning', salary: 1200 });
     expect(employeeTwo.status).toBe(201);
+
+    const employeeThree = await agent
+      .post('/api/employees')
+      .send({ name: 'Outsourcing 1', email: 'outsource1@test.com', role: 'Outsourcing', shift: 'morning', salary: 1200 });
+    expect(employeeThree.status).toBe(201);
 
     const machineInsert = await pool.query(
       `INSERT INTO machines (name, code) VALUES ($1, $2) RETURNING id`,
@@ -206,12 +211,12 @@ describe('Production tracking phases', () => {
         completed_at: '2026-04-08T12:00:00Z',
       });
     expect(badFinalBeforeSorting.status).toBe(400);
-    expect(badFinalBeforeSorting.body.error).toMatch(/Sorting phase must be recorded before final phase/i);
+    expect(badFinalBeforeSorting.body.error).toMatch(/Outsourcing phase must be recorded before final phase/i);
 
     const sorting = await agent
       .post(`/api/production-orders/${created.body.id}/sorting`)
       .send({
-        quantity: 920,
+        quantity: 800,
         loss_reason: 'Damaged fabric',
         employee_id: employeeOne.body.id,
         machine_id: machineId,
@@ -220,7 +225,32 @@ describe('Production tracking phases', () => {
       });
     expect(sorting.status).toBe(201);
     expect(sorting.body.status).toBe('sorting');
-    expect(sorting.body.sorting_loss).toBe(80);
+    expect(sorting.body.sorting_loss).toBe(200);
+
+    const badOutsourcing = await agent
+      .post(`/api/production-orders/${created.body.id}/outsourcing`)
+      .send({
+        quantity: 850,
+        employee_id: employeeThree.body.id,
+        started_at: '2026-04-08T10:30:00Z',
+        completed_at: '2026-04-08T11:30:00Z',
+      });
+    expect(badOutsourcing.status).toBe(400);
+    expect(badOutsourcing.body.error).toMatch(/Outsourcing quantity cannot exceed sorting quantity/i);
+
+    const outsourcing = await agent
+      .post(`/api/production-orders/${created.body.id}/outsourcing`)
+      .send({
+        quantity: 700,
+        loss_reason: 'External finishing loss',
+        employee_id: employeeThree.body.id,
+        started_at: '2026-04-08T10:30:00Z',
+        completed_at: '2026-04-08T11:30:00Z',
+      });
+    expect(outsourcing.status).toBe(201);
+    expect(outsourcing.body.status).toBe('outsourcing');
+    expect(outsourcing.body.sorting_loss).toBe(200);
+    expect(outsourcing.body.outsourcing_loss).toBe(100);
 
     const duplicateSorting = await agent
       .post(`/api/production-orders/${created.body.id}/sorting`)
@@ -236,18 +266,18 @@ describe('Production tracking phases', () => {
     const badFinal = await agent
       .post(`/api/production-orders/${created.body.id}/final`)
       .send({
-        quantity: 930,
+          quantity: 710,
         employee_id: employeeTwo.body.id,
         started_at: '2026-04-08T10:30:00Z',
         completed_at: '2026-04-08T12:00:00Z',
       });
     expect(badFinal.status).toBe(400);
-    expect(badFinal.body.error).toMatch(/Final quantity cannot exceed sorting quantity/i);
+      expect(badFinal.body.error).toMatch(/Final quantity cannot exceed outsourcing quantity/i);
 
     const final = await agent
       .post(`/api/production-orders/${created.body.id}/final`)
       .send({
-        quantity: 890,
+          quantity: 600,
         loss_reason: 'Stitching defects',
         employee_id: employeeTwo.body.id,
         started_at: '2026-04-08T11:00:00Z',
@@ -255,10 +285,11 @@ describe('Production tracking phases', () => {
       });
     expect(final.status).toBe(201);
     expect(final.body.status).toBe('completed');
-    expect(final.body.sorting_loss).toBe(80);
-    expect(final.body.final_loss).toBe(30);
-    expect(final.body.total_loss).toBe(110);
-    expect(Number(final.body.efficiency)).toBeCloseTo(89, 2);
+      expect(final.body.sorting_loss).toBe(200);
+      expect(final.body.outsourcing_loss).toBe(100);
+      expect(final.body.final_loss).toBe(100);
+      expect(final.body.total_loss).toBe(400);
+      expect(Number(final.body.efficiency)).toBeCloseTo(60, 2);
 
     const list = await agent.get('/api/production-orders?limit=1000');
     expect(list.status).toBe(200);
@@ -267,27 +298,35 @@ describe('Production tracking phases', () => {
     const listedOrder = list.body.data.find((row) => row.id === created.body.id);
     expect(listedOrder).toBeDefined();
     expect(listedOrder.phases.input).toBe(1000);
-    expect(listedOrder.phases.sorting).toBe(920);
-    expect(listedOrder.phases.final).toBe(890);
-    expect(listedOrder.total_loss).toBe(110);
+    expect(listedOrder.phases.sorting).toBe(800);
+    expect(listedOrder.phases.outsourcing).toBe(700);
+    expect(listedOrder.phases.final).toBe(600);
+    expect(listedOrder.total_loss).toBe(400);
 
     const report = await agent.get(`/api/production-orders/${created.body.id}/report`);
     expect(report.status).toBe(200);
     expect(report.body.input).toBe(1000);
-    expect(report.body.sorting).toBe(920);
-    expect(report.body.final).toBe(890);
-    expect(report.body.sorting_loss).toBe(80);
-    expect(report.body.final_loss).toBe(30);
-    expect(report.body.total_loss).toBe(110);
-    expect(Number(report.body.efficiency)).toBeCloseTo(89, 2);
+    expect(report.body.sorting).toBe(800);
+    expect(report.body.outsourcing).toBe(700);
+    expect(report.body.final).toBe(600);
+    expect(report.body.sorting_loss).toBe(200);
+    expect(report.body.outsourcing_loss).toBe(100);
+    expect(report.body.final_loss).toBe(100);
+    expect(report.body.total_loss).toBe(400);
+    expect(Number(report.body.efficiency)).toBeCloseTo(60, 2);
     expect(Array.isArray(report.body.phases)).toBe(true);
-    expect(report.body.phases).toHaveLength(3);
+    expect(report.body.phases).toHaveLength(4);
 
     const sortingPhase = report.body.phases.find((p) => p.phase === 'sorting');
     expect(sortingPhase.employee).toBe('Sorter 1');
     expect(sortingPhase.machine).toBe('Sorting Machine A');
     expect(sortingPhase.loss_reason).toBe('Damaged fabric');
     expect(sortingPhase.duration_minutes).toBe(120);
+
+    const outsourcingPhase = report.body.phases.find((p) => p.phase === 'outsourcing');
+    expect(outsourcingPhase.employee).toBe('Outsourcing 1');
+    expect(outsourcingPhase.loss_reason).toBe('External finishing loss');
+    expect(outsourcingPhase.duration_minutes).toBe(60);
 
     const finalPhase = report.body.phases.find((p) => p.phase === 'final');
     expect(finalPhase.employee).toBe('Final 1');
@@ -296,5 +335,6 @@ describe('Production tracking phases', () => {
 
     expect(Array.isArray(report.body.alerts)).toBe(true);
     expect(report.body.alerts.some((a) => a.type === 'HIGH_LOSS')).toBe(true);
+    expect(report.body.alerts.some((a) => /Outsourcing phase/i.test(a.message))).toBe(true);
   });
 });

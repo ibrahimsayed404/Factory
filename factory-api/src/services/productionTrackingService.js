@@ -5,6 +5,7 @@ const inventoryService = require('./inventoryService');
 
 const PHASE_INPUT = 'input';
 const PHASE_SORTING = 'sorting';
+const PHASE_OUTSOURCING = 'outsourcing';
 const PHASE_FINAL = 'final';
 const HIGH_LOSS_THRESHOLD_PERCENT = 10;
 
@@ -48,6 +49,11 @@ const ensureTrackingSchema = async () => {
         CREATE TYPE production_phase_name AS ENUM ('input', 'sorting', 'final');
       END IF;
     END $$;
+  `);
+
+  await pool.query(`
+    ALTER TYPE production_phase_name
+      ADD VALUE IF NOT EXISTS 'outsourcing' BEFORE 'final'
   `);
 
   await pool.query(`
@@ -128,13 +134,15 @@ const buildOrderNumber = (prefix = 'PTO') => {
   return `${prefix}-${ts}-${rand}`;
 };
 
-const calculateMetrics = ({ inputQty, sortingQty, finalQty }) => {
+const calculateMetrics = ({ inputQty, sortingQty, outsourcingQty, finalQty }) => {
   const hasInput = Number.isFinite(inputQty);
   const hasSorting = Number.isFinite(sortingQty);
+  const hasOutsourcing = Number.isFinite(outsourcingQty);
   const hasFinal = Number.isFinite(finalQty);
 
   const sortingLoss = hasInput && hasSorting ? inputQty - sortingQty : null;
-  const finalLoss = hasSorting && hasFinal ? sortingQty - finalQty : null;
+  const outsourcingLoss = hasSorting && hasOutsourcing ? sortingQty - outsourcingQty : null;
+  const finalLoss = hasOutsourcing && hasFinal ? outsourcingQty - finalQty : null;
   const totalLoss = hasInput && hasFinal ? inputQty - finalQty : null;
   const efficiency = hasInput && hasFinal && inputQty > 0
     ? Number(((finalQty / inputQty) * 100).toFixed(2))
@@ -153,6 +161,7 @@ const calculateMetrics = ({ inputQty, sortingQty, finalQty }) => {
 
   return {
     sorting_loss: sortingLoss,
+    outsourcing_loss: outsourcingLoss,
     final_loss: finalLoss,
     total_loss: totalLoss,
     efficiency,
@@ -168,6 +177,9 @@ const mapOrderReport = (row) => {
   const sortingQty = row.sorting_quantity !== null && row.sorting_quantity !== undefined
     ? Number(row.sorting_quantity)
     : null;
+  const outsourcingQty = row.outsourcing_quantity !== null && row.outsourcing_quantity !== undefined
+    ? Number(row.outsourcing_quantity)
+    : null;
   const finalQty = row.final_quantity !== null && row.final_quantity !== undefined
     ? Number(row.final_quantity)
     : null;
@@ -181,9 +193,10 @@ const mapOrderReport = (row) => {
     phases: {
       input: inputQty,
       sorting: sortingQty,
+      outsourcing: outsourcingQty,
       final: finalQty,
     },
-    ...calculateMetrics({ inputQty, sortingQty, finalQty }),
+    ...calculateMetrics({ inputQty, sortingQty, outsourcingQty, finalQty }),
     created_at: row.created_at,
   };
 };
@@ -224,11 +237,14 @@ const buildDetailedReport = (orderRow, phaseRows) => {
   const sortingQty = latestByPhase.has(PHASE_SORTING)
     ? Number(latestByPhase.get(PHASE_SORTING).quantity)
     : null;
+  const outsourcingQty = latestByPhase.has(PHASE_OUTSOURCING)
+    ? Number(latestByPhase.get(PHASE_OUTSOURCING).quantity)
+    : null;
   const finalQty = latestByPhase.has(PHASE_FINAL)
     ? Number(latestByPhase.get(PHASE_FINAL).quantity)
     : null;
 
-  const metrics = calculateMetrics({ inputQty, sortingQty, finalQty });
+  const metrics = calculateMetrics({ inputQty, sortingQty, outsourcingQty, finalQty });
   const alerts = metrics.alerts.map((alert) => ({ ...alert, order_id: Number(orderRow.id) }));
 
   if (sortingQty !== null && inputQty > 0) {
@@ -242,8 +258,19 @@ const buildDetailedReport = (orderRow, phaseRows) => {
     }
   }
 
-  if (finalQty !== null && sortingQty !== null && sortingQty > 0) {
-    const finalLossPct = Number((((sortingQty - finalQty) / sortingQty) * 100).toFixed(2));
+  if (outsourcingQty !== null && sortingQty !== null && sortingQty > 0) {
+    const outsourcingLossPct = Number((((sortingQty - outsourcingQty) / sortingQty) * 100).toFixed(2));
+    if (outsourcingLossPct > HIGH_LOSS_THRESHOLD_PERCENT) {
+      alerts.push({
+        type: 'HIGH_LOSS',
+        message: 'High loss detected in Outsourcing phase',
+        order_id: Number(orderRow.id),
+      });
+    }
+  }
+
+  if (finalQty !== null && outsourcingQty !== null && outsourcingQty > 0) {
+    const finalLossPct = Number((((outsourcingQty - finalQty) / outsourcingQty) * 100).toFixed(2));
     if (finalLossPct > HIGH_LOSS_THRESHOLD_PERCENT) {
       alerts.push({
         type: 'HIGH_LOSS',
@@ -260,8 +287,10 @@ const buildDetailedReport = (orderRow, phaseRows) => {
     model_number: orderRow.model_number || orderRow.product_name,
     input: inputQty,
     sorting: sortingQty,
+    outsourcing: outsourcingQty,
     final: finalQty,
     sorting_loss: metrics.sorting_loss,
+    outsourcing_loss: metrics.outsourcing_loss,
     final_loss: metrics.final_loss,
     total_loss: metrics.total_loss,
     efficiency: metrics.efficiency,
@@ -286,6 +315,7 @@ const getOrderWithLatestPhases = async (client, orderId) => {
        po.*,
        MAX(CASE WHEN lp.phase_name = 'input' THEN lp.quantity END) AS input_quantity,
        MAX(CASE WHEN lp.phase_name = 'sorting' THEN lp.quantity END) AS sorting_quantity,
+       MAX(CASE WHEN lp.phase_name = 'outsourcing' THEN lp.quantity END) AS outsourcing_quantity,
        MAX(CASE WHEN lp.phase_name = 'final' THEN lp.quantity END) AS final_quantity
      FROM production_orders po
      LEFT JOIN latest_phases lp ON lp.order_id = po.id
@@ -318,6 +348,7 @@ const listProductionOrders = async ({ page = 1, limit = 50 }) => {
          po.*,
          MAX(CASE WHEN lp.phase_name = 'input' THEN lp.quantity END) AS input_quantity,
          MAX(CASE WHEN lp.phase_name = 'sorting' THEN lp.quantity END) AS sorting_quantity,
+         MAX(CASE WHEN lp.phase_name = 'outsourcing' THEN lp.quantity END) AS outsourcing_quantity,
          MAX(CASE WHEN lp.phase_name = 'final' THEN lp.quantity END) AS final_quantity
        FROM production_orders po
        LEFT JOIN latest_phases lp ON lp.order_id = po.id
@@ -466,6 +497,9 @@ const addProductionPhase = async ({
     const sortingQty = order.sorting_quantity !== null && order.sorting_quantity !== undefined
       ? Number(order.sorting_quantity)
       : null;
+    const outsourcingQty = order.outsourcing_quantity !== null && order.outsourcing_quantity !== undefined
+      ? Number(order.outsourcing_quantity)
+      : null;
 
     if (phaseName === PHASE_SORTING) {
       if (nextQty > inputQty) {
@@ -473,12 +507,21 @@ const addProductionPhase = async ({
       }
     }
 
-    if (phaseName === PHASE_FINAL) {
+    if (phaseName === PHASE_OUTSOURCING) {
       if (sortingQty === null) {
-        throw new ApiError(400, 'Sorting phase must be recorded before final phase');
+        throw new ApiError(400, 'Sorting phase must be recorded before outsourcing phase');
       }
       if (nextQty > sortingQty) {
-        throw new ApiError(400, 'Final quantity cannot exceed sorting quantity');
+        throw new ApiError(400, 'Outsourcing quantity cannot exceed sorting quantity');
+      }
+    }
+
+    if (phaseName === PHASE_FINAL) {
+      if (outsourcingQty === null) {
+        throw new ApiError(400, 'Outsourcing phase must be recorded before final phase');
+      }
+      if (nextQty > outsourcingQty) {
+        throw new ApiError(400, 'Final quantity cannot exceed outsourcing quantity');
       }
     }
 
@@ -522,6 +565,15 @@ const addProductionPhase = async ({
       await client.query(
         `UPDATE production_orders
          SET status = 'sorting', updated_at = NOW()
+         WHERE id = $1`,
+        [orderId]
+      );
+    }
+
+    if (phaseName === PHASE_OUTSOURCING) {
+      await client.query(
+        `UPDATE production_orders
+         SET status = 'outsourcing', updated_at = NOW()
          WHERE id = $1`,
         [orderId]
       );
@@ -615,13 +667,13 @@ const deleteOrder = async (orderId) => {
       throw new ApiError(404, 'Production order not found');
     }
 
-    // Check if order has any production phases started beyond input (sorting or final)
+    // Check if order has any production phases started beyond input (sorting, outsourcing, or final)
     const phases = await client.query(
-      `SELECT id FROM production_phases WHERE order_id = $1 AND phase_name IN ('sorting', 'final') LIMIT 1`,
+      `SELECT id FROM production_phases WHERE order_id = $1 AND phase_name IN ('sorting', 'outsourcing', 'final') LIMIT 1`,
       [orderId]
     );
     if (phases.rows.length > 0) {
-      throw new ApiError(400, 'Cannot delete order - sorting or final phase has already started. You can only delete new orders.');
+      throw new ApiError(400, 'Cannot delete order - sorting, outsourcing, or final phase has already started. You can only delete new orders.');
     }
 
     const materials = await client.query(
@@ -661,6 +713,8 @@ module.exports = {
   getProductionOrderReport,
   listMachines,
   deleteOrder,
+  PHASE_INPUT,
   PHASE_SORTING,
+  PHASE_OUTSOURCING,
   PHASE_FINAL,
 };
