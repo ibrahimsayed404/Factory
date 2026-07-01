@@ -48,9 +48,9 @@ export default function ProductionOutsourcing() {
     [orders, selectedOrderId]
   );
 
-  // Filter orders to show only those with 'sorting' as latest phase
+  // Filter orders to show only those with sorting completed and outsourcing not yet started
   const availableOrders = useMemo(
-    () => (orders || []).filter((o) => o.latest_phase === 'sorting'),
+    () => (orders || []).filter((o) => o.phases?.sorting !== null && o.phases?.outsourcing === null),
     [orders]
   );
 
@@ -143,7 +143,7 @@ export default function ProductionOutsourcing() {
 
         {selected && (
           <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
-            Sorted Quantity: {selected.sorting ?? selected.planned_quantity}
+            Sorted Quantity: {selected.phases?.sorting ?? 'Not recorded yet'}
           </div>
         )}
 
