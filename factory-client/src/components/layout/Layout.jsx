@@ -150,6 +150,7 @@ export const Layout = ({ children }) => {
           {FEATURE_FLAGS.productionPipeline && <NavItem to="/production-pipeline" label={t('productionPipeline', 'Pipeline Kanban')} icon="🗂" />}
           <NavItem to="/production-orders/create" label={t('createOrder', 'Create Order')} icon="🧵" />
           <NavItem to="/production-orders/sorting" label={t('sorting', 'Sorting (فرز)')} icon="🗂" />
+          <NavItem to="/production-orders/outsourcing" label={t('outsourcing', 'Outsourcing')} icon="🚚" />
           <NavItem to="/production-orders/final" label={t('finalPhase', 'Final Phase')} icon="✅" />
           <NavItem to="/production-orders/report" label={t('prodReport', 'Prod Report')} icon="📉" />
           <NavItem to="/products"   label={t('products', 'Products')}    icon="🏷️" />

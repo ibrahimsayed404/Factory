@@ -216,6 +216,7 @@ export const authApi = {
 // Dashboard
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
+  stageEfficiency: () => api.get('/dashboard/stage-efficiency'),
 };
 
 // Inventory
@@ -367,6 +368,7 @@ export const productionTrackingApi = {
   }),
   createOrder: (body) => api.post('/production-orders', body),
   addSorting: (id, body) => api.post(`/production-orders/${id}/sorting`, body),
+  addOutsourcing: (id, body) => api.post(`/production-orders/${id}/outsourcing`, body),
   addFinal: (id, body) => api.post(`/production-orders/${id}/final`, body),
   getReport: (id) => api.get(`/production-orders/${id}/report`),
   deleteOrder: (id) => api.delete(`/production-orders/${id}`),

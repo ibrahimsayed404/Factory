@@ -20,6 +20,7 @@ const Production = lazy(() => import('./pages/Production'));
 const ProductionPipeline = lazy(() => import('./pages/ProductionPipeline'));
 const ProductionOrderCreate = lazy(() => import('./pages/ProductionOrderCreate'));
 const ProductionSorting = lazy(() => import('./pages/ProductionSorting'));
+const ProductionOutsourcing = lazy(() => import('./pages/ProductionOutsourcing'));
 const ProductionFinal = lazy(() => import('./pages/ProductionFinal'));
 const ProductionTrackingReport = lazy(() => import('./pages/ProductionTrackingReport'));
 const Attendance = lazy(() => import('./pages/Attendance'));
@@ -63,6 +64,7 @@ export default function App() {
                   <Route path="/production-pipeline" element={FEATURE_FLAGS.productionPipeline ? <Protected><ProductionPipeline /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/production-orders/create" element={<Protected><ProductionOrderCreate /></Protected>} />
                   <Route path="/production-orders/sorting" element={<Protected><ProductionSorting /></Protected>} />
+                  <Route path="/production-orders/outsourcing" element={<Protected><ProductionOutsourcing /></Protected>} />
                   <Route path="/production-orders/final" element={<Protected><ProductionFinal /></Protected>} />
                   <Route path="/production-orders/report" element={<Protected><ProductionTrackingReport /></Protected>} />
                   <Route path="/manufacturing/boms" element={FEATURE_FLAGS.manufacturingBoms ? <Protected><Bom /></Protected> : <Navigate to="/" replace />} />

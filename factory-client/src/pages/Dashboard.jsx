@@ -35,6 +35,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function Dashboard() {
   const { data: stats, loading, error } = useFetch(dashboardApi.stats);
+  const { data: stageEfficiency } = useFetch(dashboardApi.stageEfficiency);
   const { t, language } = useLanguage();
 
   const chartData = stats?.production_summary?.map(p => ({
@@ -173,6 +174,65 @@ export default function Dashboard() {
               </Card>
             </div>
           </div>
+
+          {/* Stage Efficiency */}
+          {stageEfficiency && (
+            <div style={{ marginTop: 28 }}>
+              <Card>
+                <div style={{
+                  fontSize: 13, fontWeight: 700, marginBottom: 18,
+                  color: 'var(--text-secondary)', letterSpacing: '-0.01em',
+                }}>
+                  {t('stageEfficiency', 'Stage Efficiency')}
+                </div>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: 16,
+                }}>
+                  {['input', 'sorting', 'outsourcing', 'final'].map((phase) => {
+                    const data = stageEfficiency[phase] || {};
+                    const phaseLabel = t(phase, phase.charAt(0).toUpperCase() + phase.slice(1));
+                    return (
+                      <div key={phase} style={{
+                        padding: 14,
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--bg-hover)',
+                        border: '1px solid var(--border)',
+                      }}>
+                        <div style={{
+                          fontSize: 12, fontWeight: 700, marginBottom: 10,
+                          color: 'var(--text-secondary)', textTransform: 'capitalize',
+                        }}>
+                          {phaseLabel}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('totalQty', 'Total Qty')}</span>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {data.total_quantity || 0}
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('avgLoss', 'Avg Loss %')}</span>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: Number(data.average_loss_percentage) > 10 ? 'var(--danger)' : 'var(--accent)' }}>
+                              {(data.average_loss_percentage || 0).toFixed(2)}%
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('currentOrders', 'Current Orders')}</span>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>
+                              {data.current_order_count || 0}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </div>
+          )}
         </>
       )}
     </div>
