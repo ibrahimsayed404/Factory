@@ -141,8 +141,17 @@ const calculateMetrics = ({ inputQty, sortingQty, outsourcingQty, finalQty }) =>
   const hasFinal = Number.isFinite(finalQty);
 
   const sortingLoss = hasInput && hasSorting ? inputQty - sortingQty : null;
+  const sortingLossPercentage = hasInput && hasSorting && inputQty > 0
+    ? Number(((sortingLoss / inputQty) * 100).toFixed(2))
+    : null;
   const outsourcingLoss = hasSorting && hasOutsourcing ? sortingQty - outsourcingQty : null;
+  const outsourcingLossPercentage = hasSorting && hasOutsourcing && sortingQty > 0
+    ? Number(((outsourcingLoss / sortingQty) * 100).toFixed(2))
+    : null;
   const finalLoss = hasOutsourcing && hasFinal ? outsourcingQty - finalQty : null;
+  const finalLossPercentage = hasOutsourcing && hasFinal && outsourcingQty > 0
+    ? Number(((finalLoss / outsourcingQty) * 100).toFixed(2))
+    : null;
   const totalLoss = hasInput && hasFinal ? inputQty - finalQty : null;
   const efficiency = hasInput && hasFinal && inputQty > 0
     ? Number(((finalQty / inputQty) * 100).toFixed(2))
@@ -161,8 +170,11 @@ const calculateMetrics = ({ inputQty, sortingQty, outsourcingQty, finalQty }) =>
 
   return {
     sorting_loss: sortingLoss,
+    sorting_loss_percentage: sortingLossPercentage,
     outsourcing_loss: outsourcingLoss,
+    outsourcing_loss_percentage: outsourcingLossPercentage,
     final_loss: finalLoss,
+    final_loss_percentage: finalLossPercentage,
     total_loss: totalLoss,
     efficiency,
     loss_percentage: lossPercentage,
@@ -651,6 +663,117 @@ const getProductionOrderReport = async (orderId) => {
   return buildDetailedReport(row, phasesResult.rows);
 };
 
+const getDashboardEfficiencySummary = async () => {
+  await ensureTrackingSchema();
+
+  const { rows } = await pool.query(
+    `WITH phase_rollup AS (
+       SELECT
+         pp.order_id,
+         MAX(CASE WHEN pp.phase_name = 'input' THEN pp.quantity END) AS input_quantity,
+         MAX(CASE WHEN pp.phase_name = 'sorting' THEN pp.quantity END) AS sorting_quantity,
+         MAX(CASE WHEN pp.phase_name = 'outsourcing' THEN pp.quantity END) AS outsourcing_quantity,
+         MAX(CASE WHEN pp.phase_name = 'final' THEN pp.quantity END) AS final_quantity
+       FROM production_phases pp
+       GROUP BY pp.order_id
+     ), latest_phase AS (
+       SELECT DISTINCT ON (pp.order_id)
+         pp.order_id,
+         pp.phase_name AS latest_phase_name
+       FROM production_phases pp
+       ORDER BY pp.order_id, pp.created_at DESC, pp.id DESC
+     )
+     SELECT
+       po.id,
+       pr.input_quantity,
+       pr.sorting_quantity,
+       pr.outsourcing_quantity,
+       pr.final_quantity,
+       lp.latest_phase_name
+     FROM production_orders po
+     JOIN phase_rollup pr ON pr.order_id = po.id
+     JOIN latest_phase lp ON lp.order_id = po.id
+     ORDER BY po.id`
+  );
+
+  const summary = {
+    input: { total_quantity: 0, average_loss_percentage: 0, current_order_count: 0 },
+    sorting: { total_quantity: 0, average_loss_percentage: 0, current_order_count: 0 },
+    outsourcing: { total_quantity: 0, average_loss_percentage: 0, current_order_count: 0 },
+    final: { total_quantity: 0, average_loss_percentage: 0, current_order_count: 0 },
+  };
+
+  const percentageSums = {
+    input: 0,
+    sorting: 0,
+    outsourcing: 0,
+    final: 0,
+  };
+
+  const percentageCounts = {
+    input: 0,
+    sorting: 0,
+    outsourcing: 0,
+    final: 0,
+  };
+
+  for (const row of rows) {
+    const inputQty = Number(row.input_quantity || 0);
+    const sortingQty = row.sorting_quantity !== null && row.sorting_quantity !== undefined
+      ? Number(row.sorting_quantity)
+      : null;
+    const outsourcingQty = row.outsourcing_quantity !== null && row.outsourcing_quantity !== undefined
+      ? Number(row.outsourcing_quantity)
+      : null;
+    const finalQty = row.final_quantity !== null && row.final_quantity !== undefined
+      ? Number(row.final_quantity)
+      : null;
+
+    const metrics = calculateMetrics({ inputQty, sortingQty, outsourcingQty, finalQty });
+
+    summary.input.total_quantity += inputQty;
+    percentageCounts.input += 1;
+
+    if (sortingQty !== null) {
+      summary.sorting.total_quantity += sortingQty;
+      if (metrics.sorting_loss_percentage !== null) {
+        percentageSums.sorting += metrics.sorting_loss_percentage;
+        percentageCounts.sorting += 1;
+      }
+    }
+
+    if (outsourcingQty !== null) {
+      summary.outsourcing.total_quantity += outsourcingQty;
+      if (metrics.outsourcing_loss_percentage !== null) {
+        percentageSums.outsourcing += metrics.outsourcing_loss_percentage;
+        percentageCounts.outsourcing += 1;
+      }
+    }
+
+    if (finalQty !== null) {
+      summary.final.total_quantity += finalQty;
+      if (metrics.final_loss_percentage !== null) {
+        percentageSums.final += metrics.final_loss_percentage;
+        percentageCounts.final += 1;
+      }
+    }
+
+    if (row.latest_phase_name === PHASE_INPUT) summary.input.current_order_count += 1;
+    if (row.latest_phase_name === PHASE_SORTING) summary.sorting.current_order_count += 1;
+    if (row.latest_phase_name === PHASE_OUTSOURCING) summary.outsourcing.current_order_count += 1;
+    if (row.latest_phase_name === PHASE_FINAL) summary.final.current_order_count += 1;
+  }
+
+  for (const phaseName of Object.keys(summary)) {
+    const count = percentageCounts[phaseName];
+    summary[phaseName].average_loss_percentage = count > 0
+      ? Number((percentageSums[phaseName] / count).toFixed(2))
+      : 0;
+  }
+
+  return summary;
+};
+
 const listMachines = async () => {
   await ensureTrackingSchema();
   const result = await pool.query(
@@ -720,6 +843,7 @@ module.exports = {
   createProductionOrder,
   addProductionPhase,
   getProductionOrderReport,
+  getDashboardEfficiencySummary,
   listMachines,
   deleteOrder,
   PHASE_INPUT,

@@ -675,6 +675,137 @@ describe('Paid payroll spend reporting', () => {
   });
 });
 
+describe('Dashboard stage efficiency reporting', () => {
+  beforeEach(async () => {
+    await resetData();
+  });
+
+  test('aggregates phase quantities, loss percentages, and latest-phase counts from tracking orders only', async () => {
+    const agent = await createAdminAndLogin();
+
+    const sortingEmployee = await agent
+      .post('/api/employees')
+      .send({ name: 'Dashboard Sorter', email: 'dashboard-sorter@test.com', role: 'Sorter', shift: 'morning', salary: 1200 });
+    expect(sortingEmployee.status).toBe(201);
+
+    const outsourcingEmployee = await agent
+      .post('/api/employees')
+      .send({ name: 'Dashboard Outsourcing', email: 'dashboard-outsourcing@test.com', role: 'Operator', shift: 'morning', salary: 1200 });
+    expect(outsourcingEmployee.status).toBe(201);
+
+    const finalEmployee = await agent
+      .post('/api/employees')
+      .send({ name: 'Dashboard Final', email: 'dashboard-final@test.com', role: 'Operator', shift: 'morning', salary: 1200 });
+    expect(finalEmployee.status).toBe(201);
+
+    const machineInsert = await pool.query(
+      `INSERT INTO machines (name, code) VALUES ($1, $2) RETURNING id`,
+      ['Dashboard Machine', 'DASH-1']
+    );
+    const machineId = machineInsert.rows[0].id;
+
+    const manualTrackingOrder = await agent
+      .post('/api/production-orders')
+      .send({
+        model_number: 'MANUAL-TRACK-100',
+        quantity: 100,
+        materials: [],
+      });
+    expect(manualTrackingOrder.status).toBe(201);
+
+    const customer = await agent
+      .post('/api/customers')
+      .send({ name: 'Stage Dashboard Customer', email: 'stage-dashboard@test.com' });
+    expect(customer.status).toBe(201);
+
+    const salesOrder = await agent
+      .post('/api/sales')
+      .send({
+        customer_id: customer.body.id,
+        delivery_date: '2026-05-01',
+        notes: 'Tracking dashboard sales order',
+        items: [
+          { product_name: 'DASH-SALES-200', quantity: 200, unit_price: 15, make_to_order: true },
+        ],
+      });
+    expect(salesOrder.status).toBe(201);
+
+    const production = await agent.get('/api/production');
+    expect(production.status).toBe(200);
+
+    const salesTrackingOrder = production.body.data.find((row) => row.sales_order_id === salesOrder.body.id);
+    expect(salesTrackingOrder).toBeDefined();
+
+    const sortingOnly = await agent
+      .post(`/api/production-orders/${manualTrackingOrder.body.id}/sorting`)
+      .send({
+        quantity: 80,
+        employee_id: sortingEmployee.body.id,
+        machine_id: machineId,
+        started_at: '2026-05-01T08:00:00Z',
+        completed_at: '2026-05-01T09:00:00Z',
+      });
+    expect(sortingOnly.status).toBe(201);
+
+    const sorting = await agent
+      .post(`/api/production-orders/${salesTrackingOrder.id}/sorting`)
+      .send({
+        quantity: 180,
+        employee_id: sortingEmployee.body.id,
+        machine_id: machineId,
+        started_at: '2026-05-01T08:30:00Z',
+        completed_at: '2026-05-01T09:30:00Z',
+      });
+    expect(sorting.status).toBe(201);
+
+    const outsourcing = await agent
+      .post(`/api/production-orders/${salesTrackingOrder.id}/outsourcing`)
+      .send({
+        quantity: 170,
+        employee_id: outsourcingEmployee.body.id,
+        machine_id: machineId,
+        started_at: '2026-05-01T10:00:00Z',
+        completed_at: '2026-05-01T11:00:00Z',
+      });
+    expect(outsourcing.status).toBe(201);
+
+    const final = await agent
+      .post(`/api/production-orders/${salesTrackingOrder.id}/final`)
+      .send({
+        quantity: 160,
+        employee_id: finalEmployee.body.id,
+        machine_id: machineId,
+        started_at: '2026-05-01T11:30:00Z',
+        completed_at: '2026-05-01T12:30:00Z',
+      });
+    expect(final.status).toBe(201);
+
+    const dashboard = await agent.get('/api/dashboard/stage-efficiency');
+    expect(dashboard.status).toBe(200);
+
+    // Expected by hand:
+    // input: total_quantity=300, average_loss_percentage=0.00, current_order_count=0
+    // sorting: total_quantity=260, average_loss_percentage=15.00, current_order_count=1
+    // outsourcing: total_quantity=170, average_loss_percentage=5.56, current_order_count=0
+    // final: total_quantity=160, average_loss_percentage=5.88, current_order_count=1
+    expect(dashboard.body.input.total_quantity).toBe(300);
+    expect(Number(dashboard.body.input.average_loss_percentage)).toBeCloseTo(0, 2);
+    expect(dashboard.body.input.current_order_count).toBe(0);
+
+    expect(dashboard.body.sorting.total_quantity).toBe(260);
+    expect(Number(dashboard.body.sorting.average_loss_percentage)).toBeCloseTo(15, 2);
+    expect(dashboard.body.sorting.current_order_count).toBe(1);
+
+    expect(dashboard.body.outsourcing.total_quantity).toBe(170);
+    expect(Number(dashboard.body.outsourcing.average_loss_percentage)).toBeCloseTo(5.56, 2);
+    expect(dashboard.body.outsourcing.current_order_count).toBe(0);
+
+    expect(dashboard.body.final.total_quantity).toBe(160);
+    expect(Number(dashboard.body.final.average_loss_percentage)).toBeCloseTo(5.88, 2);
+    expect(dashboard.body.final.current_order_count).toBe(1);
+  });
+});
+
 describe('Customer payment ledger', () => {
   beforeEach(async () => {
     await resetData();

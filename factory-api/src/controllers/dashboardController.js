@@ -1,4 +1,5 @@
 const pool = require('../db/pool');
+const productionTrackingService = require('../services/productionTrackingService');
 
 const getStats = async (req, res, next) => {
   try {
@@ -57,4 +58,13 @@ const getStats = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getStats };
+const getStageEfficiency = async (req, res, next) => {
+  try {
+    const summary = await productionTrackingService.getDashboardEfficiencySummary();
+    res.json(summary);
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { getStats, getStageEfficiency };
