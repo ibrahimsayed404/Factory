@@ -288,8 +288,71 @@ describe('Production stock deduction safety', () => {
     const linkedOrders = production.body.data.filter((row) => row.sales_order_id === salesOrder.body.id);
     expect(linkedOrders).toHaveLength(2);
     expect(linkedOrders.every((row) => row.assigned_to === null)).toBe(true);
+    expect(linkedOrders.every((row) => /^PTO-/.test(row.order_number))).toBe(true);
     expect(linkedOrders.map((row) => row.product_name).sort()).toEqual(['1231-t-shirt', 'Polo Shirt']);
     expect(linkedOrders.map((row) => Number(row.quantity)).sort((a, b) => a - b)).toEqual([500, 3500]);
+
+    const report = await agent.get(`/api/production-orders/${linkedOrders[0].id}/report`);
+    expect(report.status).toBe(200);
+    expect(report.body.phases.some((phase) => phase.phase === 'input' && Number(phase.quantity) === Number(linkedOrders[0].quantity))).toBe(true);
+  });
+
+  test('sales-triggered production orders keep sales linkage and accept sorting immediately', async () => {
+    const agent = await createAdminAndLogin();
+
+    const employee = await agent
+      .post('/api/employees')
+      .send({ name: 'Sales Sorter', email: 'sales-sorting@test.com', role: 'Sorter', shift: 'morning', salary: 1200 });
+    expect(employee.status).toBe(201);
+
+    const machineInsert = await pool.query(
+      `INSERT INTO machines (name, code) VALUES ($1, $2) RETURNING id`,
+      ['Sales Sorting Machine', 'SSM-1']
+    );
+    const machineId = machineInsert.rows[0].id;
+
+    const customer = await agent
+      .post('/api/customers')
+      .send({ name: 'Sales Tracking Customer', email: 'sales-tracking@test.com' });
+    expect(customer.status).toBe(201);
+
+    const salesOrder = await agent
+      .post('/api/sales')
+      .send({
+        customer_id: customer.body.id,
+        delivery_date: '2026-04-18',
+        notes: 'Make to order tracking order',
+        items: [
+          { product_name: 'Tracking MTO Shirt', quantity: 120, unit_price: 15, make_to_order: true },
+        ],
+      });
+
+    expect(salesOrder.status).toBe(201);
+
+    const production = await agent.get('/api/production');
+    expect(production.status).toBe(200);
+
+    const order = production.body.data.find((row) => row.sales_order_id === salesOrder.body.id);
+    expect(order).toBeDefined();
+    expect(order.order_number).toMatch(/^PTO-/);
+    expect(order.sales_order_id).toBe(salesOrder.body.id);
+
+    const reportBeforeSorting = await agent.get(`/api/production-orders/${order.id}/report`);
+    expect(reportBeforeSorting.status).toBe(200);
+    expect(reportBeforeSorting.body.phases.some((phase) => phase.phase === 'input' && Number(phase.quantity) === 120)).toBe(true);
+
+    const sorting = await agent
+      .post(`/api/production-orders/${order.id}/sorting`)
+      .send({
+        quantity: 100,
+        employee_id: employee.body.id,
+        machine_id: machineId,
+        started_at: '2026-04-18T08:00:00Z',
+        completed_at: '2026-04-18T09:00:00Z',
+      });
+
+    expect(sorting.status).toBe(201);
+    expect(sorting.body.phases.sorting).toBe(100);
   });
 });
 

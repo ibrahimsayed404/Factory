@@ -368,11 +368,14 @@ const listProductionOrders = async ({ page = 1, limit = 50 }) => {
   };
 };
 
-const createProductionOrder = async ({ modelNumber, quantity, product_id, materials = [] }) => {
+const createProductionOrder = async ({ modelNumber, quantity, product_id, materials = [], salesOrderId = null, client: providedClient = null, deliveryDate = null, notes = null }) => {
   await ensureTrackingSchema();
-  const client = await pool.connect();
+  const client = providedClient || await pool.connect();
+  const manageTransaction = !providedClient;
   try {
-    await client.query('BEGIN');
+    if (manageTransaction) {
+      await client.query('BEGIN');
+    }
 
     const plannedQuantity = Number.parseInt(quantity, 10);
     
@@ -390,10 +393,10 @@ const createProductionOrder = async ({ modelNumber, quantity, product_id, materi
       try {
         const orderResult = await client.query(
           `INSERT INTO production_orders
-           (order_number, model_number, planned_quantity, product_name, quantity, status, product_id)
-           VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+           (order_number, model_number, planned_quantity, product_name, quantity, status, product_id, sales_order_id, due_date, notes)
+           VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
            RETURNING *`,
-          [orderNumber, modelNumber, plannedQuantity, modelNumber, plannedQuantity, productId]
+          [orderNumber, modelNumber, plannedQuantity, modelNumber, plannedQuantity, productId, salesOrderId, deliveryDate, notes]
         );
         order = orderResult.rows[0];
         break;
@@ -449,15 +452,21 @@ const createProductionOrder = async ({ modelNumber, quantity, product_id, materi
       [order.id, PHASE_INPUT, plannedQuantity]
     );
 
-    await client.query('COMMIT');
+    if (manageTransaction) {
+      await client.query('COMMIT');
+    }
 
     const reportRow = await getOrderWithLatestPhases(client, order.id);
     return mapOrderReport(reportRow);
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (manageTransaction) {
+      await client.query('ROLLBACK');
+    }
     throw err;
   } finally {
-    client.release();
+    if (manageTransaction) {
+      client.release();
+    }
   }
 };
 

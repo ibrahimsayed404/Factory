@@ -5,6 +5,7 @@ const salesRepository = require('../repositories/salesRepository');
 const auditService = require('./auditService');
 const inventoryService = require('./inventoryService');
 const accountingService = require('./accountingService');
+const productionTrackingService = require('./productionTrackingService');
 const ApiError = require('../utils/ApiError');
 
 const buildOrderNumber = (prefix) => {
@@ -41,18 +42,17 @@ const recalculateCustomerOrderBalances = async (client, customerId) => {
 
 const createProductionOrderForItem = async (client, salesOrder, item, notes) => {
   for (let i = 0; i < 5; i += 1) {
-    const orderNum = buildOrderNumber('PO');
     try {
-      return await salesRepository.createProductionOrder(
-        client,
-        orderNum,
-        item.product_name,
-        item.quantity,
-        salesOrder.id,
-        salesOrder.delivery_date || null,
+      return await productionTrackingService.createProductionOrder({
+        modelNumber: item.product_name,
+        quantity: item.quantity,
+        product_id: item.product_id || null,
+        materials: [],
+        salesOrderId: salesOrder.id,
+        deliveryDate: salesOrder.delivery_date || null,
         notes,
-        item.product_id || null
-      );
+        client,
+      });
     } catch (err) {
       if (err.code !== '23505') throw err;
     }
