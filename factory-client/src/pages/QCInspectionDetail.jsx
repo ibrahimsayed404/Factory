@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { qcApi } from '../api';
 import { toast } from 'react-toastify';
 import { Card, Form, Button, Row, Col, Table, Badge } from 'react-bootstrap';
+import { FEATURE_FLAGS } from '../config/featureFlags';
 
 export default function QCInspectionDetail() {
   const { id } = useParams();
@@ -112,9 +113,11 @@ export default function QCInspectionDetail() {
 
   return (
     <div className="p-4">
-      <Button variant="link" onClick={() => navigate('/qc/inspections')} className="mb-3">
-        &larr; Back to Inspections
-      </Button>
+      {FEATURE_FLAGS.qcInspections && (
+        <Button variant="link" onClick={() => navigate('/qc/inspections')} className="mb-3">
+          &larr; Back to Inspections
+        </Button>
+      )}
 
       <Row>
         <Col md={4}>

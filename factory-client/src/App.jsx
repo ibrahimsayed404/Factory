@@ -7,6 +7,7 @@ import { Layout } from './components/layout/Layout';
 import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { Spinner } from './components/ui';
+import { FEATURE_FLAGS } from './config/featureFlags';
 
 const Login      = lazy(() => import('./pages/Login'));
 const Dashboard  = lazy(() => import('./pages/Dashboard'));
@@ -51,25 +52,25 @@ export default function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/"           element={<Protected><Dashboard /></Protected>} />
                   <Route path="/inventory"  element={<Protected><Inventory /></Protected>} />
-                  <Route path="/purchasing" element={<Protected><Purchasing /></Protected>} />
+                  <Route path="/purchasing" element={FEATURE_FLAGS.purchasing ? <Protected><Purchasing /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/products"   element={<Protected><Products /></Protected>} />
                   <Route path="/employees"  element={<Protected><Employees /></Protected>} />
                   <Route path="/payroll"    element={<Protected><Payroll /></Protected>} />
                   <Route path="/sales"      element={<Protected><Sales /></Protected>} />
                   <Route path="/customers"  element={<Protected><Customers /></Protected>} />
-                  <Route path="/accounting" element={<Protected><Accounting /></Protected>} />
+                  <Route path="/accounting" element={FEATURE_FLAGS.accounting ? <Protected><Accounting /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/production"  element={<Protected><Production /></Protected>} />
-                  <Route path="/production-pipeline" element={<Protected><ProductionPipeline /></Protected>} />
+                  <Route path="/production-pipeline" element={FEATURE_FLAGS.productionPipeline ? <Protected><ProductionPipeline /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/production-orders/create" element={<Protected><ProductionOrderCreate /></Protected>} />
                   <Route path="/production-orders/sorting" element={<Protected><ProductionSorting /></Protected>} />
                   <Route path="/production-orders/final" element={<Protected><ProductionFinal /></Protected>} />
                   <Route path="/production-orders/report" element={<Protected><ProductionTrackingReport /></Protected>} />
-                  <Route path="/manufacturing/boms" element={<Protected><Bom /></Protected>} />
-                  <Route path="/manufacturing/routings" element={<Protected><Routings /></Protected>} />
+                  <Route path="/manufacturing/boms" element={FEATURE_FLAGS.manufacturingBoms ? <Protected><Bom /></Protected> : <Navigate to="/" replace />} />
+                  <Route path="/manufacturing/routings" element={FEATURE_FLAGS.manufacturingRoutings ? <Protected><Routings /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/attendance" element={<Protected><Attendance /></Protected>} />
-                  <Route path="/qc/inspections" element={<Protected><QCInspections /></Protected>} />
-                  <Route path="/qc/inspections/:id" element={<Protected><QCInspectionDetail /></Protected>} />
-                  <Route path="/qc/reports" element={<Protected><QCReports /></Protected>} />
+                  <Route path="/qc/inspections" element={FEATURE_FLAGS.qcInspections ? <Protected><QCInspections /></Protected> : <Navigate to="/" replace />} />
+                  <Route path="/qc/inspections/:id" element={FEATURE_FLAGS.qcInspections ? <Protected><QCInspectionDetail /></Protected> : <Navigate to="/" replace />} />
+                  <Route path="/qc/reports" element={FEATURE_FLAGS.qcReports ? <Protected><QCReports /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/reports"    element={<Protected><Reports /></Protected>} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>

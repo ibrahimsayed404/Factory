@@ -8,6 +8,7 @@ import { ErrorMsg } from '../ui';
 import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 import { useLanguage } from '../../context/LanguageContext';
 import FabriCoreLogo from '../brand/FabriCoreLogo';
+import { FEATURE_FLAGS } from '../../config/featureFlags';
 
 /* ── Nav Section Label ──────────────────────────────────── */
 const NavSection = ({ children }) => (
@@ -144,18 +145,18 @@ export const Layout = ({ children }) => {
 
           <NavSection>{t('operations', 'Operations')}</NavSection>
           <NavItem to="/production" label={t('production', 'Production')} icon="⚙" />
-          <NavItem to="/manufacturing/boms" label={t('boms', 'BOMs')} icon="📄" />
-          <NavItem to="/manufacturing/routings" label={t('routings', 'Routings')} icon="🔄" />
-          <NavItem to="/production-pipeline" label={t('productionPipeline', 'Pipeline Kanban')} icon="🗂" />
+          {FEATURE_FLAGS.manufacturingBoms && <NavItem to="/manufacturing/boms" label={t('boms', 'BOMs')} icon="📄" />}
+          {FEATURE_FLAGS.manufacturingRoutings && <NavItem to="/manufacturing/routings" label={t('routings', 'Routings')} icon="🔄" />}
+          {FEATURE_FLAGS.productionPipeline && <NavItem to="/production-pipeline" label={t('productionPipeline', 'Pipeline Kanban')} icon="🗂" />}
           <NavItem to="/production-orders/create" label={t('createOrder', 'Create Order')} icon="🧵" />
           <NavItem to="/production-orders/sorting" label={t('sorting', 'Sorting (فرز)')} icon="🗂" />
           <NavItem to="/production-orders/final" label={t('finalPhase', 'Final Phase')} icon="✅" />
           <NavItem to="/production-orders/report" label={t('prodReport', 'Prod Report')} icon="📉" />
           <NavItem to="/products"   label={t('products', 'Products')}    icon="🏷️" />
           <NavItem to="/inventory"  label={t('inventory', 'Inventory')}  icon="📦" />
-          <NavItem to="/purchasing" label={t('purchasing', 'Purchasing')} icon="🛒" />
-          <NavItem to="/qc/inspections" label={t('qcInspections', 'QC Inspections')} icon="🔍" />
-          <NavItem to="/qc/reports" label={t('qcReports', 'QC Reports')} icon="📋" />
+          {FEATURE_FLAGS.purchasing && <NavItem to="/purchasing" label={t('purchasing', 'Purchasing')} icon="🛒" />}
+          {FEATURE_FLAGS.qcInspections && <NavItem to="/qc/inspections" label={t('qcInspections', 'QC Inspections')} icon="🔍" />}
+          {FEATURE_FLAGS.qcReports && <NavItem to="/qc/reports" label={t('qcReports', 'QC Reports')} icon="📋" />}
 
           <NavSection>{t('people', 'People')}</NavSection>
           <NavItem to="/employees"  label={t('employees', 'Employees')}  icon="👥" />
@@ -165,7 +166,7 @@ export const Layout = ({ children }) => {
           <NavSection>{t('business', 'Business')}</NavSection>
           <NavItem to="/sales"      label={t('sales', 'Sales')}      icon="📈" />
           <NavItem to="/customers"  label={t('customers', 'Customers')}  icon="🏢" />
-          <NavItem to="/accounting" label={t('accounting', 'Accounting')} icon="🧾" />
+          {FEATURE_FLAGS.accounting && <NavItem to="/accounting" label={t('accounting', 'Accounting')} icon="🧾" />}
           <NavItem to="/reports"    label={t('reports', 'Reports')}    icon="📊" />
         </nav>
 

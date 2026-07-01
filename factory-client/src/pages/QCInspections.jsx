@@ -4,6 +4,7 @@ import { qcApi } from '../api';
 import { toast } from 'react-toastify';
 import { Table, Button, Badge, Modal, Form } from 'react-bootstrap';
 import { FaPlus, FaEye } from 'react-icons/fa';
+import { FEATURE_FLAGS } from '../config/featureFlags';
 
 export default function QCInspections() {
   const [inspections, setInspections] = useState([]);
@@ -102,9 +103,11 @@ export default function QCInspections() {
                 <td className="text-info fw-bold">{ins.rework_quantity}</td>
                 <td>{getStatusBadge(ins.status)}</td>
                 <td>
-                  <Button variant="sm" className="btn-outline-primary" onClick={() => navigate(`/qc/inspections/${ins.id}`)}>
-                    <FaEye /> View
-                  </Button>
+                  {FEATURE_FLAGS.qcInspections && (
+                    <Button variant="sm" className="btn-outline-primary" onClick={() => navigate(`/qc/inspections/${ins.id}`)}>
+                      <FaEye /> View
+                    </Button>
+                  )}
                 </td>
               </tr>
             ))
