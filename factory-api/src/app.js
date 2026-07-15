@@ -44,6 +44,9 @@ const swaggerOptions = {
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Trust proxy headers for Vercel/serverless environments
+app.set('trust proxy', true);
+
 if (process.env.NODE_ENV !== 'test') {
   swaggerUi = require('swagger-ui-express');
   swaggerJSDoc = require('swagger-jsdoc');
