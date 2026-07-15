@@ -262,6 +262,16 @@ export const payrollApi = {
   pay:    (id)          => api.put(`/payroll/${id}/pay`),
 };
 
+// HR / Loans
+export const hrApi = {
+  loans: (params = '?limit=1000') => api.get(`/hr/loans${params}`).then((r) => {
+    if (Array.isArray(r)) return r;
+    if (Array.isArray(r?.data)) return r.data;
+    return [];
+  }),
+  createLoan: (body) => api.post('/hr/loans', body),
+};
+
 // Sales
 export const salesApi = {
   customers:      (params = '?limit=1000') => api.get(`/customers${params}`).then(r => {
