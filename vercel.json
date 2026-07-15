@@ -16,13 +16,11 @@
       }
     }
   ],
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index.js"
-    }
-  ],
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.js"
+    },
     {
       "src": "/assets/(.*)",
       "dest": "factory-client/assets/$1"
