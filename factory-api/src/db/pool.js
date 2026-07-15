@@ -6,6 +6,7 @@ const pool = new Pool({
   database: process.env.DB_NAME || 'factory_db',
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
 });
 
 pool.on('connect', () => {
