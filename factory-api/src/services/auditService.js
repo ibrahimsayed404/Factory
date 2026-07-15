@@ -4,9 +4,11 @@ const pool = require('../db/pool');
 // continue to work. Once the migration runs, IP and user-agent are captured.
 let hasExtraColumnsCache = null;
 
-const hasExtraColumns = async () => {
+const db = (client) => client || pool;
+
+const hasExtraColumns = async (client = null) => {
   if (hasExtraColumnsCache !== null) return hasExtraColumnsCache;
-  const result = await pool.query(
+  const result = await db(client).query(
     `SELECT EXISTS (
       SELECT 1
       FROM information_schema.columns
@@ -27,12 +29,13 @@ const hasExtraColumns = async () => {
  * @param {string|number} entityId - ID of the affected record
  * @param {object} details - Optional JSON metadata
  * @param {object} [reqContext] - Optional { ip, userAgent } for forensic logging
+ * @param {object} [client] - Optional pg client when already inside a transaction
  */
-const log = async (userId, action, entityName, entityId, details = null, reqContext = null) => {
+const log = async (userId, action, entityName, entityId, details = null, reqContext = null, client = null) => {
   try {
-    const supportsExtra = await hasExtraColumns();
+    const supportsExtra = await hasExtraColumns(client);
     if (supportsExtra && reqContext) {
-      await pool.query(
+      await db(client).query(
         `INSERT INTO audit_logs (user_id, action, entity_name, entity_id, details, ip_address, user_agent)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
@@ -46,7 +49,7 @@ const log = async (userId, action, entityName, entityId, details = null, reqCont
         ]
       );
     } else {
-      await pool.query(
+      await db(client).query(
         `INSERT INTO audit_logs (user_id, action, entity_name, entity_id, details)
          VALUES ($1, $2, $3, $4, $5)`,
         [userId || null, action, entityName, String(entityId), details ? JSON.stringify(details) : null]

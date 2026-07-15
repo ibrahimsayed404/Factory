@@ -134,26 +134,28 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate,
 };
 
 const ingestPunchEvents = async (req, res, next) => {
-  const client = await pool.connect();
+  const incoming = Array.isArray(req.body)
+    ? req.body
+    : Array.isArray(req.body?.events)
+      ? req.body.events
+      : [req.body];
+
+  if (!incoming.length) {
+    return res.status(400).json({ error: 'No events provided' });
+  }
+
+  let client;
   try {
-    const incoming = Array.isArray(req.body)
-      ? req.body
-      : Array.isArray(req.body.events)
-        ? req.body.events
-        : [req.body];
-
-    if (!incoming.length) {
-      return res.status(400).json({ error: 'No events provided' });
-    }
-
-    const results = [];
-    const policy = await getAttendancePayrollPolicy();
+    client = await pool.connect();
+    // Pass the held client so policy lookup does not need a second pool connection
+    // (Vercel uses DB_POOL_MAX=1 — pool.query while holding connect() deadlocks).
+    const policy = await getAttendancePayrollPolicy(client);
     await client.query('BEGIN');
 
     // SECURITY & PERF: Pre-fetch employees to prevent N+1 queries
     const employeeIds = [...new Set(incoming.filter(e => e.employee_id).map(e => e.employee_id))];
     const deviceUserIds = [...new Set(incoming.filter(e => e.device_user_id && !e.employee_id).map(e => String(e.device_user_id)))];
-    
+
     const employeeMap = new Map();
 
     if (employeeIds.length > 0) {
@@ -165,6 +167,8 @@ const ingestPunchEvents = async (req, res, next) => {
       const { rows } = await client.query('SELECT id, shift, shift_start, shift_end, weekend_days, device_user_id FROM employees WHERE device_user_id = ANY($1)', [deviceUserIds]);
       rows.forEach(r => employeeMap.set(`dev:${r.device_user_id}`, r));
     }
+
+    const results = [];
 
     for (const event of incoming) {
       const missing = [];
@@ -225,10 +229,12 @@ const ingestPunchEvents = async (req, res, next) => {
       results,
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch (_) { /* ignore rollback errors */ }
+    }
     next(err);
   } finally {
-    client.release();
+    if (client) client.release();
   }
 };
 

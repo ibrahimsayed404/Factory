@@ -16,10 +16,12 @@ const KEY_MAP = {
 
 let schemaEnsured = false;
 
-const ensureSettingsTable = async () => {
+const db = (client) => client || pool;
+
+const ensureSettingsTable = async (client = null) => {
   if (schemaEnsured) return;
 
-  await pool.query(`
+  await db(client).query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       key VARCHAR(120) PRIMARY KEY,
       value TEXT NOT NULL,
@@ -35,10 +37,10 @@ const toNumber = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const getAttendancePayrollPolicy = async () => {
-  await ensureSettingsTable();
+const getAttendancePayrollPolicy = async (client = null) => {
+  await ensureSettingsTable(client);
 
-  const rows = await pool.query(
+  const rows = await db(client).query(
     `SELECT key, value
      FROM app_settings
      WHERE key = ANY($1::text[])`,
@@ -56,8 +58,8 @@ const getAttendancePayrollPolicy = async () => {
   return policy;
 };
 
-const updateAttendancePayrollPolicy = async (updates) => {
-  await ensureSettingsTable();
+const updateAttendancePayrollPolicy = async (updates, client = null) => {
+  await ensureSettingsTable(client);
 
   const entries = [
     ['attendance_late_grace_minutes', updates.attendanceLateGraceMinutes],
@@ -67,7 +69,7 @@ const updateAttendancePayrollPolicy = async (updates) => {
   ].filter(([, value]) => value !== undefined && value !== null);
 
   for (const [key, value] of entries) {
-    await pool.query(
+    await db(client).query(
       `INSERT INTO app_settings (key, value, updated_at)
        VALUES ($1, $2, NOW())
        ON CONFLICT (key)
@@ -89,7 +91,7 @@ const updateAttendancePayrollPolicy = async (updates) => {
     process.env.PAYROLL_WEEKS_PER_MONTH = String(updates.payrollWeeksPerMonth);
   }
 
-  return getAttendancePayrollPolicy();
+  return getAttendancePayrollPolicy(client);
 };
 
 module.exports = {

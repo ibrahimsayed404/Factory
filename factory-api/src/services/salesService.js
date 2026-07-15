@@ -259,7 +259,7 @@ const addCustomerPayment = async (userId, customerId, file, data, reqContext = n
 
     await recalculateCustomerOrderBalances(client, customerId);
     await accountingService.postCustomerPayment(newPayment, client);
-    await auditService.log(userId, 'CREATE', 'customer_payments', newPayment.id, { amount: data.amount }, reqContext);
+    await auditService.log(userId, 'CREATE', 'customer_payments', newPayment.id, { amount: data.amount }, reqContext, client);
     await client.query('COMMIT');
 
     return newPayment;
@@ -349,7 +349,7 @@ const createSalesOrder = async (userId, data, reqContext = null) => {
 
     await salesRepository.markSalesOrderReserved(client, order.id);
     if (customer_id) await recalculateCustomerOrderBalances(client, customer_id);
-    await auditService.log(userId, 'CREATE', 'sales_orders', order.id, { order_number: order.order_number, total }, reqContext);
+    await auditService.log(userId, 'CREATE', 'sales_orders', order.id, { order_number: order.order_number, total }, reqContext, client);
     await client.query('COMMIT');
 
     return { ...order, subtotal, discount_amount: discountAmount, tax_amount: taxAmount, total_amount: total };
@@ -376,7 +376,7 @@ const updateOrderStatus = async (userId, id, data, reqContext = null) => {
     if (status === 'cancelled' && order.status !== 'cancelled') await releaseOrderReservations(client, order, items, userId);
 
     const result = await salesRepository.updateSalesOrderStatus(id, status, payment_status, paid_amount, client);
-    await auditService.log(userId, 'UPDATE_STATUS', 'sales_orders', id, { status, payment_status, paid_amount }, reqContext);
+    await auditService.log(userId, 'UPDATE_STATUS', 'sales_orders', id, { status, payment_status, paid_amount }, reqContext, client);
     await client.query('COMMIT');
     return result;
   } catch (err) {
@@ -402,7 +402,7 @@ const removeOrder = async (userId, id, reqContext = null) => {
     await salesRepository.deleteSalesOrderItems(client, id);
     await salesRepository.deleteSalesOrderRecord(client, id);
 
-    await auditService.log(userId, 'DELETE', 'sales_orders', id, null, reqContext);
+    await auditService.log(userId, 'DELETE', 'sales_orders', id, null, reqContext, client);
     await client.query('COMMIT');
     return { success: true };
   } catch (err) {
@@ -455,7 +455,7 @@ const createQuotation = async (userId, data, reqContext = null) => {
     for (const item of items) {
       await salesRepository.insertQuotationItem(client, { ...item, quotation_id: quotation.id });
     }
-    await auditService.log(userId, 'CREATE', 'quotations', quotation.id, { quotation_number: quotation.quotation_number, total }, reqContext);
+    await auditService.log(userId, 'CREATE', 'quotations', quotation.id, { quotation_number: quotation.quotation_number, total }, reqContext, client);
     await client.query('COMMIT');
     return { ...quotation, items };
   } catch (err) {
@@ -560,7 +560,7 @@ const createInvoiceFromOrder = async (userId, data, reqContext = null) => {
     }
     await salesRepository.updateSalesOrderStatus(order.id, null, 'invoiced', null, client);
     await accountingService.postSalesInvoice(invoice, client);
-    await auditService.log(userId, 'CREATE', 'invoices', invoice.id, { invoice_number: invoice.invoice_number }, reqContext);
+    await auditService.log(userId, 'CREATE', 'invoices', invoice.id, { invoice_number: invoice.invoice_number }, reqContext, client);
     await client.query('COMMIT');
     return { ...invoice, items };
   } catch (err) {
@@ -631,7 +631,7 @@ const createDeliveryNote = async (userId, data, reqContext = null) => {
       await salesRepository.incrementSalesOrderItemFulfilled(client, item.id, item.quantity);
     }
     await salesRepository.updateSalesOrderFulfillmentStatus(client, order.id);
-    await auditService.log(userId, 'CREATE', 'delivery_notes', delivery.id, { delivery_number: delivery.delivery_number }, reqContext);
+    await auditService.log(userId, 'CREATE', 'delivery_notes', delivery.id, { delivery_number: delivery.delivery_number }, reqContext, client);
     await client.query('COMMIT');
     return { ...delivery, items: deliveryItems };
   } catch (err) {
@@ -718,7 +718,7 @@ const createReturn = async (userId, data, reqContext = null) => {
       }
     }
     await accountingService.postSalesCredit(salesReturn, client);
-    await auditService.log(userId, 'CREATE', 'sales_returns', salesReturn.id, { return_number: salesReturn.return_number }, reqContext);
+    await auditService.log(userId, 'CREATE', 'sales_returns', salesReturn.id, { return_number: salesReturn.return_number }, reqContext, client);
     await client.query('COMMIT');
     return { ...salesReturn, items: returnItems };
   } catch (err) {
@@ -780,7 +780,7 @@ const createCreditNote = async (userId, data, reqContext = null) => {
     }
     if (credit.invoice_id) await salesRepository.incrementInvoiceCredited(client, credit.invoice_id, total);
     await accountingService.postSalesCredit(credit, client);
-    await auditService.log(userId, 'CREATE', 'credit_notes', credit.id, { credit_note_number: credit.credit_note_number }, reqContext);
+    await auditService.log(userId, 'CREATE', 'credit_notes', credit.id, { credit_note_number: credit.credit_note_number }, reqContext, client);
     await client.query('COMMIT');
     return { ...credit, items };
   } catch (err) {
