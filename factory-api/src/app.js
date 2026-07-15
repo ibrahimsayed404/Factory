@@ -43,9 +43,12 @@ const swaggerOptions = {
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
+const isVercel = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION;
 
 // Trust proxy headers for Vercel/serverless environments
-app.set('trust proxy', true);
+if (isVercel) {
+  app.set('trust proxy', true);
+}
 
 if (process.env.NODE_ENV !== 'test') {
   swaggerUi = require('swagger-ui-express');
@@ -63,7 +66,7 @@ const allowedOrigins = process.env.CLIENT_ORIGIN
 // Security middleware
 app.use(helmet());
 app.use(i18n);
-const shouldEnableRateLimit = isProduction || process.env.ENABLE_RATE_LIMIT_IN_DEV === 'true';
+const shouldEnableRateLimit = (isProduction || process.env.ENABLE_RATE_LIMIT_IN_DEV === 'true') && !isVercel;
 if (shouldEnableRateLimit) {
   app.use(
     rateLimit({
