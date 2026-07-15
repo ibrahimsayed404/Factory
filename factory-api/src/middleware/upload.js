@@ -2,8 +2,16 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
-const evidenceDir = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence');
-fs.mkdirSync(evidenceDir, { recursive: true });
+// Use /tmp for Vercel/serverless environments, local uploads otherwise
+const isVercel = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION;
+const baseDir = isVercel ? '/tmp' : path.join(__dirname, '..', '..');
+
+const evidenceDir = path.join(baseDir, 'uploads', 'payment-evidence');
+try {
+  fs.mkdirSync(evidenceDir, { recursive: true });
+} catch (e) {
+  // Ignore directory creation errors in serverless
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, evidenceDir),
@@ -14,8 +22,12 @@ const storage = multer.diskStorage({
   },
 });
 
-const qcPhotoDir = path.join(__dirname, '..', '..', 'uploads', 'qc-photos');
-fs.mkdirSync(qcPhotoDir, { recursive: true });
+const qcPhotoDir = path.join(baseDir, 'uploads', 'qc-photos');
+try {
+  fs.mkdirSync(qcPhotoDir, { recursive: true });
+} catch (e) {
+  // Ignore directory creation errors in serverless
+}
 
 const qcStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, qcPhotoDir),
@@ -26,8 +38,12 @@ const qcStorage = multer.diskStorage({
   },
 });
 
-const hrDocDir = path.join(__dirname, '..', '..', 'uploads', 'hr-documents');
-fs.mkdirSync(hrDocDir, { recursive: true });
+const hrDocDir = path.join(baseDir, 'uploads', 'hr-documents');
+try {
+  fs.mkdirSync(hrDocDir, { recursive: true });
+} catch (e) {
+  // Ignore directory creation errors in serverless
+}
 
 const hrStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, hrDocDir),
