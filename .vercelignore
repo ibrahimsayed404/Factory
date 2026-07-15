@@ -1,0 +1,7 @@
+﻿node_modules
+factory-desktop/dist
+factory-desktop/node_modules
+factory-client/node_modules
+.vs
+.git
+*.zip
