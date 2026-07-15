@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "factory-client/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    },
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.js"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "factory-client/assets/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "factory-client/favicon.ico"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "factory-client/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/payroll/auto-run",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
