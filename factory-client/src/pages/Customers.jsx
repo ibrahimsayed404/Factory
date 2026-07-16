@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { salesApi, resolveApiAssetUrl } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, MetricCard, Badge, statusVariant } from '../components/ui';
+import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, MetricCard, Badge, statusVariant, SearchInput } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 
 const emptyForm = { name: '', email: '', phone: '', address: '', city: '', country: '' };
@@ -405,7 +405,7 @@ export default function Customers() {
       {!loading && (
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-            <Input 
+            <SearchInput 
               placeholder="Search by name, email, phone, city, country, or address..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}

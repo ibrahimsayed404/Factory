@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { salesApi, productApi, productionTrackingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant } from '../components/ui';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant, SearchInput } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 import { formatOrderOptionLabel } from '../utils/productionOrderDisplay';
 
@@ -328,7 +328,7 @@ export default function Sales() {
       {!loading && (
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-            <Input 
+            <SearchInput 
               placeholder="Search by order number, customer, status, or payment status..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}

@@ -4,7 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useFetch } from '../hooks/useFetch';
 import {
   PageHeader, Card, Table, Badge, Btn,
-  Modal, Input, Select, Spinner, MetricCard
+  Modal, Input, Select, Spinner, MetricCard, SearchInput
 } from '../components/ui';
 
 const STATUS_OPTS = ['present', 'absent', 'late', 'half-day'];
@@ -484,7 +484,7 @@ export default function Attendance() {
       {/* Search bar for summary view */}
       {!selectedEmp && (
         <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-          <Input 
+          <SearchInput 
             placeholder="Search by employee name or device ID..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}

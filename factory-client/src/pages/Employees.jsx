@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { employeeApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg } from '../components/ui';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, SearchInput } from '../components/ui';
 
 const SHIFT_DEFAULTS = {
   morning: { start: '08:00', end: '17:00' },
@@ -208,7 +208,7 @@ export default function Employees() {
       {!loading && (
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-            <Input 
+            <SearchInput 
               placeholder="Search by name, department, role, phone, or device ID..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}

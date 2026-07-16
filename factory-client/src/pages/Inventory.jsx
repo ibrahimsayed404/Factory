@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { inventoryApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg, SearchInput } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 
 const emptyForm = { name: '', category: '', unit: '', color: '', quantity: '', min_quantity: '', cost_per_unit: '', supplier: '' };
@@ -140,7 +140,7 @@ export default function Inventory() {
       {!loading && (
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-            <Input 
+            <SearchInput 
               placeholder="Search by name, category, color, unit, or supplier..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}

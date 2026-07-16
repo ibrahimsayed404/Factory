@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { productionApi, productionTrackingApi, productApi, manufacturingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant } from '../components/ui';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant, SearchInput } from '../components/ui';
 import { FEATURE_FLAGS } from '../config/featureFlags';
 import { useLanguage } from '../context/LanguageContext';
 import { buildProductNameLookup, getOrderDisplayNumber, getOrderProductName } from '../utils/productionOrderDisplay';
@@ -248,7 +248,7 @@ export default function Production() {
       {!loading && (
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-            <Input 
+            <SearchInput 
               placeholder="Search by order number, product name, status, or model number..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}

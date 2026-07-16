@@ -12,4 +12,5 @@ export * from './Modal';
 export * from './Spinner';
 export * from './ErrorMsg';
 export { default as OrderDetailsSummary } from './OrderDetailsSummary';
+export * from './SearchInput';
 
