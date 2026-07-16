@@ -565,9 +565,9 @@ export default function Payroll() {
             <Card padding="10px 12px">{t('lateMinutes', 'Late minutes')}: <strong>{selectedBreakdown.payroll_breakdown?.late_minutes || 0}</strong></Card>
             <Card padding="10px 12px">{t('lateWeightedMinutes', 'Late weighted minutes')}: <strong>{selectedBreakdown.payroll_breakdown?.late_weighted_minutes || 0}</strong></Card>
             <Card padding="10px 12px">{t('earlyLeaveMinutes', 'Early leave minutes')}: <strong>{selectedBreakdown.payroll_breakdown?.early_leave_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{selectedBreakdown.payroll_breakdown?.regular_overtime_minutes ?? (selectedBreakdown.payroll_breakdown?.overtime_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{selectedBreakdown.payroll_breakdown?.overtime_minutes || 0}</strong></Card>
             <Card padding="10px 12px">{t('weekendWorkOvertime', 'Weekend work overtime')}: <strong>{selectedBreakdown.payroll_breakdown?.weekend_overtime_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime')}: <strong>{selectedBreakdown.payroll_breakdown?.overtime_minutes || 0}</strong></Card>
+            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime (×1.5)')}: <strong>{Math.round((selectedBreakdown.payroll_breakdown?.overtime_minutes || 0) * 1.5)}</strong></Card>
             <Card padding="10px 12px">{t('absentDays', 'Absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.absent_days || 0}</strong></Card>
             <Card padding="10px 12px">{t('halfDays', 'Half days')}: <strong>{selectedBreakdown.payroll_breakdown?.half_days || 0}</strong></Card>
             <Card padding="10px 12px">{t('inferredAbsentDays', 'Inferred absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.inferred_absent_days || 0}</strong></Card>
