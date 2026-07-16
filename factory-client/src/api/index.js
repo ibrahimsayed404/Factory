@@ -259,7 +259,19 @@ export const employeeApi = {
 export const payrollApi = {
   list:   (params = '?limit=1000') => api.get(`/payroll${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
   create: (body)        => api.post('/payroll', body),
+  updateManual: (id, body) => api.put(`/payroll/${id}/manual`, body),
   pay:    (id)          => api.put(`/payroll/${id}/pay`),
+  deleteWeek: (weekStart) => api.delete(`/payroll/week/${weekStart}`),
+};
+
+// HR / Loans
+export const hrApi = {
+  loans: (params = '?limit=1000') => api.get(`/hr/loans${params}`).then((r) => {
+    if (Array.isArray(r)) return r;
+    if (Array.isArray(r?.data)) return r.data;
+    return [];
+  }),
+  createLoan: (body) => api.post('/hr/loans', body),
 };
 
 // HR / Loans

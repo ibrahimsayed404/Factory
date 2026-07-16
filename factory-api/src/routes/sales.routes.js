@@ -6,8 +6,10 @@ const v = require('../middleware/validation');
 
 const path = require('node:path');
 const fsPromises = require('node:fs').promises;
+const storageService = require('../services/storageService');
 
 const sales = require('../controllers/salesController');
+
 
 // Customers
 router.get('/customers', authenticate, sales.getCustomers);
@@ -52,10 +54,13 @@ router.get('/uploads/payment-evidence/:filename', authenticate, authorizeAdmin, 
     const filePath = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence', filename);
     try {
       await fsPromises.access(filePath);
+      return res.sendFile(filePath);
     } catch {
+      // Local file not found — try Supabase cloud redirect
+      const cloudUrl = storageService.getCloudUrl('payment-evidence', filename);
+      if (cloudUrl) return res.redirect(cloudUrl);
       return res.status(404).json({ error: 'File not found' });
     }
-    res.sendFile(filePath);
   } catch (err) {
     next(err);
   }

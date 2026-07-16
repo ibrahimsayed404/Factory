@@ -23,7 +23,10 @@ const loadReportExportModules = async () => {
 
 /* ── Export helpers ─────────────────────────────────── */
 const exportPDF = async (filename, title, sections) => {
-  const { jsPDF, autoTable } = await loadReportExportModules();
+  const [{ jsPDF, autoTable }, { downloadPdfBlob }] = await Promise.all([
+    loadReportExportModules(),
+    import('../utils/printDocument'),
+  ]);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
 
@@ -93,7 +96,7 @@ const exportPDF = async (filename, title, sections) => {
     }
   });
 
-  doc.save(filename);
+  downloadPdfBlob(doc, filename);
 };
 
 const exportExcel = async (filename, sheets) => {

@@ -11,6 +11,40 @@ const HIGH_LOSS_THRESHOLD_PERCENT = 10;
 
 let schemaEnsured = false;
 
+const normalizeModelNumber = (value) => String(value || '').trim().toLowerCase();
+
+const isModelNumberConstraintError = (err) => (
+  err?.code === '23505'
+  && (
+    String(err.constraint || '').includes('model_number')
+    || String(err.detail || '').includes('model_number')
+  )
+);
+
+const assertModelNumberAvailable = async (client, modelNumber) => {
+  const normalized = normalizeModelNumber(modelNumber);
+  if (!normalized) throw new ApiError(400, 'model_number is required');
+
+  // Advisory lock keyed on model_number hash to serialize concurrent checks
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext($1))`,
+    [normalized]
+  );
+
+  const existing = await client.query(
+    `SELECT id
+     FROM production_orders
+     WHERE model_number IS NOT NULL
+       AND LOWER(TRIM(model_number)) = $1
+     LIMIT 1`,
+    [normalized]
+  );
+
+  if (existing.rows.length) {
+    throw new ApiError(409, `Order number ${String(modelNumber).trim()} is already in use`);
+  }
+};
+
 const ensureTrackingSchema = async () => {
   if (schemaEnsured) return;
 
@@ -36,6 +70,103 @@ const ensureTrackingSchema = async () => {
     UPDATE production_orders
     SET planned_quantity = COALESCE(planned_quantity, quantity)
     WHERE planned_quantity IS NULL
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'production_materials'
+          AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE production_materials
+          ADD COLUMN IF NOT EXISTS color VARCHAR(80);
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    UPDATE production_orders po
+    SET product_name = p.name
+    FROM products p
+    WHERE po.product_id = p.id
+      AND (
+        po.product_name IS NULL
+        OR TRIM(po.product_name) = ''
+        OR po.product_name = po.model_number
+        OR po.product_name IS DISTINCT FROM p.name
+      )
+  `);
+
+  await pool.query(`
+    UPDATE production_orders po
+    SET
+      product_name = p.name,
+      product_id = p.id
+    FROM audit_logs al
+    JOIN products p ON p.name = TRIM(al.details->>'product_name')
+    WHERE al.action = 'CREATE'
+      AND al.entity_name = 'production_orders'
+      AND al.entity_id = po.id::text
+      AND po.product_id IS NULL
+      AND po.product_name = po.model_number
+      AND al.details->>'product_name' IS NOT NULL
+      AND TRIM(al.details->>'product_name') <> ''
+      AND TRIM(al.details->>'product_name') IS DISTINCT FROM po.model_number
+      AND al.id = (
+        SELECT MAX(id)
+        FROM audit_logs
+        WHERE action = 'CREATE'
+          AND entity_name = 'production_orders'
+          AND entity_id = po.id::text
+      )
+  `);
+
+  // De-duplicate any existing model_number values before creating the unique index
+  await pool.query(`
+    DO $$
+    DECLARE
+      dup RECORD;
+      r   RECORD;
+      seq INT;
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'idx_production_orders_model_number_unique'
+          AND n.nspname = 'public'
+      ) THEN
+        -- Fix duplicates by appending a numeric suffix to all but the first occurrence
+        FOR dup IN
+          SELECT LOWER(TRIM(model_number)) AS norm
+          FROM production_orders
+          WHERE model_number IS NOT NULL AND TRIM(model_number) <> ''
+          GROUP BY LOWER(TRIM(model_number))
+          HAVING COUNT(*) > 1
+        LOOP
+          seq := 2;
+          FOR r IN
+            SELECT id, model_number
+            FROM production_orders
+            WHERE LOWER(TRIM(model_number)) = dup.norm
+            ORDER BY created_at ASC
+            OFFSET 1
+          LOOP
+            UPDATE production_orders
+            SET model_number = model_number || '-' || seq
+            WHERE id = r.id;
+            seq := seq + 1;
+          END LOOP;
+        END LOOP;
+
+        CREATE UNIQUE INDEX idx_production_orders_model_number_unique
+          ON production_orders (LOWER(TRIM(model_number)))
+          WHERE model_number IS NOT NULL AND TRIM(model_number) <> '';
+      END IF;
+    END $$;
   `);
 
   await pool.query(`
@@ -67,14 +198,29 @@ const ensureTrackingSchema = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS partner_factories (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(150) NOT NULL UNIQUE,
+      code VARCHAR(60) UNIQUE,
+      contact_person VARCHAR(120),
+      phone VARCHAR(40),
+      notes TEXT,
+      status VARCHAR(30) DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS production_phases (
       id SERIAL PRIMARY KEY,
       order_id INT NOT NULL REFERENCES production_orders(id) ON DELETE CASCADE,
       phase_name production_phase_name NOT NULL,
       quantity INT NOT NULL CHECK (quantity >= 0),
+      color_breakdown JSONB DEFAULT '[]'::jsonb,
       loss_reason TEXT,
       employee_id INT REFERENCES employees(id) ON DELETE SET NULL,
       machine_id INT REFERENCES machines(id) ON DELETE SET NULL,
+      partner_factory_id INT REFERENCES partner_factories(id) ON DELETE SET NULL,
       started_at TIMESTAMP,
       completed_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
@@ -84,8 +230,10 @@ const ensureTrackingSchema = async () => {
   await pool.query(`
     ALTER TABLE production_phases
       ADD COLUMN IF NOT EXISTS loss_reason TEXT,
+      ADD COLUMN IF NOT EXISTS color_breakdown JSONB DEFAULT '[]'::jsonb,
       ADD COLUMN IF NOT EXISTS employee_id INT,
       ADD COLUMN IF NOT EXISTS machine_id INT,
+      ADD COLUMN IF NOT EXISTS partner_factory_id INT,
       ADD COLUMN IF NOT EXISTS started_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP
   `);
@@ -111,6 +259,16 @@ const ensureTrackingSchema = async () => {
         ALTER TABLE production_phases
           ADD CONSTRAINT production_phases_machine_id_fkey
           FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE SET NULL;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'production_phases_partner_factory_id_fkey'
+      ) THEN
+        ALTER TABLE production_phases
+          ADD CONSTRAINT production_phases_partner_factory_id_fkey
+          FOREIGN KEY (partner_factory_id) REFERENCES partner_factories(id) ON DELETE SET NULL;
       END IF;
     END $$;
   `);
@@ -199,8 +357,18 @@ const mapOrderReport = (row) => {
   return {
     id: row.id,
     order_number: row.order_number,
-    model_number: row.model_number || row.product_name,
+    display_order_number: row.model_number || row.order_number,
+    model_number: row.model_number ?? '',
+    product_id: row.product_id || null,
+    catalog_product_name: row.catalog_product_name ? String(row.catalog_product_name).trim() : null,
+    product_name: resolveOrderProductName(row),
     planned_quantity: Number(row.planned_quantity || row.quantity || 0),
+    quantity: Number(row.quantity || row.planned_quantity || 0),
+    produced_qty: row.produced_qty !== null && row.produced_qty !== undefined ? Number(row.produced_qty) : null,
+    sales_order_id: row.sales_order_id || null,
+    sales_order_number: row.sales_order_number || null,
+    assigned_to_name: row.assigned_to_name || null,
+    due_date: row.due_date || null,
     status: row.status,
     phases: {
       input: inputQty,
@@ -223,14 +391,35 @@ const getPhaseDurationMinutes = (startedAt, completedAt) => {
   return Math.round(diffMs / 60000);
 };
 
+const resolveOrderProductName = (row) => {
+  const catalog = String(row.catalog_product_name || '').trim();
+  if (catalog) return catalog;
+  const stored = String(row.product_name || '').trim();
+  const model = String(row.model_number || '').trim();
+  if (stored && model && stored === model) return '';
+  if (stored) return stored;
+  return '';
+};
+
 const formatPhaseRow = (phase) => ({
   id: phase.id,
   phase: phase.phase_name,
   quantity: Number(phase.quantity),
+  color_breakdown: Array.isArray(phase.color_breakdown)
+    ? phase.color_breakdown
+    : (() => {
+      try {
+        return phase.color_breakdown ? JSON.parse(phase.color_breakdown) : [];
+      } catch {
+        return [];
+      }
+    })(),
   employee_id: phase.employee_id !== null ? Number(phase.employee_id) : null,
   employee: phase.employee_name || null,
   machine_id: phase.machine_id !== null ? Number(phase.machine_id) : null,
   machine: phase.machine_name || null,
+  partner_factory_id: phase.partner_factory_id !== null ? Number(phase.partner_factory_id) : null,
+  partner_factory: phase.partner_factory_name || null,
   loss_reason: phase.loss_reason || null,
   started_at: phase.started_at,
   completed_at: phase.completed_at,
@@ -296,7 +485,10 @@ const buildDetailedReport = (orderRow, phaseRows) => {
     id: Number(orderRow.id),
     order_id: Number(orderRow.id),
     order_number: orderRow.order_number,
-    model_number: orderRow.model_number || orderRow.product_name,
+    display_order_number: orderRow.model_number || orderRow.order_number,
+    model_number: orderRow.model_number ?? '',
+    catalog_product_name: orderRow.catalog_product_name ? String(orderRow.catalog_product_name).trim() : null,
+    product_name: resolveOrderProductName(orderRow),
     input: inputQty,
     sorting: sortingQty,
     outsourcing: outsourcingQty,
@@ -325,14 +517,16 @@ const getOrderWithLatestPhases = async (client, orderId) => {
      )
      SELECT
        po.*,
+       p.name AS catalog_product_name,
        MAX(CASE WHEN lp.phase_name = 'input' THEN lp.quantity END) AS input_quantity,
        MAX(CASE WHEN lp.phase_name = 'sorting' THEN lp.quantity END) AS sorting_quantity,
        MAX(CASE WHEN lp.phase_name = 'outsourcing' THEN lp.quantity END) AS outsourcing_quantity,
        MAX(CASE WHEN lp.phase_name = 'final' THEN lp.quantity END) AS final_quantity
      FROM production_orders po
      LEFT JOIN latest_phases lp ON lp.order_id = po.id
+     LEFT JOIN products p ON po.product_id = p.id
      WHERE po.id = $1
-     GROUP BY po.id`,
+     GROUP BY po.id, p.name`,
     [orderId]
   );
 
@@ -358,13 +552,19 @@ const listProductionOrders = async ({ page = 1, limit = 50 }) => {
        )
        SELECT
          po.*,
+         p.name AS catalog_product_name,
+         so.order_number AS sales_order_number,
+         e.name AS assigned_to_name,
          MAX(CASE WHEN lp.phase_name = 'input' THEN lp.quantity END) AS input_quantity,
          MAX(CASE WHEN lp.phase_name = 'sorting' THEN lp.quantity END) AS sorting_quantity,
          MAX(CASE WHEN lp.phase_name = 'outsourcing' THEN lp.quantity END) AS outsourcing_quantity,
          MAX(CASE WHEN lp.phase_name = 'final' THEN lp.quantity END) AS final_quantity
        FROM production_orders po
        LEFT JOIN latest_phases lp ON lp.order_id = po.id
-       GROUP BY po.id
+       LEFT JOIN products p ON po.product_id = p.id
+       LEFT JOIN sales_orders so ON po.sales_order_id = so.id
+       LEFT JOIN employees e ON po.assigned_to = e.id
+       GROUP BY po.id, p.name, so.order_number, e.name
        ORDER BY po.created_at DESC
        LIMIT $1 OFFSET $2`,
       [pageSize, offset]
@@ -380,7 +580,7 @@ const listProductionOrders = async ({ page = 1, limit = 50 }) => {
   };
 };
 
-const createProductionOrder = async ({ modelNumber, quantity, product_id, materials = [], salesOrderId = null, client: providedClient = null, deliveryDate = null, notes = null }) => {
+const createProductionOrder = async ({ modelNumber, productName, quantity, product_id, materials = [], colorBreakdown = [], salesOrderId = null, client: providedClient = null, deliveryDate = null, notes = null }) => {
   await ensureTrackingSchema();
   const client = providedClient || await pool.connect();
   const manageTransaction = !providedClient;
@@ -389,13 +589,49 @@ const createProductionOrder = async ({ modelNumber, quantity, product_id, materi
       await client.query('BEGIN');
     }
 
-    const plannedQuantity = Number.parseInt(quantity, 10);
-    
-    // Resolve product_id if not provided
+    const resolvedModelNumber = String(modelNumber || '').trim();
+    if (!resolvedModelNumber) throw new ApiError(400, 'model_number is required');
+
     let productId = product_id || null;
-    if (!productId && modelNumber) {
-      const pRes = await client.query('SELECT id FROM products WHERE name = $1', [modelNumber]);
-      if (pRes.rows.length) productId = pRes.rows[0].id;
+    let resolvedProductName = String(productName || '').trim();
+
+    if (productId) {
+      const pRes = await client.query('SELECT id, name FROM products WHERE id = $1', [productId]);
+      if (!pRes.rows.length) throw new ApiError(400, 'Product not found');
+      productId = pRes.rows[0].id;
+      resolvedProductName = pRes.rows[0].name;
+    } else if (resolvedProductName) {
+      const pRes = await client.query('SELECT id, name FROM products WHERE name = $1', [resolvedProductName]);
+      if (pRes.rows.length) {
+        productId = pRes.rows[0].id;
+        resolvedProductName = pRes.rows[0].name;
+      } else {
+        const inserted = await client.query(
+          `INSERT INTO products (name, default_price) VALUES ($1, 0) RETURNING id, name`,
+          [resolvedProductName]
+        );
+        productId = inserted.rows[0].id;
+        resolvedProductName = inserted.rows[0].name;
+      }
+    }
+
+    if (!productId || !resolvedProductName) throw new ApiError(400, 'product_id is required');
+
+    await assertModelNumberAvailable(client, resolvedModelNumber);
+
+    const normalizedBreakdown = (Array.isArray(colorBreakdown) ? colorBreakdown : [])
+      .map((row) => ({
+        color: String(row?.color || '').trim(),
+        quantity: Number(row?.quantity),
+      }))
+      .filter((row) => row.color && Number.isFinite(row.quantity) && row.quantity > 0);
+
+    const plannedQuantity = normalizedBreakdown.length > 0
+      ? normalizedBreakdown.reduce((sum, row) => sum + row.quantity, 0)
+      : Number.parseInt(quantity, 10);
+
+    if (!Number.isFinite(plannedQuantity) || plannedQuantity <= 0) {
+      throw new ApiError(400, 'At least one color quantity is required');
     }
 
     let order = null;
@@ -408,11 +644,14 @@ const createProductionOrder = async ({ modelNumber, quantity, product_id, materi
            (order_number, model_number, planned_quantity, product_name, quantity, status, product_id, sales_order_id, due_date, notes)
            VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
            RETURNING *`,
-          [orderNumber, modelNumber, plannedQuantity, modelNumber, plannedQuantity, productId, salesOrderId, deliveryDate, notes]
+          [orderNumber, resolvedModelNumber, plannedQuantity, resolvedProductName, plannedQuantity, productId, salesOrderId, deliveryDate, notes]
         );
         order = orderResult.rows[0];
         break;
       } catch (err) {
+        if (isModelNumberConstraintError(err)) {
+          throw new ApiError(409, `Order number ${resolvedModelNumber} is already in use`);
+        }
         if (err.code !== '23505') throw err;
       }
     }
@@ -442,10 +681,10 @@ const createProductionOrder = async ({ modelNumber, quantity, product_id, materi
         );
       }
 
-      await client.query(
-        `INSERT INTO production_materials (production_order_id, material_id, quantity_used)
-         VALUES ($1, $2, $3)`,
-        [order.id, materialId, requiredQty]
+        await client.query(
+          `INSERT INTO production_materials (production_order_id, material_id, quantity_used, color)
+         VALUES ($1, $2, $3, $4)`,
+        [order.id, materialId, requiredQty, material.color || null]
       );
 
       await inventoryService.issueStock({
@@ -459,9 +698,9 @@ const createProductionOrder = async ({ modelNumber, quantity, product_id, materi
     }
 
     await client.query(
-      `INSERT INTO production_phases (order_id, phase_name, quantity)
-       VALUES ($1, $2, $3)`,
-      [order.id, PHASE_INPUT, plannedQuantity]
+      `INSERT INTO production_phases (order_id, phase_name, quantity, color_breakdown)
+       VALUES ($1, $2, $3, $4)`,
+      [order.id, PHASE_INPUT, plannedQuantity, JSON.stringify(normalizedBreakdown)]
     );
 
     if (manageTransaction) {
@@ -486,9 +725,11 @@ const addProductionPhase = async ({
   orderId,
   phaseName,
   quantity,
+  colorBreakdown = [],
   lossReason = null,
   employeeId,
   machineId = null,
+  partnerFactoryId = null,
   startedAt,
   completedAt,
 }) => {
@@ -575,11 +816,32 @@ const addProductionPhase = async ({
       }
     }
 
+    if (partnerFactoryId !== null && partnerFactoryId !== undefined) {
+      const factoryCheck = await client.query(
+        'SELECT id FROM partner_factories WHERE id = $1',
+        [partnerFactoryId]
+      );
+      if (!factoryCheck.rows.length) {
+        throw new ApiError(400, 'Partner factory not found');
+      }
+    }
+
+    if (phaseName === PHASE_OUTSOURCING && machineId) {
+      throw new ApiError(400, 'Outsourcing phase must use partner_factory_id, not machine_id');
+    }
+
+    if (phaseName === PHASE_SORTING && partnerFactoryId) {
+      throw new ApiError(400, 'Sorting phase must use machine_id, not partner_factory_id');
+    }
+
+    const resolvedMachineId = phaseName === PHASE_OUTSOURCING ? null : (machineId || null);
+    const resolvedPartnerFactoryId = phaseName === PHASE_OUTSOURCING ? (partnerFactoryId || null) : null;
+
     await client.query(
       `INSERT INTO production_phases
-       (order_id, phase_name, quantity, loss_reason, employee_id, machine_id, started_at, completed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [orderId, phaseName, nextQty, lossReason, employeeId, machineId || null, startedAtDate.toISOString(), completedAtDate.toISOString()]
+       (order_id, phase_name, quantity, color_breakdown, loss_reason, employee_id, machine_id, partner_factory_id, started_at, completed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [orderId, phaseName, nextQty, JSON.stringify(colorBreakdown || []), lossReason, employeeId, resolvedMachineId, resolvedPartnerFactoryId, startedAtDate.toISOString(), completedAtDate.toISOString()]
     );
 
     if (phaseName === PHASE_SORTING) {
@@ -644,17 +906,21 @@ const getProductionOrderReport = async (orderId) => {
        pp.id,
        pp.phase_name,
        pp.quantity,
+       pp.color_breakdown,
        pp.loss_reason,
        pp.employee_id,
        pp.machine_id,
+       pp.partner_factory_id,
        pp.started_at,
        pp.completed_at,
        pp.created_at,
        e.name AS employee_name,
-       m.name AS machine_name
+       m.name AS machine_name,
+       pf.name AS partner_factory_name
      FROM production_phases pp
      LEFT JOIN employees e ON e.id = pp.employee_id
      LEFT JOIN machines m ON m.id = pp.machine_id
+     LEFT JOIN partner_factories pf ON pf.id = pp.partner_factory_id
      WHERE pp.order_id = $1
      ORDER BY pp.created_at ASC, pp.id ASC`,
     [orderId]
@@ -785,31 +1051,70 @@ const listMachines = async () => {
   return result.rows;
 };
 
-const deleteOrder = async (orderId) => {
+const listPartnerFactories = async () => {
+  await ensureTrackingSchema();
+  const result = await pool.query(
+    `SELECT id, name, code, contact_person, phone, notes, status
+     FROM partner_factories
+     WHERE status = 'active'
+     ORDER BY name ASC`
+  );
+  return result.rows;
+};
+
+const createPartnerFactory = async ({ name, code = null, contactPerson = null, phone = null, notes = null }) => {
+  await ensureTrackingSchema();
+  const trimmedName = String(name || '').trim();
+  if (!trimmedName) {
+    throw new ApiError(400, 'Partner factory name is required');
+  }
+
+  const result = await pool.query(
+    `INSERT INTO partner_factories (name, code, contact_person, phone, notes)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, name, code, contact_person, phone, notes, status`,
+    [trimmedName, code || null, contactPerson || null, phone || null, notes || null]
+  );
+  return result.rows[0];
+};
+
+const deleteOrder = async (orderId, { force = false } = {}) => {
   await ensureTrackingSchema();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const order = await client.query(
-      'SELECT id, order_number FROM production_orders WHERE id = $1',
+      'SELECT id, order_number, status, product_id, produced_qty FROM production_orders WHERE id = $1 FOR UPDATE',
       [orderId]
     );
     if (!order.rows.length) {
       throw new ApiError(404, 'Production order not found');
     }
 
-    // Check if order has any production phases started beyond input (sorting, outsourcing, or final)
-    const phases = await client.query(
-      `SELECT id FROM production_phases WHERE order_id = $1 AND phase_name IN ('sorting', 'outsourcing', 'final') LIMIT 1`,
-      [orderId]
-    );
-    if (phases.rows.length > 0) {
-      throw new ApiError(400, 'Cannot delete order - sorting, outsourcing, or final phase has already started. You can only delete new orders.');
+    const orderRow = order.rows[0];
+
+    if (!force) {
+      const phases = await client.query(
+        `SELECT id FROM production_phases WHERE order_id = $1 AND phase_name IN ('sorting', 'outsourcing', 'final') LIMIT 1`,
+        [orderId]
+      );
+      if (phases.rows.length > 0) {
+        throw new ApiError(400, 'Cannot delete order - sorting, outsourcing, or final phase has already started. You can only delete new orders.');
+      }
+    } else if (orderRow.status === 'completed' && orderRow.product_id && Number(orderRow.produced_qty) > 0) {
+      await inventoryService.issueStock({
+        item_type: 'product',
+        item_id: orderRow.product_id,
+        quantity: Number(orderRow.produced_qty),
+        reference_type: 'production_order_cancel',
+        reference_id: orderId,
+        notes: `Reversed finished production for cancelled order ${orderRow.order_number}`,
+      }, client);
     }
 
     const materials = await client.query(
-      `SELECT material_id, quantity_used FROM production_materials WHERE production_order_id = $1`,
+      `SELECT material_id, quantity_used, color FROM production_materials WHERE production_order_id = $1`,
       [orderId]
     );
 
@@ -829,7 +1134,7 @@ const deleteOrder = async (orderId) => {
 
     await client.query('COMMIT');
 
-    return { id: orderId, order_number: order.rows[0].order_number, message: 'Production order deleted and inventory restored' };
+    return { id: orderId, order_number: orderRow.order_number, message: 'Production order deleted and inventory restored' };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -845,6 +1150,8 @@ module.exports = {
   getProductionOrderReport,
   getDashboardEfficiencySummary,
   listMachines,
+  listPartnerFactories,
+  createPartnerFactory,
   deleteOrder,
   PHASE_INPUT,
   PHASE_SORTING,

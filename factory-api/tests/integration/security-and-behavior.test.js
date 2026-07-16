@@ -33,6 +33,7 @@ const resetData = async () => {
       payroll,
       attendance,
       employees,
+      machines,
       materials,
       products,
       departments,
@@ -406,22 +407,92 @@ describe('Payroll auto-adjustments', () => {
     expect(payroll.body.payroll_breakdown.half_days).toBe(1);
 
     // salary=3000 => daily=100, minute~=0.2083
-    // weighted late = first 15m at 1x + remaining 5m at 1.5x => 22.5m
-    // auto deductions = weighted-late(22.5m)=4.69 + absent(1d)=100 + half-day(0.5d)=50 => 154.69
+    // one day late 20 (>10) => weighted 20*1.5 = 30
+    // auto deductions = late(30m)=6.25 + absent(1d)=100 + half-day(0.5d)=50 => 156.25
     // auto bonus = overtime(60m)*minute*1.5 => 18.75
     // final bonus = 18.75 + 10(manual) => 28.75
-    // final deductions = 154.69 + 5(manual) => 159.69
-    // net = 3000 + 28.75 - 159.69 => 2869.06
+    // final deductions = 156.25 + 5(manual) => 161.25
+    // net = 3000 + 28.75 - 161.25 => 2867.50
     expect(Number(payroll.body.bonus)).toBeCloseTo(28.75, 2);
-    expect(Number(payroll.body.deductions)).toBeCloseTo(159.69, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(2869.06, 2);
+    expect(Number(payroll.body.deductions)).toBeCloseTo(161.25, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(2867.5, 2);
+    expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(30, 2);
 
     const list = await agent.get('/api/payroll?month=3&year=2026');
     expect(list.status).toBe(200);
     expect(list.body.data).toHaveLength(1);
     expect(list.body.data[0].payroll_breakdown).toBeDefined();
     expect(Number(list.body.data[0].payroll_breakdown.auto_bonus)).toBeCloseTo(18.75, 2);
-    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(154.69, 2);
+    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(156.25, 2);
+  });
+
+  test('weights late minutes per day, not on the weekly total', async () => {
+    const agent = await createAdminAndLogin();
+
+    const emp = await agent
+      .post('/api/employees')
+      .send({
+        name: 'Late Per Day Worker',
+        email: 'late-per-day@test.com',
+        role: 'Operator',
+        shift: 'morning',
+        weekend_days: '5',
+        salary: 2400,
+      });
+    expect(emp.status).toBe(201);
+    const employeeId = emp.body.id;
+
+    // Saturday 5 late (<=10 => x1), Sunday 40 late (>10 => x1.5) => 5 + 60 = 65
+    for (const row of [
+      { date: '2026-07-04', check_in: '09:15', check_out: '17:00', status: 'present' }, // after 10 grace => 5 late
+      { date: '2026-07-05', check_in: '09:50', check_out: '17:00', status: 'present' }, // after 10 grace => 40 late
+    ]) {
+      const resp = await agent.post(`/api/employees/${employeeId}/attendance`).send(row);
+      expect([200, 201]).toContain(resp.status);
+    }
+
+    const payroll = await agent
+      .post('/api/payroll')
+      .send({ employee_id: employeeId, week_start: '2026-07-04', bonus: 0, deductions: 0 });
+
+    expect(payroll.status).toBe(201);
+    expect(Number(payroll.body.payroll_breakdown.late_minutes)).toBe(45);
+    expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(65, 2);
+  });
+
+  test('generates payroll for all active employees when week_start is provided and no employee selected', async () => {
+    const agent = await createAdminAndLogin();
+
+    const emp1 = await agent.post('/api/employees').send({
+      name: 'Batch Worker 1',
+      email: 'batch1@test.com',
+      role: 'Operator',
+      weekend_days: '5,6',
+      salary: 2000,
+    });
+    expect(emp1.status).toBe(201);
+
+    const emp2 = await agent.post('/api/employees').send({
+      name: 'Batch Worker 2',
+      email: 'batch2@test.com',
+      role: 'Operator',
+      weekend_days: '5,6',
+      salary: 2500,
+    });
+    expect(emp2.status).toBe(201);
+
+    const payroll = await agent
+      .post('/api/payroll')
+      .send({ week_start: '2026-03-07', bonus: 0, deductions: 0 });
+
+    expect(payroll.status).toBe(201);
+    expect(Array.isArray(payroll.body)).toBe(true);
+    expect(payroll.body).toHaveLength(2);
+    expect(payroll.body.map((row) => row.employee_id).sort()).toEqual([emp1.body.id, emp2.body.id].sort());
+
+    const list = await agent.get('/api/payroll?week_start=2026-03-07');
+    expect(list.status).toBe(200);
+    expect(list.body.data.length).toBeGreaterThanOrEqual(2);
   });
 
   test('treats weekend attendance as overtime bonus and marks note as present vacation', async () => {
@@ -708,6 +779,7 @@ describe('Dashboard stage efficiency reporting', () => {
       .post('/api/production-orders')
       .send({
         model_number: 'MANUAL-TRACK-100',
+        product_name: 'Manual Track Product',
         quantity: 100,
         materials: [],
       });

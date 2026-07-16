@@ -42,10 +42,12 @@ const main = async () => {
 
   await pool.query(`
     INSERT INTO departments (name) VALUES
-      ('Cutting'),
-      ('Sewing'),
-      ('Quality Control'),
-      ('Warehouse'),
+      ('Machine (قسم المكن)'),
+      ('Operation (قسم التشغل)'),
+      ('Finishing (قسم التشطيب)'),
+      ('Packing (قسم التكيس او التعبئه)'),
+      ('Ironing (قسم المكوه)'),
+      ('Sorting (قسم الفرز)'),
       ('Administration')
     ON CONFLICT DO NOTHING
   `);

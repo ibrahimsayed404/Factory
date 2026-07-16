@@ -24,12 +24,24 @@ WHERE po.product_name = p.name AND po.product_id IS NULL;
 
 -- 2. Constraints: Prevent duplicate data
 -- departments.name
-ALTER TABLE departments
-  ADD CONSTRAINT departments_name_key UNIQUE (name);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'departments_name_key'
+  ) THEN
+    ALTER TABLE departments ADD CONSTRAINT departments_name_key UNIQUE (name);
+  END IF;
+END $$;
 
 -- materials.name
-ALTER TABLE materials
-  ADD CONSTRAINT materials_name_key UNIQUE (name);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'materials_name_color_key'
+  ) THEN
+    ALTER TABLE materials ADD CONSTRAINT materials_name_color_key UNIQUE (name, color);
+  END IF;
+END $$;
 
 
 -- 3. Missing Foreign Key Indexes

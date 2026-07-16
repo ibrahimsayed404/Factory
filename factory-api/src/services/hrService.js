@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const ApiError = require('../utils/ApiError');
+const { normalizeLoanPayload } = require('../utils/loanUtils');
 
 // Positions
 exports.getPositions = async () => {
@@ -31,7 +32,7 @@ exports.createShift = async (data) => {
   const { name, start_time, end_time, weekend_days } = data;
   const result = await pool.query(
     'INSERT INTO hr_shifts (name, start_time, end_time, weekend_days) VALUES ($1, $2, $3, $4) RETURNING *',
-    [name, start_time, end_time, weekend_days || '0,6']
+    [name, start_time, end_time, weekend_days || '5']
   );
   return result.rows[0];
 };
@@ -121,10 +122,10 @@ exports.getLoans = async (employeeId) => {
 };
 
 exports.createLoan = async (data) => {
-  const { employee_id, principal_amount, monthly_installment } = data;
+  const normalized = normalizeLoanPayload(data);
   const result = await pool.query(
-    'INSERT INTO hr_loans (employee_id, principal_amount, remaining_amount, monthly_installment) VALUES ($1, $2, $3, $4) RETURNING *',
-    [employee_id, principal_amount, principal_amount, monthly_installment]
+    'INSERT INTO hr_loans (employee_id, principal_amount, remaining_amount, monthly_installment, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [normalized.employee_id, normalized.principal_amount, normalized.remaining_amount, normalized.monthly_installment, normalized.status]
   );
   return result.rows[0];
 };

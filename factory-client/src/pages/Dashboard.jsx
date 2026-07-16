@@ -10,7 +10,20 @@ const productionColors = {
   in_progress: 'var(--info)',
   done: 'var(--accent)',
   shipped: '#8a95aa',
+  sorting: 'var(--info)',
+  outsourcing: '#a78bfa',
+  completed: 'var(--accent)',
 };
+
+const productionStatusLabel = (status) => ({
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  done: 'Done',
+  shipped: 'Shipped',
+  sorting: 'Sorting',
+  outsourcing: 'Outsourcing',
+  completed: 'Completed',
+}[status] || status.replaceAll('_', ' '));
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -39,7 +52,7 @@ export default function Dashboard() {
   const { t, language } = useLanguage();
 
   const chartData = stats?.production_summary?.map(p => ({
-    name: p.status.replace('_', ' '),
+    name: productionStatusLabel(p.status),
     count: Number.parseInt(p.count, 10),
     fill: productionColors[p.status] || 'var(--accent)',
   })) || [];

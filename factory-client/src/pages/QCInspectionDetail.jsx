@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { qcApi } from '../api';
+import { qcApi, resolveApiAssetUrl } from '../api';
 import { toast } from 'react-toastify';
 import { Card, Form, Button, Row, Col, Table, Badge } from 'react-bootstrap';
 import { FEATURE_FLAGS } from '../config/featureFlags';
@@ -150,9 +150,9 @@ export default function QCInspectionDetail() {
                 <div className="d-flex flex-wrap gap-2">
                   {inspection.photos?.map(photo => (
                     <div key={photo.id} className="border p-1" style={{ width: '120px' }}>
-                      <a href={`${import.meta.env.VITE_API_URL?.replace('/api', '') || ''}/uploads/qc-photos/${photo.file_path}`} target="_blank" rel="noreferrer">
+                      <a href={resolveApiAssetUrl(`/uploads/qc-photos/${photo.file_path}`)} target="_blank" rel="noreferrer">
                         <img 
-                          src={`${import.meta.env.VITE_API_URL?.replace('/api', '') || ''}/uploads/qc-photos/${photo.file_path}`} 
+                          src={resolveApiAssetUrl(`/uploads/qc-photos/${photo.file_path}`)} 
                           alt="Evidence" 
                           style={{ width: '100%', height: '100px', objectFit: 'cover' }}
                         />

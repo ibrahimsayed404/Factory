@@ -4,7 +4,7 @@ import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 
-const emptyForm = { name: '', sku: '', description: '', default_price: '' };
+const emptyForm = { name: '', description: '', default_price: '' };
 
 export default function Products() {
   const { t } = useLanguage();
@@ -35,8 +35,13 @@ export default function Products() {
     }
     setSaving(true);
     try {
-      if (editing) await productApi.update(editing, form);
-      else await productApi.create(form);
+      const payload = {
+        name: form.name.trim(),
+        description: form.description?.trim() || null,
+        default_price: form.default_price || 0,
+      };
+      if (editing) await productApi.update(editing, payload);
+      else await productApi.create(payload);
       setShowModal(false);
       setSuccessMsg(editing ? t('productUpdated', 'Product updated!') : t('productAdded', 'Product added!'));
       await refetch();
@@ -63,7 +68,6 @@ export default function Products() {
 
   const columns = [
     { key: 'name', label: t('product', 'Product') },
-    { key: 'sku', label: t('sku', 'SKU'), render: v => v || '—' },
     { key: 'description', label: t('description', 'Description'), render: v => v || '—' },
     { key: 'default_price', label: t('defaultPrice', 'Default Price'), render: v => v ? `$${v}` : '—' },
     { key: 'actions', label: '', render: (_, row) => (
@@ -80,7 +84,7 @@ export default function Products() {
     <div style={{ padding: '28px 28px 40px' }}>
       <PageHeader
         title={t('products', 'Products')}
-        subtitle={t('manageProductCatalog', 'Manage product catalog and SKUs')}
+        subtitle={t('manageProductCatalog', 'Manage product names for production and sales')}
         action={
           <Btn variant="primary" onClick={openCreate}>{t('addProduct', '+ Add product')}</Btn>
         }
@@ -100,7 +104,6 @@ export default function Products() {
         <Modal title={editing ? t('editProduct', 'Edit product') : t('addProduct', 'Add product')} onClose={() => setShowModal(false)}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
             <Input label={t('product', 'Name')} value={form.name} onChange={f('name')} />
-            <Input label={t('sku', 'SKU')} value={form.sku} onChange={f('sku')} />
             <Input label={t('description', 'Description')} value={form.description} onChange={f('description')} />
             <Input label={t('defaultPrice', 'Default Price ($)')} type="number" value={form.default_price} onChange={f('default_price')} />
           </div>

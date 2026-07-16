@@ -4,7 +4,7 @@ import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg } from '../components/ui';
 
 const SHIFT_DEFAULTS = {
-  morning: { start: '09:00', end: '17:00' },
+  morning: { start: '08:00', end: '17:00' },
   evening: { start: '14:00', end: '22:00' },
   night: { start: '22:00', end: '06:00' },
 };
@@ -25,7 +25,7 @@ const WEEK_DAY_LABELS = WEEK_DAYS.reduce((acc, day) => {
 }, {});
 
 const parseWeekendDays = (value) =>
-  String(value || '0,6')
+  String(value || '5')
     .split(',')
     .map((v) => Number(String(v).trim()))
     .filter((v) => Number.isInteger(v) && v >= 0 && v <= 6);
@@ -65,8 +65,8 @@ const WeekendChips = ({ value }) => {
 };
 
 const emptyForm = {
-  name: '', email: '', phone: '', department_id: '', role: '', shift: 'morning',
-  shift_start: '09:00', shift_end: '17:00', device_user_id: '', weekend_days: '0,6', salary: '', hire_date: '', status: 'active',
+  name: '', phone: '', department_id: '', role: '', shift: 'morning',
+  shift_start: '08:00', shift_end: '17:00', device_user_id: '', weekend_days: '5', salary: '', hire_date: '', status: 'active',
 };
 
 export default function Employees() {
@@ -85,7 +85,7 @@ export default function Employees() {
       hire_date: emp.hire_date?.split('T')[0] || '',
       shift_start: emp.shift_start ? String(emp.shift_start).slice(0, 5) : (SHIFT_DEFAULTS[emp.shift]?.start || ''),
       shift_end: emp.shift_end ? String(emp.shift_end).slice(0, 5) : (SHIFT_DEFAULTS[emp.shift]?.end || ''),
-      weekend_days: emp.weekend_days || '0,6',
+      weekend_days: emp.weekend_days || '5',
     });
     setEditing(emp.id);
     setShowModal(true);
@@ -122,9 +122,7 @@ export default function Employees() {
       setForm(emptyForm);
       await refetch();
     } catch (err) {
-      let msg = err?.message || 'Failed to save employee.';
-      if (err?.response?.data?.error) msg = err.response.data.error;
-      setFormError(msg);
+      setFormError(err?.message || 'Failed to save employee.');
     } finally {
       setSaving(false);
     }
@@ -174,7 +172,7 @@ export default function Employees() {
       return `${label} (${start}-${end})`;
     } },
     { key: 'weekend_days', label: 'Weekend', render: v => <WeekendChips value={v} /> },
-    { key: 'salary', label: 'Salary', render: v => v ? `$${Number(v).toLocaleString()}` : '—' },
+    { key: 'salary', label: 'Weekly Salary', render: v => v ? `$${Number(v).toLocaleString()}` : '—' },
     { key: 'status', label: 'Status', render: v => <Badge variant={v === 'active' ? 'success' : 'default'}>{v}</Badge> },
     { key: 'actions', label: '', render: (_, row) => (
       <div style={{ display: 'flex', gap: 6 }}>
@@ -204,7 +202,6 @@ export default function Employees() {
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1/-1' }}><Input label="Full name" value={form.name} onChange={f('name')} /></div>
-            <Input label="Email" type="email" value={form.email} onChange={f('email')} />
             <Input label="Phone" value={form.phone} onChange={f('phone')} />
             <Select label="Department" value={form.department_id} onChange={f('department_id')}>
               <option value="">Select department</option>

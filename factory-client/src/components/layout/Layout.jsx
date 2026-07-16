@@ -153,6 +153,7 @@ export const Layout = ({ children }) => {
           <NavItem to="/production-orders/outsourcing" label={t('outsourcing', 'Outsourcing')} icon="🚚" />
           <NavItem to="/production-orders/final" label={t('finalPhase', 'Final Phase')} icon="✅" />
           <NavItem to="/production-orders/report" label={t('prodReport', 'Prod Report')} icon="📉" />
+          <NavItem to="/production-orders/manage" label={t('manageOrders', 'Manage Orders')} icon="🗑" />
           <NavItem to="/products"   label={t('products', 'Products')}    icon="🏷️" />
           <NavItem to="/inventory"  label={t('inventory', 'Inventory')}  icon="📦" />
           {FEATURE_FLAGS.purchasing && <NavItem to="/purchasing" label={t('purchasing', 'Purchasing')} icon="🛒" />}
@@ -163,6 +164,7 @@ export const Layout = ({ children }) => {
           <NavItem to="/employees"  label={t('employees', 'Employees')}  icon="👥" />
           <NavItem to="/attendance" label={t('attendance', 'Attendance')}  icon="📅" />
           <NavItem to="/payroll"    label={t('payroll', 'Payroll')}    icon="💳" />
+          <NavItem to="/loans"      label={t('loans', 'Loans')}        icon="🏦" />
 
           <NavSection>{t('business', 'Business')}</NavSection>
           <NavItem to="/sales"      label={t('sales', 'Sales')}      icon="📈" />

@@ -14,9 +14,9 @@ const createBom = async (bomData, materials, client = pool) => {
 
   const matPromises = materials.map(mat => 
     client.query(
-      `INSERT INTO bom_materials (bom_id, material_id, quantity, scrap_percentage, notes)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [bom.id, mat.material_id, mat.quantity, mat.scrap_percentage || 0, mat.notes]
+      `INSERT INTO bom_materials (bom_id, material_id, color, quantity, scrap_percentage, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [bom.id, mat.material_id, mat.color || null, mat.quantity, mat.scrap_percentage || 0, mat.notes]
     )
   );
   await Promise.all(matPromises);
@@ -42,7 +42,7 @@ const getBomById = async (id, client = pool) => {
   const bom = bomResult.rows[0];
 
   const matsResult = await client.query(
-    `SELECT bm.*, m.name as material_name, m.unit 
+    `SELECT bm.*, m.name as material_name, m.unit, m.colors as material_colors
      FROM bom_materials bm
      JOIN materials m ON bm.material_id = m.id
      WHERE bm.bom_id = $1`,

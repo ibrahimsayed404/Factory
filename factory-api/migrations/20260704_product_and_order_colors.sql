@@ -1,0 +1,6 @@
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS colors TEXT;
+
+ALTER TABLE sales_order_items
+  ADD COLUMN IF NOT EXISTS color VARCHAR(80);
+

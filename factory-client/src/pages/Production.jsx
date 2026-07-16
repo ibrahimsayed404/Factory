@@ -1,17 +1,57 @@
-import React, { useState } from 'react';
-import { productionApi, productApi, manufacturingApi } from '../api';
+import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { productionApi, productionTrackingApi, productApi, manufacturingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant } from '../components/ui';
+import { FEATURE_FLAGS } from '../config/featureFlags';
+import { useLanguage } from '../context/LanguageContext';
+import { buildProductNameLookup, getOrderDisplayNumber, getOrderProductName } from '../utils/productionOrderDisplay';
 
 const emptyForm = { product_id: '', quantity: '', bom_id: '', routing_id: '', start_date: '', due_date: '' };
 
-const statusLabel = { pending: 'Pending', in_progress: 'In Progress', done: 'Done', shipped: 'Shipped' };
+const statusLabel = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  done: 'Done',
+  shipped: 'Shipped',
+  sorting: 'Sorting',
+  outsourcing: 'Outsourcing',
+  completed: 'Completed',
+};
+
+const TRACKING_STATUSES = new Set(['sorting', 'outsourcing', 'completed']);
+
+const isTrackingOrder = (order) => (
+  order?.order_number?.startsWith('PTO-')
+  || Boolean(order?.model_number)
+  || TRACKING_STATUSES.has(order?.status)
+);
+
+const trackingProgress = (order) => {
+  const total = Number(order.planned_quantity || order.phases?.input || order.quantity || 0);
+  const phases = ['input', 'sorting', 'outsourcing', 'final'];
+  const completed = phases.filter((phase) => order.phases?.[phase] !== null && order.phases?.[phase] !== undefined).length;
+  const produced = order.status === 'completed'
+    ? Number(order.phases?.final ?? order.produced_qty ?? 0)
+    : Number(order.phases?.final ?? order.phases?.outsourcing ?? order.phases?.sorting ?? 0);
+  const pct = total > 0 ? Math.min((produced / total) * 100, 100) : Math.round((completed / phases.length) * 100);
+  return { total, produced, pct, completed, phaseCount: phases.length };
+};
 
 export default function Production() {
-  const { data: orders, loading, error, refetch } = useFetch(productionApi.list);
+  const { t } = useLanguage();
+  const { data: orders, loading, error, refetch } = useFetch(productionTrackingApi.list);
   const { data: products } = useFetch(productApi.list);
-  const { data: boms } = useFetch(manufacturingApi.boms);
-  const { data: routings } = useFetch(manufacturingApi.routings);
+  const productNameById = useMemo(() => buildProductNameLookup(products), [products]);
+  const manufacturingEnabled = FEATURE_FLAGS.manufacturingBoms && FEATURE_FLAGS.manufacturingRoutings;
+  const { data: boms } = useFetch(
+    () => (manufacturingEnabled ? manufacturingApi.boms() : Promise.resolve([])),
+    [manufacturingEnabled]
+  );
+  const { data: routings } = useFetch(
+    () => (manufacturingEnabled ? manufacturingApi.routings() : Promise.resolve([])),
+    [manufacturingEnabled]
+  );
   const [showModal, setShowModal] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -35,7 +75,20 @@ export default function Production() {
     setSaving(true);
     setCreateError('');
     try {
-      await productionApi.create(form);
+      const selectedProduct = (products || []).find((p) => String(p.id) === String(form.product_id));
+      if (!selectedProduct) {
+        setCreateError('Please select a product.');
+        return;
+      }
+      const payload = manufacturingEnabled
+        ? form
+        : {
+          product_name: selectedProduct.name,
+          quantity: form.quantity,
+          start_date: form.start_date || undefined,
+          due_date: form.due_date || undefined,
+        };
+      await productionApi.create(payload);
       setShowModal(false);
       refetch();
     } catch (e) {
@@ -92,16 +145,13 @@ export default function Production() {
 
   const f = v => e => setForm({ ...form, [v]: e.target.value });
 
-  const displayed = statusFilter ? (orders || []).filter(o => o.status === statusFilter) : orders || [];
+  const displayed = statusFilter
+    ? (orders || []).filter((o) => o.status === statusFilter)
+    : (orders || []);
 
-  const columns = [
-    { key: 'order_number', label: 'Order #', render: v => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{v}</span> },
-    { key: 'sales_order_number', label: 'Sales order', render: v => v ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--info)' }}>{v}</span> : 'Manual' },
-    { key: 'product_name', label: 'Product' },
-    { key: 'quantity', label: 'Qty', render: (v, row) => {
-      const total = Number(v || 0);
-      const produced = Number(row.produced_qty || 0);
-      const pct = total > 0 ? Math.min((produced / total) * 100, 100) : 0;
+  const renderQuantity = (row) => {
+    if (isTrackingOrder(row)) {
+      const { total, produced, pct } = trackingProgress(row);
       const color = pct >= 100 ? 'var(--accent)' : pct > 0 ? 'var(--info)' : 'var(--text-muted)';
       return (
         <div style={{ minWidth: 150 }}>
@@ -114,20 +164,49 @@ export default function Production() {
           </div>
         </div>
       );
-    } },
-    { key: 'assigned_to_name', label: 'Team', render: (v, row) => (row.sales_order_number && !v ? 'All employees' : (v || '—')) },
-    { key: 'due_date', label: 'Due', render: v => v ? new Date(v).toLocaleDateString() : '—' },
-    { key: 'status', label: 'Status', render: v => <Badge variant={statusVariant(v)}>{statusLabel[v] || v}</Badge> },
-    { key: 'actions', label: '', render: (_, row) => (
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Btn size="sm" onClick={() => openProgress(row)}>Update progress</Btn>
-        <Select value={row.status} onChange={e => updateStatus(row.id, e.target.value)} style={{ fontSize: 12, padding: '4px 8px', width: 130 }}>
-          <option value="pending">Pending</option>
-          <option value="in_progress">In Progress</option>
-          <option value="done">Done</option>
-          <option value="shipped">Shipped</option>
-        </Select>
+    }
+
+    const total = Number(row.quantity || 0);
+    const produced = Number(row.produced_qty || 0);
+    const pct = total > 0 ? Math.min((produced / total) * 100, 100) : 0;
+    const color = pct >= 100 ? 'var(--accent)' : pct > 0 ? 'var(--info)' : 'var(--text-muted)';
+    return (
+      <div style={{ minWidth: 150 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 12 }}>
+          <span>{produced} / {total}</span>
+          <span style={{ color }}>{Math.round(pct)}%</span>
+        </div>
+        <div style={{ height: 6, background: 'var(--bg-hover)', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 999 }} />
+        </div>
       </div>
+    );
+  };
+
+  const columns = [
+    { key: 'order_number', label: t('orderNumber', 'Order #'), render: (_, row) => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{getOrderDisplayNumber(row)}</span> },
+    { key: 'sales_order_number', label: t('salesOrder', 'Sales order'), render: v => v ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--info)' }}>{v}</span> : t('manual', 'Manual') },
+    { key: 'product_name', label: t('product', 'Product'), render: (_, row) => getOrderProductName(row, productNameById) },
+    { key: 'quantity', label: t('qty', 'Qty'), render: (_, row) => renderQuantity(row) },
+    { key: 'assigned_to_name', label: t('team', 'Team'), render: (v, row) => (row.sales_order_number && !v ? t('allEmployees', 'All employees') : (v || '—')) },
+    { key: 'due_date', label: t('dueDate', 'Due'), render: v => v ? new Date(v).toLocaleDateString() : '—' },
+    { key: 'status', label: t('status', 'Status'), render: v => <Badge variant={statusVariant(v)}>{statusLabel[v] || v}</Badge> },
+    { key: 'actions', label: '', render: (_, row) => (
+      isTrackingOrder(row) ? (
+        <Link to="/production-orders/report" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>
+          {t('viewReport', 'View report')}
+        </Link>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Btn size="sm" onClick={() => openProgress(row)}>{t('updateProgress', 'Update progress')}</Btn>
+          <Select value={row.status} onChange={e => updateStatus(row.id, e.target.value)} style={{ fontSize: 12, padding: '4px 8px', width: 130 }}>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+            <option value="shipped">Shipped</option>
+          </Select>
+        </div>
+      )
     )},
   ];
 
@@ -137,11 +216,14 @@ export default function Production() {
         action={
           <div style={{ display: 'flex', gap: 8 }}>
             <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 140 }}>
-              <option value="">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
-              <option value="done">Done</option>
-              <option value="shipped">Shipped</option>
+              <option value="">{t('allStatuses', 'All statuses')}</option>
+              <option value="pending">{t('pending', 'Pending')}</option>
+              <option value="in_progress">{t('inProgress', 'In Progress')}</option>
+              <option value="sorting">{t('sorting', 'Sorting')}</option>
+              <option value="outsourcing">{t('outsourcing', 'Outsourcing')}</option>
+              <option value="completed">{t('completed', 'Completed')}</option>
+              <option value="done">{t('done', 'Done')}</option>
+              <option value="shipped">{t('shipped', 'Shipped')}</option>
             </Select>
             <Btn variant="primary" onClick={() => { setForm(emptyForm); setShowModal(true); }}>+ New order</Btn>
           </div>
@@ -163,19 +245,23 @@ export default function Production() {
             
             <Input label="Quantity" type="number" value={form.quantity} onChange={f('quantity')} />
             
-            <Select label="BOM" value={form.bom_id} onChange={f('bom_id')}>
-              <option value="">Select BOM...</option>
-              {(boms || []).filter(b => b.product_id === Number(form.product_id) || !form.product_id).map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </Select>
+            {manufacturingEnabled && (
+              <>
+                <Select label="BOM" value={form.bom_id} onChange={f('bom_id')}>
+                  <option value="">Select BOM...</option>
+                  {(boms || []).filter(b => b.product_id === Number(form.product_id) || !form.product_id).map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </Select>
 
-            <Select label="Routing" value={form.routing_id} onChange={f('routing_id')}>
-              <option value="">Select Routing...</option>
-              {(routings || []).filter(r => r.product_id === Number(form.product_id) || !form.product_id).map(r => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </Select>
+                <Select label="Routing" value={form.routing_id} onChange={f('routing_id')}>
+                  <option value="">Select Routing...</option>
+                  {(routings || []).filter(r => r.product_id === Number(form.product_id) || !form.product_id).map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </Select>
+              </>
+            )}
 
             <Input label="Start Date" type="date" value={form.start_date} onChange={f('start_date')} />
             <Input label="Due Date" type="date" value={form.due_date} onChange={f('due_date')} />

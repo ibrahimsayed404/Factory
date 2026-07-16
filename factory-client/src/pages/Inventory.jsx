@@ -4,7 +4,7 @@ import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 
-const emptyForm = { name: '', category: '', unit: '', quantity: '', min_quantity: '', cost_per_unit: '', supplier: '' };
+const emptyForm = { name: '', category: '', unit: '', color: '', quantity: '', min_quantity: '', cost_per_unit: '', supplier: '' };
 
 export default function Inventory() {
   const { t } = useLanguage();
@@ -22,6 +22,7 @@ export default function Inventory() {
 
   const validateForm = () => {
     if (!form.name.trim()) return t('nameRequired', 'Name is required.');
+    if (!form.color?.trim()) return t('colorRequired', 'Color is required.');
     if (!form.unit.trim()) return t('unitRequired', 'Unit is required.');
     if (form.quantity === '' || Number.isNaN(Number(form.quantity)) || Number(form.quantity) < 0) return t('nonNegativeQuantity', 'Quantity must be a non-negative number.');
     if (form.min_quantity === '' || Number.isNaN(Number(form.min_quantity)) || Number(form.min_quantity) < 0) return t('nonNegativeMinQuantity', 'Min quantity must be a non-negative number.');
@@ -38,8 +39,9 @@ export default function Inventory() {
     }
     setSaving(true);
     try {
-      if (editing) await inventoryApi.update(editing, form);
-      else await inventoryApi.create(form);
+      const payload = { ...form, color: form.color?.trim() || null };
+      if (editing) await inventoryApi.update(editing, payload);
+      else await inventoryApi.create(payload);
       setShowModal(false);
       setSuccessMsg(editing ? t('materialUpdated', 'Material updated!') : t('materialAdded', 'Material added!'));
       await refetch();
@@ -74,6 +76,7 @@ export default function Inventory() {
   const columns = [
     { key: 'name', label: t('material', 'Material') },
     { key: 'category', label: t('category', 'Category'), render: v => v || '—' },
+    { key: 'color', label: t('color', 'Color'), render: (v, row) => (v || row.colors || '—') },
     { key: 'quantity', label: t('qty', 'Qty'), render: (v, row) => (
       <span style={{ color: quantityValue(v) <= quantityValue(row.min_quantity) ? 'var(--danger)' : 'var(--text-primary)' }}>
         {v} {row.unit}
@@ -129,6 +132,7 @@ export default function Inventory() {
             <div style={{ gridColumn: '1/-1' }}><Input label={t('material', 'Name')} value={form.name} onChange={f('name')} /></div>
             <Input label={t('category', 'Category')} placeholder="fabric, thread…" value={form.category} onChange={f('category')} />
             <Input label={t('unit', 'Unit')} placeholder="meters, kg, pcs" value={form.unit} onChange={f('unit')} />
+    <Input label={t('color', 'Color')} placeholder="Red, Blue, Black" value={form.color} onChange={f('color')} />
             <Input label={t('qty', 'Quantity')} type="number" value={form.quantity} onChange={f('quantity')} />
             <Input label={t('minQty', 'Min quantity')} type="number" value={form.min_quantity} onChange={f('min_quantity')} />
             <Input label={t('unitCost', 'Cost per unit ($)')} type="number" value={form.cost_per_unit} onChange={f('cost_per_unit')} />

@@ -30,9 +30,29 @@ export default function Customers() {
   const [paymentEvidence, setPaymentEvidence] = useState(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [formError, setFormError] = useState('');
+
+  const enrichLedgerOrders = async (orders = []) => Promise.all(
+    (orders || []).map(async (order) => {
+      try {
+        const detailed = await salesApi.order(order.id);
+        const detailedOrder = detailed?.data && typeof detailed.data === 'object' ? detailed.data : detailed;
+        return {
+          ...order,
+          ...detailedOrder,
+          items: Array.isArray(detailedOrder?.items) ? detailedOrder.items : Array.isArray(order?.items) ? order.items : [],
+        };
+      } catch {
+        return order;
+      }
+    })
+  );
 
   const validateForm = () => {
     if (!form.name.trim()) return t('customerNameRequired', 'Customer name is required.');
@@ -73,7 +93,10 @@ export default function Customers() {
     setPaymentEvidence(null);
     try {
       const data = await salesApi.customerLedger(customer.id);
-      setLedger(data);
+      setLedger({
+        ...data,
+        orders: await enrichLedgerOrders(data?.orders || []),
+      });
     } catch (e) {
       setLedgerError(e.message);
     } finally {
@@ -87,7 +110,10 @@ export default function Customers() {
     setLedgerError('');
     try {
       const data = await salesApi.customerLedger(selectedCustomer.id);
-      setLedger(data);
+      setLedger({
+        ...data,
+        orders: await enrichLedgerOrders(data?.orders || []),
+      });
     } catch (e) {
       setLedgerError(e.message);
     } finally {
@@ -162,27 +188,39 @@ export default function Customers() {
   const ledgerOrders = ledger?.orders || [];
   const paymentRows = ledger?.payments || [];
   const summary = ledger?.summary || {};
+  const getOrderItems = (row) => {
+    const sourceItems = Array.isArray(row?.items)
+      ? row.items
+      : typeof row?.items === 'string'
+        ? (() => {
+            try {
+              const parsed = JSON.parse(row.items);
+              return Array.isArray(parsed) ? parsed : [];
+            } catch {
+              return [];
+            }
+          })()
+        : [];
+
+    return sourceItems
+      .map((item) => ({
+        product_name: item?.product_name || item?.name || 'Item',
+        color: item?.color || item?.colors || item?.variant_color || '',
+        quantity: Number(item?.quantity || 0),
+      }))
+      .filter((item) => item.product_name);
+  };
   const orderColumns = [
     { key: 'order_number', label: 'Order #' },
-    { key: 'order_date', label: t('date', 'Date'), render: v => v ? new Date(v).toLocaleDateString() : '—' },
-    { key: 'total_products', label: t('productsTaken', 'Products'), render: v => Number(v || 0) },
-    { key: 'total_amount', label: t('totalOrdered', 'Total'), render: v => `$${Number(v || 0).toLocaleString()}` },
-    { key: 'paid_amount', label: t('totalPaid', 'Paid'), render: v => `$${Number(v || 0).toLocaleString()}` },
-    { key: 'balance', label: t('remaining', 'Remaining'), render: (_, row) => `$${Math.max(0, Number(row.total_amount || 0) - Number(row.paid_amount || 0)).toLocaleString()}` },
-    { key: 'payment_status', label: t('payment', 'Payment'), render: v => <Badge variant={statusVariant(v)}>{v}</Badge> },
-    { key: 'status', label: t('status', 'Order status'), render: v => <Badge variant={statusVariant(v)}>{v}</Badge> },
-    { key: 'actions', label: '', render: (_, row) => (
-      <Btn size="sm" variant="danger" onClick={async () => {
-        if (globalThis.window.confirm('Are you sure you want to delete this order? This cannot be undone.')) {
-          try {
-            await salesApi.delete(row.id);
-            await openLedger(selectedCustomer);
-          } catch (e) {
-            globalThis.window.alert(e.message || 'Failed to delete order');
-          }
-        }
-      }}>Delete</Btn>
-    ) },
+    { key: 'order_date', label: t('date', 'Date') },
+    { key: 'total_products', label: t('productsTaken', 'Products') },
+    { key: 'total_amount', label: t('totalOrdered', 'Total') },
+    { key: 'paid_amount', label: t('totalPaid', 'Paid') },
+    { key: 'balance', label: t('remaining', 'Remaining') },
+    { key: 'payment_status', label: t('payment', 'Payment') },
+    { key: 'status', label: t('status', 'Order status') },
+    { key: 'details', label: t('details', 'Details') },
+    { key: 'actions', label: '' },
   ];
   const paymentColumns = [
     { key: 'payment_date', label: t('paymentDate', 'Payment date'), render: v => v ? new Date(v).toLocaleDateString() : '—' },
@@ -235,7 +273,82 @@ export default function Customers() {
 
         <Card padding="0">
           <div style={{ padding: '14px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{t('customerLedger', 'CUSTOMER ORDERS')}</div>
-          <Table columns={orderColumns} data={ledgerOrders} emptyMsg={t('noOrdersYet', 'No orders for this customer yet.')} />
+          {!ledgerOrders.length ? (
+            <div style={{ padding: '20px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('noOrdersYet', 'No orders for this customer yet.')}</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 12px 12px' }}>
+              {ledgerOrders.map((row) => {
+                const items = getOrderItems(row);
+                const remaining = Math.max(0, Number(row.total_amount || 0) - Number(row.paid_amount || 0));
+                const displayOrderNumber = row.order_number || row.orderNo || row.order_no || `#${row.id}`;
+                return (
+                  <div key={row.id} style={{ padding: '10px 12px', backgroundColor: 'var(--background-secondary)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                      <div>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 7px', borderRadius: 6, background: 'var(--accent-dim)', color: 'var(--accent)', fontWeight: 700, fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
+                          {displayOrderNumber}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
+                          {row.order_date ? new Date(row.order_date).toLocaleDateString() : '—'} · {Number(row.total_products || 0)} pcs
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <Badge variant={statusVariant(row.payment_status)}>{row.payment_status}</Badge>
+                        <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                        <Btn size="sm" variant="danger" onClick={async () => {
+                          setDeleteTarget(row);
+                          setDeletePassword('');
+                          setDeleteError('');
+                        }}>Delete</Btn>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('totalOrdered', 'Total ordered')}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>${Number(row.total_amount || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('totalPaid', 'Total paid')}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>${Number(row.paid_amount || 0).toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('remaining', 'Remaining')}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>${remaining.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('productsTaken', 'Products taken')}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{Number(row.total_products || 0)}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ borderTop: '1px dashed var(--border)', paddingTop: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('orderItems', 'ORDER ITEMS')}</div>
+                      {!items.length ? (
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{String(row.details || row.order_details || row.items_details || '') || '—'}</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {items.map((item, idx) => (
+                            <div key={`${row.id}-${idx}-${item.product_name}`} style={{ padding: '8px 10px', backgroundColor: 'var(--background-primary)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product_name}</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
+                                <Badge variant="outline" style={{ display: 'flex', gap: 8, padding: '3px 7px', fontSize: 11, backgroundColor: 'var(--background-primary)' }}>
+                                  <span style={{ fontWeight: 500 }}>{item.color || t('defaultColor', 'Default')}</span>
+                                </Badge>
+                                <Badge variant="outline" style={{ display: 'flex', gap: 8, padding: '3px 7px', fontSize: 11, backgroundColor: 'var(--background-primary)' }}>
+                                  <span style={{ fontWeight: 500 }}>{item.quantity} {t('pcs', 'pcs')}</span>
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
 
         <Card padding="0">
@@ -245,6 +358,27 @@ export default function Customers() {
       </div>
     );
   }
+
+  const handleDeleteOrder = async () => {
+    if (!deleteTarget) return;
+    if (!deletePassword.trim()) {
+      setDeleteError(t('passwordRequired', 'Password is required.'));
+      return;
+    }
+
+    setDeleteSaving(true);
+    setDeleteError('');
+    try {
+      await salesApi.delete(deleteTarget.id, { password: deletePassword });
+      setDeleteTarget(null);
+      setDeletePassword('');
+      await reloadLedger();
+    } catch (e) {
+      setDeleteError(e.message || t('deleteFailed', 'Failed to delete order.'));
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
@@ -280,6 +414,29 @@ export default function Customers() {
       {showLedger && (
         <Modal title={`${t('customerLedger', 'Customer ledger')} — ${selectedCustomer?.name || ''}`} onClose={() => setShowLedger(false)} width={980}>
           {ledgerBody}
+        </Modal>
+      )}
+
+      {deleteTarget && (
+        <Modal title={t('deleteOrder', 'Delete Order')} onClose={() => setDeleteTarget(null)} width={420}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {t('confirmDeleteOrder', 'Enter your password to confirm deleting order')} {deleteTarget.order_number}.
+            </div>
+            <Input
+              label={t('confirmPassword', 'Enter your password to confirm')}
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+            />
+            {deleteError && <ErrorMsg msg={deleteError} />}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Btn onClick={() => setDeleteTarget(null)} disabled={deleteSaving}>{t('cancel', 'Cancel')}</Btn>
+              <Btn variant="danger" onClick={handleDeleteOrder} disabled={deleteSaving}>
+                {deleteSaving ? t('deleting', 'Deleting…') : t('delete', 'Delete')}
+              </Btn>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { productionTrackingApi } from '../api';
+import { productApi, productionTrackingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
-import { Badge, Card, ErrorMsg, PageHeader, Select, Spinner, Table, Btn, Modal } from '../components/ui';
+import { Badge, Card, ErrorMsg, PageHeader, Select, Spinner, Table, Btn, Modal, Input } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
+import { buildProductNameLookup, formatOrderOptionLabel } from '../utils/productionOrderDisplay';
 
 const efficiencyVariant = (efficiency) => {
   if (efficiency === null || efficiency === undefined) return 'neutral';
@@ -14,9 +16,13 @@ const efficiencyVariant = (efficiency) => {
 
 export default function ProductionTrackingReport() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { data: orders, loading, error, refetch } = useFetch(productionTrackingApi.list);
+  const { data: products } = useFetch(productApi.list);
+  const productNameById = useMemo(() => buildProductNameLookup(products), [products]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const { data: report, loading: reportLoading, error: reportError } = useFetch(
@@ -29,28 +35,27 @@ export default function ProductionTrackingReport() {
     [orders, selectedOrderId]
   );
 
-  const cycleStarted = Boolean(report?.sorting || report?.final);
-  const canDelete = Boolean(selectedOrderId && report && !cycleStarted);
-
-  useEffect(() => {
-    if (cycleStarted) {
-      setShowDeleteConfirm(false);
-    }
-  }, [cycleStarted]);
+  const canDelete = Boolean(selectedOrderId && report);
 
   const handleDeleteOrder = async () => {
     if (!selectedOrderId) return;
-    if (cycleStarted) {
-      setShowDeleteConfirm(false);
+    if (!deletePassword.trim()) {
+      setDeleteError(t('passwordRequired', 'Password is required.'));
       return;
     }
     setDeleting(true);
     setDeleteError('');
-    await productionTrackingApi.deleteOrder(selectedOrderId);
-    setShowDeleteConfirm(false);
-    setSelectedOrderId('');
-    await refetch();
-    setDeleting(false);
+    try {
+      await productionTrackingApi.deleteOrder(selectedOrderId, { password: deletePassword });
+      setShowDeleteConfirm(false);
+      setSelectedOrderId('');
+      setDeletePassword('');
+      await refetch();
+    } catch (e) {
+      setDeleteError(e.message || t('deleteFailed', 'Failed to delete order.'));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const warning = (report?.loss_percentage || 0) > 10;
@@ -59,6 +64,7 @@ export default function ProductionTrackingReport() {
     ? [
       { name: t('input', 'Input'), quantity: report.input ?? 0 },
       { name: t('sorting', 'Sorting'), quantity: report.sorting ?? 0 },
+      { name: t('outsourcing', 'Outsourcing'), quantity: report.outsourcing ?? 0 },
       { name: t('final', 'Final'), quantity: report.final ?? 0 },
     ]
     : [];
@@ -67,7 +73,15 @@ export default function ProductionTrackingReport() {
     { key: 'phase', label: t('phase', 'Phase') },
     { key: 'quantity', label: t('quantity', 'Quantity') },
     { key: 'employee', label: t('employee', 'Employee'), render: (v) => v || '—' },
-    { key: 'machine', label: t('machine', 'Machine'), render: (v) => v || '—' },
+    {
+      key: 'facility',
+      label: t('machineOrPartnerFactory', 'Machine / Partner Factory'),
+      render: (_, row) => (
+        row.phase === 'outsourcing'
+          ? (row.partner_factory || '—')
+          : (row.machine || '—')
+      ),
+    },
     { key: 'loss_reason', label: t('loss', 'Loss Reason'), render: (v) => v || '—' },
     { key: 'duration_minutes', label: t('duration', 'Duration (min)'), render: (v) => v ?? '—' },
   ];
@@ -81,6 +95,7 @@ export default function ProductionTrackingReport() {
     ? [
       { label: t('input', 'Input'), value: report.input ?? '—' },
       { label: t('sorting', 'Sorting'), value: `${report.sorting ?? '—'} (loss: ${report.sorting_loss ?? '—'})` },
+      { label: t('outsourcing', 'Outsourcing'), value: `${report.outsourcing ?? '—'} (loss: ${report.outsourcing_loss ?? '—'})` },
       { label: t('final', 'Final'), value: `${report.final ?? '—'} (loss: ${report.final_loss ?? '—'})` },
       { label: t('totalLoss', 'Total Loss'), value: report.total_loss ?? '—' },
       { label: t('lossPercentage', 'Loss Percentage'), value: report.loss_percentage !== null && report.loss_percentage !== undefined ? `${report.loss_percentage}%` : '—' },
@@ -90,7 +105,7 @@ export default function ProductionTrackingReport() {
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      <PageHeader title={t('productionTrackingReport', 'Production Tracking Report')} subtitle={t('comparePhases', 'Compare quantities across Input, Sorting, and Final phases')} />
+      <PageHeader title={t('productionTrackingReport', 'Production Tracking Report')} subtitle={t('comparePhases', 'Compare quantities across Input, Sorting, Outsourcing, and Final phases')} />
 
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
@@ -102,13 +117,13 @@ export default function ProductionTrackingReport() {
           <option value="">{t('chooseOrder', 'Choose order')}</option>
           {(orders || []).map((order) => (
             <option key={order.id} value={order.id}>
-              {order.order_number} - {order.model_number}
+              {formatOrderOptionLabel(order, productNameById)}
             </option>
           ))}
         </Select>
         {canDelete && (
           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-            <Btn size="sm" variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+            <Btn size="sm" variant="danger" onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteConfirm(true); }}>
               {t('delete', 'Delete Order')}
             </Btn>
           </div>
@@ -118,9 +133,20 @@ export default function ProductionTrackingReport() {
       {showDeleteConfirm && (
         <Modal title={t('deleteOrder', 'Delete Production Order?')} onClose={() => setShowDeleteConfirm(false)} width={400}>
           <div style={{ marginBottom: 16, fontSize: 14 }}>
-            {t('deleteWarning', 'This will delete the production order and restore all deducted inventory. This action cannot be undone.')}
+            {t('cancelOrderWarning', 'This will permanently delete the order and restore deducted materials. Finished product stock will be reversed if applicable.')}
           </div>
-          {deleteError && <ErrorMsg msg={deleteError} />}
+          <Input
+            label={t('confirmPassword', 'Enter your password to confirm')}
+            type="password"
+            value={deletePassword}
+            onChange={(e) => {
+              setDeletePassword(e.target.value);
+              if (deleteError) setDeleteError('');
+            }}
+            autoComplete="current-password"
+            placeholder={user?.email || ''}
+          />
+          {deleteError && <div style={{ marginTop: 12 }}><ErrorMsg msg={deleteError} /></div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
             <Btn onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
               {t('cancel', 'Cancel')}

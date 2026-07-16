@@ -1,0 +1,3334 @@
+[
+  {
+    "name": "ام يوسف",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:10",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام هبه",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام محمود الفار",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "حنان",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "16:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام رودينا",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "16:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "منه رمضان",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ملك (م)",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:10",
+        "out": "14:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "اميره",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "22:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "09:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present",
+        "note": "اذن يوم الأربعاء"
+      }
+    ]
+  },
+  {
+    "name": "صباح",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "حميده",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "ام مكه",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام نوره",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "دنيا حسين",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present",
+        "note": "ليها نص يوم"
+      }
+    ]
+  },
+  {
+    "name": "دعاء",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present",
+        "note": "200"
+      }
+    ]
+  },
+  {
+    "name": "ام ادم",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام عماد",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام شهد",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام محمد",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:15",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "شهد",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "15:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام رحمه",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent",
+        "note": "1000"
+      }
+    ]
+  },
+  {
+    "name": "ياسمين",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "11:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "09:20",
+        "out": "17:00",
+        "status": "present",
+        "note": "اذن يوم الخميس"
+      }
+    ]
+  },
+  {
+    "name": "ام يونس",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "أسماء سيد",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "مروان",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:45",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present",
+        "note": "200"
+      }
+    ]
+  },
+  {
+    "name": "عبدالرحمن",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "محمد شعبان",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "مؤمن ايمن",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام مروان",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "13:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "محمد صبحي",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "زياد",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "10:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "امل",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "دنيا مصطفي",
+    "dept": "قسم المكن",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "ام احمد",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent",
+        "note": "+1"
+      }
+    ]
+  },
+  {
+    "name": "الاء",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present",
+        "note": "+1"
+      }
+    ]
+  },
+  {
+    "name": "فرح",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "07:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:20",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "يوسف",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:40",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:15",
+        "out": "18:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "منة",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "محمود",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:20",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present",
+        "note": "+1"
+      }
+    ]
+  },
+  {
+    "name": "نور",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "احمد",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:30",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:20",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:15",
+        "out": "18:20",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present",
+        "note": "+1"
+      }
+    ]
+  },
+  {
+    "name": "مريم محمد",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "كريم",
+    "dept": "قسم التشغيل",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام رحمه",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "فاطمة",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "19:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام منه",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام ايه",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "وفاء",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "زينة",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "رحمه",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام دعاء",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "10:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "منه صبحي",
+    "dept": "قسم التشطيب",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:15",
+        "out": "19:00",
+        "status": "present",
+        "note": "100"
+      }
+    ]
+  },
+  {
+    "name": "سما",
+    "dept": "قسم التكيس",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "بسمة",
+    "dept": "قسم التكيس",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "14:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "10:20",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "10:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "10:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "10:10",
+        "out": "19:00",
+        "status": "present",
+        "note": "100"
+      }
+    ]
+  },
+  {
+    "name": "ابتسام",
+    "dept": "قسم التكيس",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ملك",
+    "dept": "قسم التكيس",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ميرهان",
+    "dept": "قسم التكيس",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "قمر",
+    "dept": "قسم التكيس",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "أسامة",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "10:20",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "11:00",
+        "out": "14:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "12:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "09:30",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "10:00",
+        "out": "18:30",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "بلال",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "10:05",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "11:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "11:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "11:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "10:00",
+        "out": "18:00",
+        "status": "present",
+        "note": "100"
+      }
+    ]
+  },
+  {
+    "name": "زياد",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "10:20",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "11:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "11:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "11:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "11:20",
+        "out": "18:30",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "عزت",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "09:40",
+        "out": "19:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "10:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "09:45",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:40",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "09:40",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "10:00",
+        "out": "20:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "احمد ممدوح",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "19:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "09:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "احمد هاني",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "محمد عبده",
+    "dept": "قسم المكوه",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "18:30",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "مريم",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:15",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام عمار",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "سلمي",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "13:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "ام ريتاج",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "ام حمزه",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "رويدا",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "10:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "جرجس",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "19:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "كيرلس",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "19:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "20:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "راغب",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "09:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "18:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "08:30",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:15",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:20",
+        "out": "17:00",
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "نور",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "08:00",
+        "out": "16:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present",
+        "note": "ليه 100 + 200"
+      }
+    ]
+  },
+  {
+    "name": "عبدالعزيز",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": "10:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-07",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-08",
+        "in": "09:00",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-09",
+        "in": "09:00",
+        "out": null,
+        "status": "present"
+      }
+    ]
+  },
+  {
+    "name": "مصطفي",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "08:40",
+        "out": "17:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "عمر",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "08:00",
+        "out": "15:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "قصي",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": "09:00",
+        "out": "12:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-05",
+        "in": "10:30",
+        "out": "15:00",
+        "status": "present"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  },
+  {
+    "name": "لؤي",
+    "dept": "قسم الفرز",
+    "days": [
+      {
+        "date": "2026-07-04",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-05",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-06",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-07",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-08",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      },
+      {
+        "date": "2026-07-09",
+        "in": null,
+        "out": null,
+        "status": "absent"
+      }
+    ]
+  }
+]

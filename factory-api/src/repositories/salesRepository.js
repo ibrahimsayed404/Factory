@@ -1,5 +1,28 @@
 const pool = require('../db/pool');
 
+const relationColumnExistsCache = new Map();
+
+const relationColumnExists = async (client, relationName, columnName) => {
+  const cacheKey = `${relationName}.${columnName}`;
+  if (relationColumnExistsCache.has(cacheKey)) {
+    return relationColumnExistsCache.get(cacheKey);
+  }
+
+  const result = await client.query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND column_name = $2
+     ) AS exists`,
+    [relationName, columnName]
+  );
+  const exists = Boolean(result.rows[0]?.exists);
+  relationColumnExistsCache.set(cacheKey, exists);
+  return exists;
+};
+
 const queryWithPagination = async (baseQuery, filters, orderBy, { limit, offset }, client = pool) => {
   const params = [];
   let query = baseQuery;
@@ -170,14 +193,24 @@ const getCustomerById = async (id, client = pool) => {
 };
 
 const getCustomerLedgerDetails = async (id) => {
-  const [orders, invoices, payments, returns, credits, summary] = await Promise.all([
+  const [orders, orderItems, invoices, payments, returns, credits, summary] = await Promise.all([
     pool.query(
-      `SELECT so.*, COALESCE(SUM(soi.quantity), 0)::int AS total_products
+      `SELECT
+         so.*,
+         COALESCE(SUM(soi.quantity), 0)::int AS total_products
        FROM sales_orders so
        LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
        WHERE so.customer_id = $1
        GROUP BY so.id
        ORDER BY so.order_date DESC, so.id DESC`,
+      [id]
+    ),
+    pool.query(
+      `SELECT soi.*, so.id AS sales_order_id
+       FROM sales_order_items soi
+       JOIN sales_orders so ON so.id = soi.sales_order_id
+       WHERE so.customer_id = $1
+       ORDER BY so.order_date DESC, so.id DESC, soi.id ASC`,
       [id]
     ),
     pool.query(
@@ -228,8 +261,24 @@ const getCustomerLedgerDetails = async (id) => {
     ),
   ]);
 
+  const orderItemsByOrderId = new Map();
+  for (const row of orderItems.rows) {
+    const orderId = Number(row.sales_order_id);
+    if (!orderItemsByOrderId.has(orderId)) orderItemsByOrderId.set(orderId, []);
+    orderItemsByOrderId.get(orderId).push(row);
+  }
+
+  const ordersWithDetails = orders.rows.map((order) => {
+    const items = orderItemsByOrderId.get(Number(order.id)) || [];
+    return {
+      ...order,
+      items,
+      details: items.map((item) => `${item.product_name || 'Item'}${item.color ? ` (${item.color})` : ''}: ${Number(item.quantity || 0)}`).join(', '),
+    };
+  });
+
   return {
-    orders: orders.rows,
+    orders: ordersWithDetails,
     invoices: invoices.rows,
     payments: payments.rows,
     returns: returns.rows,
@@ -388,15 +437,26 @@ const createSalesOrderRecord = async (client, {
 const insertSalesOrderItem = async (client, {
   sales_order_id,
   product_name,
+  color,
   quantity,
   unit_price,
   product_id = null,
 }) => {
+  const hasColorColumn = await relationColumnExists(client, 'sales_order_items', 'color');
+  const columns = ['sales_order_id', 'product_name', 'quantity', 'unit_price', 'product_id'];
+  const values = [sales_order_id, product_name, quantity, unit_price, product_id];
+
+  if (hasColorColumn) {
+    columns.splice(2, 0, 'color');
+    values.splice(2, 0, color || null);
+  }
+
+  const placeholders = columns.map((_, index) => `$${index + 1}`).join(',');
   const result = await client.query(
-    `INSERT INTO sales_order_items (sales_order_id, product_name, quantity, unit_price, product_id)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO sales_order_items (${columns.join(', ')})
+     VALUES (${placeholders})
      RETURNING *`,
-    [sales_order_id, product_name, quantity, unit_price, product_id]
+    values
   );
   return result.rows[0];
 };

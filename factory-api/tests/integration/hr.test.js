@@ -57,7 +57,7 @@ describe('HR & Monthly Payroll Integration Tests', () => {
     if (generateRes.status !== 201) console.log(generateRes.body);
 
     expect(generateRes.status).toBe(201);
-    expect(generateRes.body.net_salary).toBe(5200); // 5000 + 500 (bonus) - 200 (penalty) - 100 (loan) = 5200
+    expect(generateRes.body.net_salary).toBe(20200); // 5000 weekly salary becomes 20000 monthly equivalent, +500 bonus -200 penalty -100 loan = 20200
   });
 
 });

@@ -28,6 +28,13 @@ const markPaid = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const updateManual = async (req, res, next) => {
+  try {
+    const result = await payrollService.updateManualAdjustments(req.params.id, req.body);
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
 const generateMonthly = async (req, res, next) => {
   try {
     const result = await payrollService.generateMonthlyPayroll(req.body);
@@ -35,4 +42,11 @@ const generateMonthly = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAll, create, markPaid, generateMonthly };
+const deleteWeek = async (req, res, next) => {
+  try {
+    const result = await payrollService.deletePayrollWeek(req.params.weekStart);
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAll, create, markPaid, updateManual, generateMonthly, deleteWeek };

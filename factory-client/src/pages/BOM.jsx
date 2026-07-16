@@ -7,9 +7,15 @@ import { useLanguage } from '../context/LanguageContext';
 const createMaterialRow = () => ({
   client_id: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
   material_id: '',
+  color: '',
   quantity: 1,
   scrap_percentage: 0,
 });
+
+const splitColors = (value) => String(value || '')
+  .split(',')
+  .map((color) => color.trim())
+  .filter(Boolean);
 
 const emptyForm = { product_id: '', name: '', base_quantity: 1, materials: [] };
 
@@ -129,6 +135,20 @@ export default function Bom() {
                         <option key={mat.id} value={mat.item_id}>{mat.name}</option>
                       ))}
                     </Select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    {(() => {
+                      const selected = (materials || []).find((i) => String(i.item_id) === String(m.material_id));
+                      const colors = splitColors(selected?.colors);
+                      return colors.length ? (
+                        <Select value={m.color} onChange={e => updateMaterial(idx, 'color', e.target.value)}>
+                          <option value="">{t('color', 'Color')}</option>
+                          {colors.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </Select>
+                      ) : (
+                        <Input placeholder={t('color', 'Color')} value={m.color} onChange={e => updateMaterial(idx, 'color', e.target.value)} />
+                      );
+                    })()}
                   </div>
                   <div style={{ flex: 1 }}>
                     <Input type="number" placeholder="Qty" value={m.quantity} onChange={e => updateMaterial(idx, 'quantity', e.target.value)} />

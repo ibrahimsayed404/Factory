@@ -1,0 +1,9 @@
+ALTER TABLE materials
+  ADD COLUMN IF NOT EXISTS colors TEXT;
+
+ALTER TABLE bom_materials
+  ADD COLUMN IF NOT EXISTS color VARCHAR(80);
+
+ALTER TABLE production_materials
+  ADD COLUMN IF NOT EXISTS color VARCHAR(80);
+

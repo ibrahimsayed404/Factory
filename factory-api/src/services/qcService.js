@@ -1,4 +1,5 @@
 const pool = require('../db/pool');
+const storageService = require('./storageService');
 
 class QCService {
   async getDefectCategories() {
@@ -152,7 +153,8 @@ class QCService {
   }
 
   async addPhoto(id, file) {
-    // Assuming file is an object with a path/filename
+    // Upload to Supabase cloud if configured
+    await storageService.uploadToCloud(file, 'qc-photos');
     const { rows } = await pool.query(`
       INSERT INTO qc_inspection_photos (inspection_id, file_path)
       VALUES ($1, $2)

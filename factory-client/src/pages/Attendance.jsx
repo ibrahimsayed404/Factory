@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { employeeApi } from '../api';
+import { useLanguage } from '../context/LanguageContext';
 import { useFetch } from '../hooks/useFetch';
 import {
   PageHeader, Card, Table, Badge, Btn,
@@ -247,6 +248,7 @@ const HeatMap = ({ records, year, month }) => {
 
 /* ── Main page ─────────────────────────────────────────── */
 export default function Attendance() {
+  const { t } = useLanguage();
   const now = new Date();
   const [month, setMonth]  = useState(now.getMonth() + 1);
   const [year,  setYear]   = useState(now.getFullYear());
@@ -271,21 +273,27 @@ export default function Attendance() {
   const { data: employees, loading: empListLoading } = useFetch(employeeApi.list);
 
   useEffect(() => {
-    const calculated = computeWorkedHours(logForm.check_in, logForm.check_out);
+    const isAbsent = logForm.status === 'absent';
+    const calculated = isAbsent ? '' : computeWorkedHours(logForm.check_in, logForm.check_out);
     const employee = employees?.find((e) => String(e.id) === String(logForm.employee_id));
-    const weekendAttendance = isWeekendDate(employee, logForm.date) && Boolean(logForm.check_in || logForm.check_out);
-    const workedMinutes = calculateWorkedMinutes(logForm.check_in, logForm.check_out);
-    const metrics = weekendAttendance
-      ? { late_minutes: 0, early_leave_minutes: 0, overtime_minutes: workedMinutes || 0 }
-      : computeShiftMetrics(employee, logForm.check_in, logForm.check_out);
+    const weekendAttendance = !isAbsent && isWeekendDate(employee, logForm.date) && Boolean(logForm.check_in || logForm.check_out);
+    const workedMinutes = isAbsent ? 0 : calculateWorkedMinutes(logForm.check_in, logForm.check_out);
+    const metrics = isAbsent
+      ? { late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0 }
+      : (weekendAttendance
+          ? { late_minutes: 0, early_leave_minutes: 0, overtime_minutes: workedMinutes || 0 }
+          : computeShiftMetrics(employee, logForm.check_in, logForm.check_out));
     setLogForm((prev) => {
       const autoStatus = weekendAttendance
         ? 'present'
         : (prev.status === 'present' || prev.status === 'late'
           ? (metrics.late_minutes > 0 ? 'late' : 'present')
           : prev.status);
+      
       const next = {
         ...prev,
+        check_in: isAbsent ? '' : prev.check_in,
+        check_out: isAbsent ? '' : prev.check_out,
         hours_worked: calculated,
         late_minutes: metrics.late_minutes,
         early_leave_minutes: metrics.early_leave_minutes,
@@ -296,7 +304,9 @@ export default function Attendance() {
           : (prev.notes === WEEKEND_PRESENT_NOTE ? '' : prev.notes),
       };
       if (
-        prev.hours_worked === next.hours_worked
+        prev.check_in === next.check_in
+        && prev.check_out === next.check_out
+        && prev.hours_worked === next.hours_worked
         && prev.late_minutes === next.late_minutes
         && prev.early_leave_minutes === next.early_leave_minutes
         && prev.overtime_minutes === next.overtime_minutes
@@ -307,7 +317,7 @@ export default function Attendance() {
       }
       return next;
     });
-  }, [logForm.check_in, logForm.check_out, logForm.employee_id, logForm.date, employees]);
+  }, [logForm.check_in, logForm.check_out, logForm.employee_id, logForm.date, logForm.status, employees]);
 
   // Summary: load attendance for ALL employees for the month
   const [summary, setSummary] = useState([]);
@@ -361,8 +371,32 @@ export default function Attendance() {
   const totalHours    = summary.reduce((a, s) => a + s.records.reduce((b, r) => b + parseFloat(r.hours_worked || 0), 0), 0);
 
   // Summary table columns
+  const summaryTableData = useMemo(() => summary.map(s => {
+    const presentCount = s.records.filter(r => r.status === 'present').length;
+    const lateCount = s.records.filter(r => r.status === 'late').length;
+    const absentCount = s.records.filter(r => r.status === 'absent').length;
+    const totalHrs = parseFloat(s.records.reduce((a, r) => a + parseFloat(r.hours_worked || 0), 0).toFixed(1));
+    const total = s.records.length;
+    const rate = total > 0 ? Math.round(((presentCount + lateCount) / total) * 100) : 0;
+    return {
+      id: s.emp.id,
+      emp: s.emp,
+      records: s.records,
+      device_user_id: s.emp.device_user_id || '',
+      empName: s.emp.name || '',
+      presentCount,
+      lateCount,
+      absentCount,
+      totalHrs,
+      rate,
+    };
+  }), [summary]);
+
   const summaryColumns = [
-    { key: 'emp', label: 'Employee', render: (_, row) => (
+    { key: 'device_user_id', label: t('deviceNo', 'Device No'), render: v => (
+      <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{v || '—'}</span>
+    )},
+    { key: 'empName', label: t('employee', 'Employee'), render: (_, row) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
@@ -373,38 +407,25 @@ export default function Attendance() {
         <span>{row.emp.name}</span>
       </div>
     )},
-    { key: 'present', label: 'Present', render: (_, row) => (
-      <span style={{ color: 'var(--accent)', fontWeight: 500 }}>
-        {row.records.filter(r => r.status === 'present').length}
-      </span>
+    { key: 'presentCount', label: t('present', 'Present'), render: v => (
+      <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{v}</span>
     )},
-    { key: 'late', label: 'Late', render: (_, row) => (
-      <span style={{ color: 'var(--warn)' }}>
-        {row.records.filter(r => r.status === 'late').length}
-      </span>
+    { key: 'lateCount', label: t('late', 'Late'), render: v => (
+      <span style={{ color: 'var(--warn)' }}>{v}</span>
     )},
-    { key: 'absent', label: 'Absent', render: (_, row) => (
-      <span style={{ color: 'var(--danger)' }}>
-        {row.records.filter(r => r.status === 'absent').length}
-      </span>
+    { key: 'absentCount', label: t('absent', 'Absent'), render: v => (
+      <span style={{ color: 'var(--danger)' }}>{v}</span>
     )},
-    { key: 'hours', label: 'Total hours', render: (_, row) => (
-      `${row.records.reduce((a, r) => a + parseFloat(r.hours_worked || 0), 0).toFixed(1)}h`
-    )},
-    { key: 'rate', label: 'Attendance rate', render: (_, row) => {
-      const total = row.records.length;
-      const present = row.records.filter(r => r.status === 'present' || r.status === 'late').length;
-      const rate = total > 0 ? Math.round((present / total) * 100) : 0;
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, height: 5, background: 'var(--bg-hover)', borderRadius: 99, maxWidth: 80 }}>
-            <div style={{ width: `${rate}%`, height: '100%', background: rate > 80 ? 'var(--accent)' : rate > 50 ? 'var(--warn)' : 'var(--danger)', borderRadius: 99 }} />
-          </div>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rate}%</span>
+    { key: 'totalHrs', label: t('totalHours', 'Total hours'), render: v => `${v}h` },
+    { key: 'rate', label: t('attendanceRate', 'Attendance rate'), render: (_, row) => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, height: 5, background: 'var(--bg-hover)', borderRadius: 99, maxWidth: 80 }}>
+          <div style={{ width: `${row.rate}%`, height: '100%', background: row.rate > 80 ? 'var(--accent)' : row.rate > 50 ? 'var(--warn)' : 'var(--danger)', borderRadius: 99 }} />
         </div>
-      );
-    }},
-    { key: 'actions', label: '', render: (_, row) => (
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{row.rate}%</span>
+      </div>
+    )},
+    { key: 'actions', label: '', sortable: false, render: (_, row) => (
       <Btn size="sm" onClick={() => selectEmployee(row.emp)}>View</Btn>
     )},
   ];
@@ -482,7 +503,7 @@ export default function Attendance() {
             <Card padding="0">
               <Table
                 columns={summaryColumns}
-                data={summary}
+                data={summaryTableData}
                 emptyMsg="No employees found."
               />
             </Card>

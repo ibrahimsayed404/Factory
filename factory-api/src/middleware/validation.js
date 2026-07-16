@@ -80,7 +80,7 @@ const attendanceUpsert = [
 ];
 
 const payrollCreate = [
-  body('employee_id').isInt({ min: 1 }).withMessage('employee_id is required'),
+  body('employee_id').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage('employee_id must be valid'),
   body('week_start').optional({ checkFalsy: true }).isISO8601().withMessage('week_start must be YYYY-MM-DD'),
   body('month').optional({ checkFalsy: true }).isInt({ min: 1, max: 12 }).withMessage('month must be between 1 and 12'),
   body('year').optional({ checkFalsy: true }).isInt({ min: 2000, max: 2100 }).withMessage('year must be valid'),
@@ -237,6 +237,18 @@ const settingsAttendancePayrollUpdate = [
   handleValidation,
 ];
 
+const partnerFactoryCreate = [
+  body('name').trim().isLength({ min: 2, max: 150 }).withMessage('name is required'),
+  body('contact_person').optional({ nullable: true, checkFalsy: true }).isLength({ max: 120 }).withMessage('contact_person is too long'),
+  body('phone').optional({ nullable: true, checkFalsy: true }).isLength({ max: 40 }).withMessage('phone is too long'),
+  handleValidation,
+];
+
+const productionOrderDelete = [
+  body('password').isString().notEmpty().withMessage('password is required'),
+  handleValidation,
+];
+
 module.exports = {
   handleValidation,
   idParam,
@@ -261,4 +273,6 @@ module.exports = {
   productionTrackingCreate,
   productionTrackingPhase,
   settingsAttendancePayrollUpdate,
+  partnerFactoryCreate,
+  productionOrderDelete,
 };

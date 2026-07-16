@@ -3,6 +3,7 @@ import { productionApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Spinner, ErrorMsg, Badge, statusVariant } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
+import { getOrderDisplayNumber } from '../utils/productionOrderDisplay';
 
 export default function ProductionPipeline() {
   const { t } = useLanguage();
@@ -112,7 +113,7 @@ export default function ProductionPipeline() {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          {order.order_number}
+                          {getOrderDisplayNumber(order)}
                         </span>
                         <Badge variant={statusVariant(order.status)}>{status.label}</Badge>
                       </div>

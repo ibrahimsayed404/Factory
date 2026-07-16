@@ -6,6 +6,7 @@ const auditService = require('./auditService');
 const inventoryService = require('./inventoryService');
 const accountingService = require('./accountingService');
 const productionTrackingService = require('./productionTrackingService');
+const storageService = require('./storageService');
 const ApiError = require('../utils/ApiError');
 
 const buildOrderNumber = (prefix) => {
@@ -45,6 +46,7 @@ const createProductionOrderForItem = async (client, salesOrder, item, notes) => 
     try {
       return await productionTrackingService.createProductionOrder({
         modelNumber: item.product_name,
+        productName: item.product_name,
         quantity: item.quantity,
         product_id: item.product_id || null,
         materials: [],
@@ -82,6 +84,7 @@ const prepareSalesItems = async (client, items) => {
     const item = {
       product_id: product?.id || raw.product_id || null,
       product_name: raw.product_name || product?.name,
+      color: raw.color || null,
       quantity,
       unit_price: unitPrice,
       make_to_order: raw.make_to_order === true,
@@ -209,7 +212,10 @@ const getCustomerLedger = async (id) => {
       remaining_balance: remainingBalance,
       credit_balance: creditBalance,
     },
-    orders,
+    orders: orders.map((order) => ({
+      ...order,
+      items: Array.isArray(order.items) ? order.items : [],
+    })),
     invoices,
     payments,
     returns,
@@ -226,6 +232,10 @@ const addCustomerPayment = async (userId, customerId, file, data, reqContext = n
     const customer = await salesRepository.getCustomerById(customerId, client);
     if (!customer) throw new ApiError(404, 'Customer not found');
 
+    // Upload to Supabase cloud if configured (async, non-blocking for DB tx)
+    if (file) {
+      await storageService.uploadToCloud(file, 'payment-evidence');
+    }
     const evidenceUrl = file ? `/api/uploads/payment-evidence/${file.filename}` : null;
     const evidenceName = file ? file.originalname : null;
     const evidenceMime = file ? file.mimetype : null;
@@ -325,6 +335,7 @@ const createSalesOrder = async (userId, data, reqContext = null) => {
       await salesRepository.insertSalesOrderItem(client, {
         sales_order_id: order.id,
         product_name: item.product_name,
+        color: item.color,
         quantity: item.quantity,
         unit_price: item.unit_price,
         product_id: item.product_id,
@@ -480,6 +491,7 @@ const convertQuotationToOrder = async (userId, id, reqContext = null) => {
     items: items.map((item) => ({
       product_id: item.product_id,
       product_name: item.product_name,
+      color: item.color,
       quantity: item.quantity,
       unit_price: item.unit_price,
     })),
@@ -554,6 +566,7 @@ const createInvoiceFromOrder = async (userId, data, reqContext = null) => {
         sales_order_item_id: item.id,
         product_id: item.product_id,
         product_name: item.product_name,
+        color: item.color,
         quantity: item.quantity,
         unit_price: item.unit_price,
       });
@@ -626,6 +639,7 @@ const createDeliveryNote = async (userId, data, reqContext = null) => {
         sales_order_item_id: item.id,
         product_id: item.product_id,
         product_name: item.product_name,
+        color: item.color,
         quantity: item.quantity,
       });
       await salesRepository.incrementSalesOrderItemFulfilled(client, item.id, item.quantity);
@@ -698,6 +712,7 @@ const createReturn = async (userId, data, reqContext = null) => {
         sales_order_item_id: item.id,
         product_id: item.product_id,
         product_name: item.product_name,
+        color: item.color,
         quantity: item.quantity,
         unit_price: item.unit_price,
         restock: item.restock,

@@ -1,5 +1,7 @@
 const pool = require('../db/pool');
 
+const PRODUCTION_COMPLETED_STATUSES = "('done','shipped','completed')";
+
 const toIsoDate = (date) => date.toISOString().slice(0, 10);
 
 const parseIsoDate = (value) => {
@@ -293,7 +295,7 @@ const productionOverview = async (req, res, next) => {
           date_trunc('month', created_at)::date AS month_start,
           to_char(date_trunc('month', created_at), 'Mon YYYY') AS month_label,
           COUNT(*)::int AS total,
-          SUM(CASE WHEN status IN ('done','shipped') THEN 1 ELSE 0 END)::int AS completed,
+          SUM(CASE WHEN status IN ${PRODUCTION_COMPLETED_STATUSES} THEN 1 ELSE 0 END)::int AS completed,
           COALESCE(SUM(quantity), 0)::int AS units_ordered,
           COALESCE(SUM(produced_qty), 0)::int AS units_produced
         FROM production_orders
@@ -329,7 +331,7 @@ const productionOverview = async (req, res, next) => {
       pool.query(`
         SELECT
           COUNT(*)::int AS total,
-          SUM(CASE WHEN status IN ('done','shipped') THEN 1 ELSE 0 END)::int AS done,
+          SUM(CASE WHEN status IN ${PRODUCTION_COMPLETED_STATUSES} THEN 1 ELSE 0 END)::int AS done,
           COALESCE(SUM(quantity),0)::int    AS total_units,
           COALESCE(SUM(produced_qty),0)::int AS produced_units
         FROM production_orders
@@ -353,21 +355,21 @@ const productionOverview = async (req, res, next) => {
           SUM(CASE
             WHEN due_date IS NOT NULL
              AND due_date < CURRENT_DATE
-             AND status NOT IN ('done','shipped')
+             AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
               THEN 1
             ELSE 0
           END)::int AS late_orders,
           COALESCE(SUM(CASE
             WHEN due_date IS NOT NULL
              AND due_date < CURRENT_DATE
-             AND status NOT IN ('done','shipped')
+             AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
               THEN GREATEST(quantity - produced_qty, 0)
             ELSE 0
           END), 0)::int AS late_units,
           MIN(due_date) FILTER (
             WHERE due_date IS NOT NULL
               AND due_date < CURRENT_DATE
-              AND status NOT IN ('done','shipped')
+              AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
           )::date AS earliest_late_due_date
         FROM production_orders
         WHERE created_at >= $1::date
@@ -388,7 +390,7 @@ const productionOverview = async (req, res, next) => {
           AND created_at <  ($2::date + interval '1 day')
           AND due_date IS NOT NULL
           AND due_date < CURRENT_DATE
-          AND status NOT IN ('done','shipped')
+          AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
         GROUP BY product_name
         ORDER BY oldest_due_date ASC, late_units DESC
       `, [startDate, endDate]),

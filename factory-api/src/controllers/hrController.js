@@ -1,4 +1,5 @@
 const hrService = require('../services/hrService');
+const storageService = require('../services/storageService');
 
 exports.getPositions = async (req, res, next) => {
   try {
@@ -94,6 +95,8 @@ exports.getDocuments = async (req, res, next) => {
 exports.uploadDocument = async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    // Upload to Supabase cloud if configured
+    await storageService.uploadToCloud(req.file, 'hr-documents');
     const documentType = req.body.document_type || 'Other';
     const data = await hrService.uploadDocument(req.params.employeeId, documentType, req.file.filename);
     res.status(201).json(data);

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS hr_shifts (
   name VARCHAR(100) NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
-  weekend_days VARCHAR(20) DEFAULT '0,6',
+  weekend_days VARCHAR(20) DEFAULT '5',
   created_at TIMESTAMP DEFAULT NOW()
 );
 

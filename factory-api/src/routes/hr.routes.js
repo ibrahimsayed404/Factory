@@ -4,6 +4,10 @@ const hrController = require('../controllers/hrController');
 const { authenticate, authorize } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
+const path = require('node:path');
+const fsPromises = require('node:fs').promises;
+const storageService = require('../services/storageService');
+
 router.use(authenticate);
 
 // Positions
@@ -32,4 +36,27 @@ router.post('/loans', authorize('admin', 'hr', 'finance'), hrController.createLo
 router.get('/employees/:employeeId/documents', hrController.getDocuments);
 router.post('/employees/:employeeId/documents', authorize('admin', 'hr'), upload.single('document'), hrController.uploadDocument);
 
+// Authenticated HR document download
+router.get('/uploads/hr-documents/:filename', authorize('admin', 'hr'), async (req, res, next) => {
+  try {
+    const { filename } = req.params;
+    if (!filename || /[/\\]/.test(filename) || filename.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+    const filePath = path.join(__dirname, '..', '..', 'uploads', 'hr-documents', filename);
+    try {
+      await fsPromises.access(filePath);
+      return res.sendFile(filePath);
+    } catch {
+      // Local file not found — try Supabase cloud redirect
+      const cloudUrl = storageService.getCloudUrl('hr-documents', filename);
+      if (cloudUrl) return res.redirect(cloudUrl);
+      return res.status(404).json({ error: 'File not found' });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
+

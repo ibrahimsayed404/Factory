@@ -69,43 +69,51 @@ const logAttendance = async (id, data) => {
   const employeeRecord = await employeeRepository.getEmployeeShiftDetails(id);
   if (!employeeRecord) throw new ApiError(404, 'Employee not found');
 
+  const isAbsent = status === 'absent';
+  const resolvedCheckIn = isAbsent ? null : (check_in || null);
+  const resolvedCheckOut = isAbsent ? null : (check_out || null);
+
   const policy = await getAttendancePayrollPolicy();
-  const isWeekendAttendance = isWeekendDate(employeeRecord, date) && Boolean(check_in || check_out);
-  const workedMinutes = calculateWorkedMinutes(check_in, check_out);
+  const isWeekendAttendance = !isAbsent && isWeekendDate(employeeRecord, date) && Boolean(resolvedCheckIn || resolvedCheckOut);
+  const workedMinutes = isAbsent ? 0 : calculateWorkedMinutes(resolvedCheckIn, resolvedCheckOut);
   
-  const metrics = isWeekendAttendance
-    ? {
-      late_minutes: 0,
-      early_leave_minutes: 0,
-      overtime_minutes: workedMinutes || 0,
-    }
-    : calculateShiftMetrics(employeeRecord, check_in, check_out, { lateGraceMinutes: policy.attendanceLateGraceMinutes });
+  const metrics = isAbsent
+    ? { late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0 }
+    : (isWeekendAttendance
+        ? {
+          late_minutes: 0,
+          early_leave_minutes: 0,
+          overtime_minutes: workedMinutes || 0,
+        }
+        : calculateShiftMetrics(employeeRecord, resolvedCheckIn, resolvedCheckOut, { lateGraceMinutes: policy.attendanceLateGraceMinutes }));
     
-  const resolvedHoursWorked = calculateHoursWorked(check_in, check_out, hours_worked);
+  const resolvedHoursWorked = isAbsent ? null : calculateHoursWorked(resolvedCheckIn, resolvedCheckOut, hours_worked);
   
-  const resolvedLateMinutes = isWeekendAttendance
+  const resolvedLateMinutes = isAbsent ? 0 : (isWeekendAttendance
     ? 0
-    : (Number.isFinite(Number(late_minutes)) ? Number(late_minutes) : metrics.late_minutes);
+    : (Number.isFinite(Number(late_minutes)) ? Number(late_minutes) : metrics.late_minutes));
     
-  const resolvedEarlyLeaveMinutes = isWeekendAttendance
+  const resolvedEarlyLeaveMinutes = isAbsent ? 0 : (isWeekendAttendance
     ? 0
-    : (Number.isFinite(Number(early_leave_minutes)) ? Number(early_leave_minutes) : metrics.early_leave_minutes);
+    : (Number.isFinite(Number(early_leave_minutes)) ? Number(early_leave_minutes) : metrics.early_leave_minutes));
     
-  const resolvedOvertimeMinutes = isWeekendAttendance
+  const resolvedOvertimeMinutes = isAbsent ? 0 : (isWeekendAttendance
     ? (workedMinutes || 0)
-    : (Number.isFinite(Number(overtime_minutes)) ? Number(overtime_minutes) : metrics.overtime_minutes);
+    : (Number.isFinite(Number(overtime_minutes)) ? Number(overtime_minutes) : metrics.overtime_minutes));
     
-  const resolvedStatus = isWeekendAttendance
-    ? 'present'
-    : ((status === 'present' || status === 'late')
-      ? (resolvedLateMinutes > 0 ? 'late' : 'present')
-      : status);
+  const resolvedStatus = isAbsent
+    ? 'absent'
+    : (isWeekendAttendance
+        ? 'present'
+        : ((status === 'present' || status === 'late')
+          ? (resolvedLateMinutes > 0 ? 'late' : 'present')
+          : status));
       
   const resolvedNotes = isWeekendAttendance ? WEEKEND_PRESENT_NOTE : notes;
 
   const attendanceData = {
-    check_in,
-    check_out,
+    check_in: resolvedCheckIn,
+    check_out: resolvedCheckOut,
     hours_worked: resolvedHoursWorked,
     status: resolvedStatus,
     notes: resolvedNotes,

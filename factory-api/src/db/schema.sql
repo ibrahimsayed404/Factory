@@ -161,9 +161,11 @@ CREATE TABLE IF NOT EXISTS inventory_balances (
 
 CREATE TABLE IF NOT EXISTS materials (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(150) UNIQUE NOT NULL,
+  name VARCHAR(150) NOT NULL,
   category VARCHAR(100),              -- fabric, thread, button, zipper, etc.
   unit VARCHAR(30) NOT NULL,          -- kg, meters, pieces
+  color VARCHAR(80),
+  colors VARCHAR(80),
   quantity NUMERIC(10,2) DEFAULT 0,
   min_quantity NUMERIC(10,2) DEFAULT 0,  -- low stock threshold
   cost_per_unit NUMERIC(10,2),
@@ -349,6 +351,7 @@ CREATE TABLE IF NOT EXISTS products (
   name VARCHAR(150) UNIQUE NOT NULL,
   sku VARCHAR(50) UNIQUE,
   description TEXT,
+  colors TEXT,
   default_price NUMERIC(10,2),
   quantity NUMERIC(10,2) DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
@@ -409,6 +412,7 @@ CREATE TABLE IF NOT EXISTS sales_order_items (
   sales_order_id INT REFERENCES sales_orders(id) ON DELETE CASCADE,
   product_id INT REFERENCES products(id) ON DELETE SET NULL,
   product_name VARCHAR(150) NOT NULL,
+  color VARCHAR(80),
   quantity INT NOT NULL,
   unit_price NUMERIC(10,2) NOT NULL,
   fulfilled_quantity NUMERIC(10,2) DEFAULT 0,
@@ -800,6 +804,13 @@ CREATE TABLE IF NOT EXISTS production_orders (
   notes TEXT,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS production_materials (
+  id SERIAL PRIMARY KEY,
+  production_order_id INT NOT NULL REFERENCES production_orders(id) ON DELETE CASCADE,
+  material_id INT NOT NULL REFERENCES materials(id) ON DELETE RESTRICT,
+  quantity_used NUMERIC(10,2) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS machines (

@@ -14,6 +14,7 @@ const Dashboard  = lazy(() => import('./pages/Dashboard'));
 const Inventory  = lazy(() => import('./pages/Inventory'));
 const Employees  = lazy(() => import('./pages/Employees'));
 const Payroll    = lazy(() => import('./pages/Payroll'));
+const Loans      = lazy(() => import('./pages/Loans'));
 const Sales      = lazy(() => import('./pages/Sales'));
 const Customers  = lazy(() => import('./pages/Customers'));
 const Production = lazy(() => import('./pages/Production'));
@@ -23,6 +24,7 @@ const ProductionSorting = lazy(() => import('./pages/ProductionSorting'));
 const ProductionOutsourcing = lazy(() => import('./pages/ProductionOutsourcing'));
 const ProductionFinal = lazy(() => import('./pages/ProductionFinal'));
 const ProductionTrackingReport = lazy(() => import('./pages/ProductionTrackingReport'));
+const ProductionOrderManage = lazy(() => import('./pages/ProductionOrderManage'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const Reports    = lazy(() => import('./pages/Reports'));
 const Accounting = lazy(() => import('./pages/Accounting'));
@@ -57,6 +59,7 @@ export default function App() {
                   <Route path="/products"   element={<Protected><Products /></Protected>} />
                   <Route path="/employees"  element={<Protected><Employees /></Protected>} />
                   <Route path="/payroll"    element={<Protected><Payroll /></Protected>} />
+                  <Route path="/loans"      element={<Protected><Loans /></Protected>} />
                   <Route path="/sales"      element={<Protected><Sales /></Protected>} />
                   <Route path="/customers"  element={<Protected><Customers /></Protected>} />
                   <Route path="/accounting" element={FEATURE_FLAGS.accounting ? <Protected><Accounting /></Protected> : <Navigate to="/" replace />} />
@@ -67,6 +70,7 @@ export default function App() {
                   <Route path="/production-orders/outsourcing" element={<Protected><ProductionOutsourcing /></Protected>} />
                   <Route path="/production-orders/final" element={<Protected><ProductionFinal /></Protected>} />
                   <Route path="/production-orders/report" element={<Protected><ProductionTrackingReport /></Protected>} />
+                  <Route path="/production-orders/manage" element={<Protected><ProductionOrderManage /></Protected>} />
                   <Route path="/manufacturing/boms" element={FEATURE_FLAGS.manufacturingBoms ? <Protected><Bom /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/manufacturing/routings" element={FEATURE_FLAGS.manufacturingRoutings ? <Protected><Routings /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/attendance" element={<Protected><Attendance /></Protected>} />

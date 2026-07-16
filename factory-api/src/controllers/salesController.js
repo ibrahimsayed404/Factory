@@ -1,5 +1,6 @@
 const salesService = require('../services/salesService');
 const { extractReqContext } = require('../services/auditService');
+const { verifyUserPassword } = require('../utils/verifyPassword');
 
 const getCustomers = async (req, res, next) => {
   try {
@@ -59,6 +60,7 @@ const updateStatus = async (req, res, next) => {
 
 const deleteOrder = async (req, res, next) => {
   try {
+    await verifyUserPassword(req.user.id, req.body.password);
     const result = await salesService.removeOrder(req.user.id, req.params.id, extractReqContext(req));
     res.json(result);
   } catch (err) { next(err); }

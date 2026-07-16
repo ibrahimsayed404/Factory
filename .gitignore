@@ -12,9 +12,11 @@ Thumbs.db
 uploads/
 nssm-2.24/
 .vscode/
+.vs/
 .idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 
+.vercel

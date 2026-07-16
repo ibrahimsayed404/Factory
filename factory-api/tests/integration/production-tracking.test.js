@@ -23,6 +23,7 @@ const resetData = async () => {
   await pool.query(`
     TRUNCATE TABLE
       machines,
+      partner_factories,
       inventory_transactions,
       inventory_balances,
       warehouse_locations,
@@ -74,6 +75,12 @@ const createAdminAndLogin = async () => {
   return agent;
 };
 
+const createCatalogProduct = async (agent, name) => {
+  const created = await agent.post('/api/products').send({ name, default_price: 10 });
+  expect(created.status).toBe(201);
+  return created.body;
+};
+
 beforeAll(async () => {
   await pool.query(schemaSql);
   await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS weekend_days VARCHAR(20) DEFAULT '0,6'`);
@@ -90,6 +97,38 @@ beforeAll(async () => {
       status VARCHAR(30) DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW()
     )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS partner_factories (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(150) NOT NULL UNIQUE,
+      code VARCHAR(60) UNIQUE,
+      contact_person VARCHAR(120),
+      phone VARCHAR(40),
+      notes TEXT,
+      status VARCHAR(30) DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE production_phases
+      ADD COLUMN IF NOT EXISTS partner_factory_id INT
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS partner_factories (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(150) NOT NULL UNIQUE,
+      code VARCHAR(60) UNIQUE,
+      contact_person VARCHAR(120),
+      phone VARCHAR(40),
+      notes TEXT,
+      status VARCHAR(30) DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    ALTER TABLE production_phases
+      ADD COLUMN IF NOT EXISTS partner_factory_id INT
   `);
   await resetData();
 });
@@ -118,10 +157,14 @@ describe('Production tracking phases', () => {
       });
     expect(material.status).toBe(201);
 
+    const product = await createCatalogProduct(agent, 'M-101 Product');
+
     const created = await agent
       .post('/api/production-orders')
       .send({
         model_number: 'M-101',
+        product_name: 'M-101 Product',
+        product_id: product.id,
         quantity: 1000,
         materials: [
           { material_id: material.body.id, quantity: 500 },
@@ -130,6 +173,8 @@ describe('Production tracking phases', () => {
 
     expect(created.status).toBe(201);
     expect(created.body.model_number).toBe('M-101');
+    expect(created.body.product_name).toBe('M-101 Product');
+    expect(created.body.catalog_product_name).toBe('M-101 Product');
     expect(created.body.phases.input).toBe(1000);
     expect(created.body.phases.sorting).toBe(null);
     expect(created.body.phases.final).toBe(null);
@@ -143,6 +188,32 @@ describe('Production tracking phases', () => {
     expect(report.status).toBe(200);
     expect(report.body.input).toBe(1000);
     expect(Array.isArray(report.body.phases)).toBe(true);
+  });
+
+  test('stores catalog product name separately from model number', async () => {
+    const agent = await createAdminAndLogin();
+    const product = await createCatalogProduct(agent, 'Blue Polo Shirt');
+
+    const created = await agent
+      .post('/api/production-orders')
+      .send({
+        model_number: '6001',
+        product_name: 'Blue Polo Shirt',
+        product_id: product.id,
+        quantity: 1200,
+        materials: [],
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body.model_number).toBe('6001');
+    expect(created.body.product_name).toBe('Blue Polo Shirt');
+    expect(created.body.catalog_product_name).toBe('Blue Polo Shirt');
+
+    const list = await agent.get('/api/production-orders?limit=1000');
+    expect(list.status).toBe(200);
+    const row = list.body.data.find((order) => order.id === created.body.id);
+    expect(row.product_name).toBe('Blue Polo Shirt');
+    expect(row.model_number).toBe('6001');
   });
 
   test('validates sorting, outsourcing, and final quantities and computes phase losses', async () => {
@@ -169,10 +240,20 @@ describe('Production tracking phases', () => {
     );
     const machineId = machineInsert.rows[0].id;
 
+    const factoryInsert = await pool.query(
+      `INSERT INTO partner_factories (name, code) VALUES ($1, $2) RETURNING id`,
+      ['Al-Nour Textiles', 'ANT-01']
+    );
+    const partnerFactoryId = factoryInsert.rows[0].id;
+
+    const product = await createCatalogProduct(agent, 'M-102 Product');
+
     const created = await agent
       .post('/api/production-orders')
       .send({
         model_number: 'M-102',
+        product_name: 'M-102 Product',
+        product_id: product.id,
         quantity: 1000,
         materials: [],
       });
@@ -244,6 +325,7 @@ describe('Production tracking phases', () => {
         quantity: 700,
         loss_reason: 'External finishing loss',
         employee_id: employeeThree.body.id,
+        partner_factory_id: partnerFactoryId,
         started_at: '2026-04-08T10:30:00Z',
         completed_at: '2026-04-08T11:30:00Z',
       });
@@ -325,6 +407,7 @@ describe('Production tracking phases', () => {
 
     const outsourcingPhase = report.body.phases.find((p) => p.phase === 'outsourcing');
     expect(outsourcingPhase.employee).toBe('Outsourcing 1');
+    expect(outsourcingPhase.partner_factory).toBe('Al-Nour Textiles');
     expect(outsourcingPhase.loss_reason).toBe('External finishing loss');
     expect(outsourcingPhase.duration_minutes).toBe(60);
 

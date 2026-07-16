@@ -11,3 +11,5 @@ export * from './PageHeader';
 export * from './Modal';
 export * from './Spinner';
 export * from './ErrorMsg';
+export { default as OrderDetailsSummary } from './OrderDetailsSummary';
+
