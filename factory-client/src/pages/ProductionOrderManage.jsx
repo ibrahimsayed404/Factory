@@ -4,7 +4,7 @@ import { productApi, productionTrackingApi } from '../api';
 
 import { useFetch } from '../hooks/useFetch';
 
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg, statusVariant } from '../components/ui';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg, statusVariant, SearchInput } from '../components/ui';
 
 import { useLanguage } from '../context/LanguageContext';
 
@@ -78,6 +78,8 @@ export default function ProductionOrderManage() {
 
   const [success, setSuccess] = useState('');
 
+  const [searchTerm, setSearchTerm] = useState('');
+
 
 
   const productNameById = useMemo(() => buildProductNameLookup(products), [products]);
@@ -85,12 +87,26 @@ export default function ProductionOrderManage() {
 
 
   const displayed = useMemo(() => {
-
-    const list = orders || [];
-
-    return statusFilter ? list.filter((o) => o.status === statusFilter) : list;
-
-  }, [orders, statusFilter]);
+    let list = orders || [];
+    
+    // Apply status filter
+    if (statusFilter) {
+      list = list.filter((o) => o.status === statusFilter);
+    }
+    
+    // Apply search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase().trim();
+      list = list.filter(order => 
+        (order.order_number?.toLowerCase() || '').includes(term) ||
+        (order.product_name?.toLowerCase() || '').includes(term) ||
+        (order.status?.toLowerCase() || '').includes(term) ||
+        (order.model_number?.toLowerCase() || '').includes(term)
+      );
+    }
+    
+    return list;
+  }, [orders, statusFilter, searchTerm]);
 
 
 
@@ -376,21 +392,20 @@ export default function ProductionOrderManage() {
 
       {printError && <div style={{ marginBottom: 12 }}><ErrorMsg msg={printError} /></div>}
 
-      {success && <div style={{ marginBottom: 12, color: 'var(--accent)', fontSize: 13 }}>{success}</div>}
-
-
-
       {!loading && (
-
-        <Card padding="0">
-
-          <Table columns={columns} data={displayed} />
-
-        </Card>
-
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <SearchInput 
+              placeholder="Search by order number, product name, status, or model number..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0"><Table columns={columns} data={displayed} /></Card>
+        </>
       )}
 
-
+      {success && <div style={{ marginBottom: 12, color: 'var(--accent)', fontSize: 13 }}>{success}</div>}
 
       {deleteTarget && (
 
