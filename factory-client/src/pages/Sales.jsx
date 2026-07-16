@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { salesApi, productApi, productionTrackingApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant } from '../components/ui';
@@ -127,6 +127,19 @@ export default function Sales() {
   const [detailOrder, setDetailOrder] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [productionMetrics, setProductionMetrics] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredOrders = useMemo(() => {
+    if (!orders) return [];
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return orders;
+    return orders.filter(order => 
+      (order.order_number?.toLowerCase() || '').includes(term) ||
+      (order.customer_name?.toLowerCase() || '').includes(term) ||
+      (order.status?.toLowerCase() || '').includes(term) ||
+      (order.payment_status?.toLowerCase() || '').includes(term)
+    );
+  }, [orders, searchTerm]);
 
   const addOrderRow = () => setOrderRows([...orderRows, createEmptyOrderRow()]);
   const updateOrderRowDynamic = (i, updates) => setOrderRows(prev => prev.map((it, idx) => idx === i ? { ...it, ...updates } : it));
@@ -312,7 +325,18 @@ export default function Sales() {
       />
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
-      {!loading && <Card padding="0"><Table columns={columns} data={orders || []} /></Card>}
+      {!loading && (
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <Input 
+              placeholder="Search by order number, customer, status, or payment status..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0"><Table columns={columns} data={filteredOrders} /></Card>
+        </>
+      )}
 
       {showModal && (
         <Modal title={t('newSalesOrder', 'New sales order')} onClose={() => setShowModal(false)} width={560}>

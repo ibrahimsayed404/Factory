@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { productApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
@@ -15,6 +15,17 @@ export default function Products() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredProducts = useMemo(() => {
+    if (!items) return [];
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return items;
+    return items.filter(item => 
+      (item.name?.toLowerCase() || '').includes(term) ||
+      (item.description?.toLowerCase() || '').includes(term)
+    );
+  }, [items, searchTerm]);
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setShowModal(true); };
   const openEdit = (item) => { setForm(item); setEditing(item.id); setShowModal(true); };
@@ -94,9 +105,18 @@ export default function Products() {
       {error && <ErrorMsg msg={error} />}
 
       {!loading && (
-        <Card padding="0">
-          <Table columns={columns} data={items || []} />
-        </Card>
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <Input 
+              placeholder="Search by name or description..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0">
+            <Table columns={columns} data={filteredProducts} />
+          </Card>
+        </>
       )}
 
       {successMsg && <div style={{color:'var(--accent)',margin:'12px 0',fontWeight:600}}>{successMsg}</div>}

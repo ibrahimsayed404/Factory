@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { salesApi, resolveApiAssetUrl } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, MetricCard, Badge, statusVariant } from '../components/ui';
@@ -37,6 +37,21 @@ export default function Customers() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [formError, setFormError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredCustomers = useMemo(() => {
+    if (!customers) return [];
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return customers;
+    return customers.filter(customer => 
+      (customer.name?.toLowerCase() || '').includes(term) ||
+      (customer.email?.toLowerCase() || '').includes(term) ||
+      (customer.phone?.toLowerCase() || '').includes(term) ||
+      (customer.city?.toLowerCase() || '').includes(term) ||
+      (customer.country?.toLowerCase() || '').includes(term) ||
+      (customer.address?.toLowerCase() || '').includes(term)
+    );
+  }, [customers, searchTerm]);
 
   const enrichLedgerOrders = async (orders = []) => Promise.all(
     (orders || []).map(async (order) => {
@@ -387,7 +402,18 @@ export default function Customers() {
       />
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
-      {!loading && <Card padding="0"><Table columns={columns} data={customers || []} /></Card>}
+      {!loading && (
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <Input 
+              placeholder="Search by name, email, phone, city, country, or address..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0"><Table columns={columns} data={filteredCustomers} /></Card>
+        </>
+      )}
 
       {successMsg && <div style={{color:'var(--accent)',margin:'12px 0',fontWeight:600}}>{successMsg}</div>}
 

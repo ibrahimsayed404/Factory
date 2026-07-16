@@ -60,6 +60,7 @@ export default function Production() {
   const [statusFilter, setStatusFilter] = useState('');
   const [createError, setCreateError] = useState('');
   const [progressError, setProgressError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const progressProducedQty = Number(progressForm.produced_qty || 0);
   const progressTotalQty = Number(progressForm.quantity || 0);
@@ -145,9 +146,22 @@ export default function Production() {
 
   const f = v => e => setForm({ ...form, [v]: e.target.value });
 
-  const displayed = statusFilter
-    ? (orders || []).filter((o) => o.status === statusFilter)
-    : (orders || []);
+  const displayed = useMemo(() => {
+    let result = orders || [];
+    if (statusFilter) {
+      result = result.filter((o) => o.status === statusFilter);
+    }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase().trim();
+      result = result.filter(order => 
+        (order.order_number?.toLowerCase() || '').includes(term) ||
+        (order.product_name?.toLowerCase() || '').includes(term) ||
+        (order.status?.toLowerCase() || '').includes(term) ||
+        (order.model_number?.toLowerCase() || '').includes(term)
+      );
+    }
+    return result;
+  }, [orders, statusFilter, searchTerm]);
 
   const renderQuantity = (row) => {
     if (isTrackingOrder(row)) {
@@ -231,7 +245,18 @@ export default function Production() {
       />
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
-      {!loading && <Card padding="0"><Table columns={columns} data={displayed} /></Card>}
+      {!loading && (
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <Input 
+              placeholder="Search by order number, product name, status, or model number..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0"><Table columns={columns} data={displayed} /></Card>
+        </>
+      )}
 
       {showModal && (
         <Modal title="New production order" onClose={() => setShowModal(false)} width={520}>

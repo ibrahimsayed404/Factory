@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { inventoryApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
@@ -16,6 +16,20 @@ export default function Inventory() {
   const [filterLow, setFilterLow] = useState(false);
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return items;
+    return items.filter(item => 
+      (item.name?.toLowerCase() || '').includes(term) ||
+      (item.category?.toLowerCase() || '').includes(term) ||
+      (item.color?.toLowerCase() || '').includes(term) ||
+      (item.unit?.toLowerCase() || '').includes(term) ||
+      (item.supplier?.toLowerCase() || '').includes(term)
+    );
+  }, [items, searchTerm]);
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setShowModal(true); };
   const openEdit = (item) => { setForm(item); setEditing(item.id); setShowModal(true); };
@@ -67,9 +81,13 @@ export default function Inventory() {
   const f = v => e => setForm({ ...form, [v]: e.target.value });
   const quantityValue = (value) => Number.parseFloat(value);
 
-  const displayed = filterLow
-    ? (items || []).filter(i => quantityValue(i.quantity) <= quantityValue(i.min_quantity))
-    : items || [];
+  const displayed = useMemo(() => {
+    let result = filteredItems;
+    if (filterLow) {
+      result = result.filter(i => quantityValue(i.quantity) <= quantityValue(i.min_quantity));
+    }
+    return result;
+  }, [filteredItems, filterLow]);
 
   const lowCount = (items || []).filter(i => quantityValue(i.quantity) <= quantityValue(i.min_quantity)).length;
 
@@ -120,9 +138,18 @@ export default function Inventory() {
       {error && <ErrorMsg msg={error} />}
 
       {!loading && (
-        <Card padding="0">
-          <Table columns={columns} data={displayed} />
-        </Card>
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <Input 
+              placeholder="Search by name, category, color, unit, or supplier..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0">
+            <Table columns={columns} data={displayed} />
+          </Card>
+        </>
       )}
 
       {successMsg && <div style={{color:'var(--accent)',margin:'12px 0',fontWeight:600}}>{successMsg}</div>}

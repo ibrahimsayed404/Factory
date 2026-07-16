@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { employeeApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg } from '../components/ui';
@@ -77,6 +77,20 @@ export default function Employees() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredEmployees = useMemo(() => {
+    if (!employees) return [];
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return employees;
+    return employees.filter(emp => 
+      (emp.name?.toLowerCase() || '').includes(term) ||
+      (emp.department_name?.toLowerCase() || '').includes(term) ||
+      (emp.role?.toLowerCase() || '').includes(term) ||
+      (emp.phone?.toLowerCase() || '').includes(term) ||
+      (emp.device_user_id?.toString() || '').includes(term)
+    );
+  }, [employees, searchTerm]);
 
   const openCreate = () => { setForm(emptyForm); setEditing(null); setShowModal(true); };
   const openEdit = (emp) => {
@@ -191,7 +205,18 @@ export default function Employees() {
       />
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
-      {!loading && <Card padding="0"><Table columns={columns} data={employees || []} /></Card>}
+      {!loading && (
+        <>
+          <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+            <Input 
+              placeholder="Search by name, department, role, phone, or device ID..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </Card>
+          <Card padding="0"><Table columns={columns} data={filteredEmployees} /></Card>
+        </>
+      )}
 
       {showModal && (
         <Modal title={editing ? 'Edit employee' : 'Add employee'} onClose={() => setShowModal(false)} width={520}>

@@ -370,27 +370,39 @@ export default function Attendance() {
   const totalLate     = summary.reduce((a, s) => a + s.records.filter(r => r.status === 'late').length, 0);
   const totalHours    = summary.reduce((a, s) => a + s.records.reduce((b, r) => b + parseFloat(r.hours_worked || 0), 0), 0);
 
+  // Search functionality
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Summary table columns
-  const summaryTableData = useMemo(() => summary.map(s => {
-    const presentCount = s.records.filter(r => r.status === 'present').length;
-    const lateCount = s.records.filter(r => r.status === 'late').length;
-    const absentCount = s.records.filter(r => r.status === 'absent').length;
-    const totalHrs = parseFloat(s.records.reduce((a, r) => a + parseFloat(r.hours_worked || 0), 0).toFixed(1));
-    const total = s.records.length;
-    const rate = total > 0 ? Math.round(((presentCount + lateCount) / total) * 100) : 0;
-    return {
-      id: s.emp.id,
-      emp: s.emp,
-      records: s.records,
-      device_user_id: s.emp.device_user_id || '',
-      empName: s.emp.name || '',
-      presentCount,
-      lateCount,
-      absentCount,
-      totalHrs,
-      rate,
-    };
-  }), [summary]);
+  const summaryTableData = useMemo(() => {
+    const data = summary.map(s => {
+      const presentCount = s.records.filter(r => r.status === 'present').length;
+      const lateCount = s.records.filter(r => r.status === 'late').length;
+      const absentCount = s.records.filter(r => r.status === 'absent').length;
+      const totalHrs = parseFloat(s.records.reduce((a, r) => a + parseFloat(r.hours_worked || 0), 0).toFixed(1));
+      const total = s.records.length;
+      const rate = total > 0 ? Math.round(((presentCount + lateCount) / total) * 100) : 0;
+      return {
+        id: s.emp.id,
+        emp: s.emp,
+        records: s.records,
+        device_user_id: s.emp.device_user_id || '',
+        empName: s.emp.name || '',
+        presentCount,
+        lateCount,
+        absentCount,
+        totalHrs,
+        rate,
+      };
+    });
+
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return data;
+    return data.filter(row => 
+      (row.empName?.toLowerCase() || '').includes(term) ||
+      (row.device_user_id?.toString() || '').includes(term)
+    );
+  }, [summary, searchTerm]);
 
   const summaryColumns = [
     { key: 'device_user_id', label: t('deviceNo', 'Device No'), render: v => (
@@ -468,6 +480,17 @@ export default function Attendance() {
         <MetricCard label="Days absent"   value={totalAbsent}           color="var(--danger)" />
         <MetricCard label="Total hours"   value={`${totalHours.toFixed(0)}h`} />
       </div>
+
+      {/* Search bar for summary view */}
+      {!selectedEmp && (
+        <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+          <Input 
+            placeholder="Search by employee name or device ID..." 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+        </Card>
+      )}
 
       {/* Employee detail view */}
       {selectedEmp ? (
