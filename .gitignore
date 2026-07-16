@@ -19,4 +19,4 @@ nssm-2.24/
 *.njsproj
 *.sln
 
-.vercel
+.env*
