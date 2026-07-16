@@ -216,18 +216,52 @@ export default function Payroll() {
 
     const { printHtmlDocument } = await import('../utils/printDocument');
 
-    const recordsHtml = sortedRecords.map(row => `
-      <tr>
-        <td>${row.employee_name || '—'}</td>
-        <td>${row.department_name || '—'}</td>
-        <td>${row.role || '—'}</td>
-        <td class="num">$${Number(row.base_salary || 0).toLocaleString()}</td>
-        <td class="num">${Number(row.bonus || 0) > 0 ? `+$${Number(row.bonus).toLocaleString()}` : '—'}</td>
-        <td class="num">${Number(row.deductions || 0) > 0 ? `-$${Number(row.deductions).toLocaleString()}` : '—'}</td>
-        <td class="num"><strong>$${Number(row.net_salary || 0).toLocaleString()}</strong></td>
-        <td><span class="badge ${row.status || 'pending'}">${row.status || 'pending'}</span></td>
-      </tr>
-    `).join('');
+    const renderBreakdownField = (label, value, isCurrency = false) => {
+      if (value === 0 || value === null || value === undefined || value === '') return '';
+      const formatted = isCurrency ? `$${Number(value).toLocaleString()}` : value;
+      return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong>${formatted}</strong></div>`;
+    };
+
+    const employeeBreakdowns = sortedRecords.map(row => {
+      const breakdown = row.payroll_breakdown || {};
+      const fields = [
+        { label: t('base', 'Base'), value: row.base_salary, isCurrency: true },
+        { label: t('autoBonus', 'Auto bonus'), value: breakdown.auto_bonus, isCurrency: true },
+        { label: t('autoDeductions', 'Auto deductions'), value: breakdown.auto_deductions, isCurrency: true },
+        { label: t('manualBonus', 'Manual bonus'), value: breakdown.manual_bonus, isCurrency: true },
+        { label: t('manualDeductions', 'Manual deductions'), value: breakdown.manual_deductions, isCurrency: true },
+        { label: t('loanDeduction', 'Loan deduction'), value: breakdown.loan_deduction, isCurrency: true },
+        { label: t('lateMinutes', 'Late minutes'), value: breakdown.late_minutes },
+        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: breakdown.late_weighted_minutes },
+        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: breakdown.early_leave_minutes },
+        { label: t('regularOvertime', 'Regular overtime'), value: breakdown.overtime_minutes },
+        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: breakdown.weekend_overtime_minutes },
+        { label: t('totalOvertime', 'Total overtime (×1.5)'), value: Math.round((breakdown.overtime_minutes || 0) * 1.5) },
+        { label: t('absentDays', 'Absent days'), value: breakdown.absent_days },
+        { label: t('halfDays', 'Half days'), value: breakdown.half_days },
+        { label: t('inferredAbsentDays', 'Inferred absent days'), value: breakdown.inferred_absent_days },
+      ];
+
+      const nonZeroFields = fields.filter(f => f.value !== 0 && f.value !== null && f.value !== undefined && f.value !== '');
+      const fieldsHtml = nonZeroFields.map(f => renderBreakdownField(f.label, f.value, f.isCurrency)).join('');
+
+      return `
+        <div style="page-break-inside: avoid; margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #0f1117;">
+            <div>
+              <div style="font-size: 16px; font-weight: 700; color: #0f1117;">${row.employee_name || '—'}</div>
+              <div style="font-size: 12px; color: #64748b;">${row.department_name || '—'} · ${row.role || '—'}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 18px; font-weight: 700; color: #0f6e56;">$${Number(row.net_salary || 0).toLocaleString()}</div>
+              <div style="font-size: 11px; color: #64748b;">${t('netSalary', 'Net salary')}</div>
+            </div>
+          </div>
+          ${fieldsHtml}
+          ${row.week_start ? `<div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">${formatWeekInterval(row.week_start, row.week_end, t)}</div>` : ''}
+        </div>
+      `;
+    }).join('');
 
     const html = `
       <!DOCTYPE html>
@@ -376,23 +410,7 @@ export default function Payroll() {
             <div class="val">${selectedWeek.paidCount}/${selectedWeek.employeeCount} ${t('paid', 'paid')}</div>
           </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>${t('employee', 'Employee')}</th>
-              <th>${t('department', 'Department')}</th>
-              <th>${t('role', 'Role')}</th>
-              <th class="num">${t('base', 'Base')}</th>
-              <th class="num">${t('bonus', 'Bonus')}</th>
-              <th class="num">${t('deductions', 'Deductions')}</th>
-              <th class="num">${t('netSalary', 'Net salary')}</th>
-              <th>${t('status', 'Status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${recordsHtml}
-          </tbody>
-        </table>
+        ${employeeBreakdowns}
       </body>
       </html>
     `;
