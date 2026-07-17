@@ -69,6 +69,19 @@ const getLocalDateString = (dateVal) => {
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 /**
+ * Formats minutes to hours when > 60
+ * @param {number} minutes - The minutes value to format
+ * @returns {string} Formatted string (e.g., "90" -> "1h 30m", "45" -> "45m")
+ */
+const formatMinutes = (minutes) => {
+  if (!minutes || minutes === 0) return '0';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
+
+/**
  * Formats a week interval like: "from Saturday to Thursday from 4/7 to 9/7"
  */
 const formatWeekInterval = (weekStart, weekEnd, t) => {
@@ -222,6 +235,14 @@ export default function Payroll() {
       return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong>${formatted}</strong></div>`;
     };
 
+    const formatMinutesForPDF = (minutes) => {
+      if (!minutes || minutes === 0) return '0';
+      if (minutes < 60) return `${minutes}m`;
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    };
+
     const employeeBreakdowns = sortedRecords.map(row => {
       const breakdown = row.payroll_breakdown || {};
       const fields = [
@@ -231,12 +252,12 @@ export default function Payroll() {
         { label: t('manualBonus', 'Manual bonus'), value: breakdown.manual_bonus, isCurrency: true },
         { label: t('manualDeductions', 'Manual deductions'), value: breakdown.manual_deductions, isCurrency: true },
         { label: t('loanDeduction', 'Loan deduction'), value: breakdown.loan_deduction, isCurrency: true },
-        { label: t('lateMinutes', 'Late minutes'), value: breakdown.late_minutes },
-        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: breakdown.late_weighted_minutes },
-        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: breakdown.early_leave_minutes },
-        { label: t('regularOvertime', 'Regular overtime'), value: breakdown.overtime_minutes },
-        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: breakdown.weekend_overtime_minutes },
-        { label: t('totalOvertime', 'Total overtime (×1.5)'), value: Math.round((breakdown.overtime_minutes || 0) * 1.5) },
+        { label: t('lateMinutes', 'Late minutes'), value: formatMinutesForPDF(breakdown.late_minutes) },
+        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: formatMinutesForPDF(breakdown.late_weighted_minutes) },
+        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: formatMinutesForPDF(breakdown.early_leave_minutes) },
+        { label: t('regularOvertime', 'Regular overtime'), value: formatMinutesForPDF(breakdown.overtime_minutes) },
+        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: formatMinutesForPDF(breakdown.weekend_overtime_minutes) },
+        { label: t('totalOvertime', 'Total overtime (×1.5)'), value: formatMinutesForPDF(Math.round((breakdown.overtime_minutes || 0) * 1.5)) },
         { label: t('absentDays', 'Absent days'), value: breakdown.absent_days },
         { label: t('halfDays', 'Half days'), value: breakdown.half_days },
         { label: t('inferredAbsentDays', 'Inferred absent days'), value: breakdown.inferred_absent_days },
@@ -580,12 +601,12 @@ export default function Payroll() {
           </div>
 
           <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12 }}>
-            <Card padding="10px 12px">{t('lateMinutes', 'Late minutes')}: <strong>{selectedBreakdown.payroll_breakdown?.late_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('lateWeightedMinutes', 'Late weighted minutes')}: <strong>{selectedBreakdown.payroll_breakdown?.late_weighted_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('earlyLeaveMinutes', 'Early leave minutes')}: <strong>{selectedBreakdown.payroll_breakdown?.early_leave_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{selectedBreakdown.payroll_breakdown?.overtime_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('weekendWorkOvertime', 'Weekend work overtime')}: <strong>{selectedBreakdown.payroll_breakdown?.weekend_overtime_minutes || 0}</strong></Card>
-            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime (×1.5)')}: <strong>{Math.round((selectedBreakdown.payroll_breakdown?.overtime_minutes || 0) * 1.5)}</strong></Card>
+            <Card padding="10px 12px">{t('lateMinutes', 'Late minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.late_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('lateWeightedMinutes', 'Late weighted minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.late_weighted_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('earlyLeaveMinutes', 'Early leave minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.early_leave_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.overtime_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('weekendWorkOvertime', 'Weekend work overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.weekend_overtime_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime (×1.5)')}: <strong>{formatMinutes(Math.round((selectedBreakdown.payroll_breakdown?.overtime_minutes || 0) * 1.5))}</strong></Card>
             <Card padding="10px 12px">{t('absentDays', 'Absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.absent_days || 0}</strong></Card>
             <Card padding="10px 12px">{t('halfDays', 'Half days')}: <strong>{selectedBreakdown.payroll_breakdown?.half_days || 0}</strong></Card>
             <Card padding="10px 12px">{t('inferredAbsentDays', 'Inferred absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.inferred_absent_days || 0}</strong></Card>
