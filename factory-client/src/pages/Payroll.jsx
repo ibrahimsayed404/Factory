@@ -236,7 +236,7 @@ export default function Payroll() {
     };
 
     const formatMinutesForPDF = (minutes) => {
-      if (!minutes || minutes === 0) return '0';
+      if (!minutes || minutes === 0) return 0;
       if (minutes < 60) return `${minutes}m`;
       const hours = Math.floor(minutes / 60);
       const remainingMinutes = minutes % 60;
