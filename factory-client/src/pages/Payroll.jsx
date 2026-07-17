@@ -246,24 +246,26 @@ export default function Payroll() {
     const employeeBreakdowns = sortedRecords.map(row => {
       const breakdown = row.payroll_breakdown || {};
       const fields = [
-        { label: t('base', 'Base'), value: row.base_salary, isCurrency: true },
-        { label: t('autoBonus', 'Auto bonus'), value: breakdown.auto_bonus, isCurrency: true },
-        { label: t('autoDeductions', 'Auto deductions'), value: breakdown.auto_deductions, isCurrency: true },
-        { label: t('manualBonus', 'Manual bonus'), value: breakdown.manual_bonus, isCurrency: true },
-        { label: t('manualDeductions', 'Manual deductions'), value: breakdown.manual_deductions, isCurrency: true },
-        { label: t('loanDeduction', 'Loan deduction'), value: breakdown.loan_deduction, isCurrency: true },
-        { label: t('lateMinutes', 'Late minutes'), value: formatMinutesForPDF(breakdown.late_minutes) },
-        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: formatMinutesForPDF(breakdown.late_weighted_minutes) },
-        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: formatMinutesForPDF(breakdown.early_leave_minutes) },
-        { label: t('regularOvertime', 'Regular overtime'), value: formatMinutesForPDF(breakdown.overtime_minutes) },
-        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: formatMinutesForPDF(breakdown.weekend_overtime_minutes) },
-        { label: t('totalOvertime', 'Total overtime (×1.5)'), value: formatMinutesForPDF(Math.round((breakdown.overtime_minutes || 0) * 1.5)) },
-        { label: t('absentDays', 'Absent days'), value: breakdown.absent_days },
-        { label: t('halfDays', 'Half days'), value: breakdown.half_days },
-        { label: t('inferredAbsentDays', 'Inferred absent days'), value: breakdown.inferred_absent_days },
+        { label: t('base', 'Base'), value: row.base_salary, isCurrency: true, required: true },
+        { label: t('autoBonus', 'Auto bonus'), value: breakdown.auto_bonus, isCurrency: true, required: false },
+        { label: t('autoDeductions', 'Auto deductions'), value: breakdown.auto_deductions, isCurrency: true, required: true },
+        { label: t('manualBonus', 'Manual bonus'), value: breakdown.manual_bonus, isCurrency: true, required: false },
+        { label: t('manualDeductions', 'Manual deductions'), value: breakdown.manual_deductions, isCurrency: true, required: false },
+        { label: t('loanDeduction', 'Loan deduction'), value: breakdown.loan_deduction, isCurrency: true, required: false },
+        { label: t('lateMinutes', 'Late minutes'), value: formatMinutesForPDF(breakdown.late_minutes), required: true },
+        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: formatMinutesForPDF(breakdown.late_weighted_minutes), required: true },
+        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: formatMinutesForPDF(breakdown.early_leave_minutes), required: false },
+        { label: t('regularOvertime', 'Regular overtime'), value: formatMinutesForPDF(breakdown.overtime_minutes), required: false },
+        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: formatMinutesForPDF(breakdown.weekend_overtime_minutes), required: false },
+        { label: t('totalOvertime', 'Total overtime (×1.5)'), value: formatMinutesForPDF(Math.round((breakdown.overtime_minutes || 0) * 1.5)), required: false },
+        { label: t('absentDays', 'Absent days'), value: breakdown.absent_days, required: false },
+        { label: t('halfDays', 'Half days'), value: breakdown.half_days, required: false },
+        { label: t('inferredAbsentDays', 'Inferred absent days'), value: breakdown.inferred_absent_days, required: false },
       ];
 
-      const nonZeroFields = fields.filter(f => f.value !== 0 && f.value !== null && f.value !== undefined && f.value !== '');
+      const nonZeroFields = fields.filter(f => 
+        f.required || (f.value !== 0 && f.value !== null && f.value !== undefined && f.value !== '')
+      );
       const fieldsHtml = nonZeroFields.map(f => renderBreakdownField(f.label, f.value, f.isCurrency)).join('');
 
       return `
