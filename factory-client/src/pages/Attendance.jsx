@@ -115,39 +115,6 @@ const computeShiftMetrics = (employee, checkIn, checkOut) => {
 
 const toDateKey = (value) => String(value || '').split('T')[0];
 
-const getWeekOfMonth = (dateValue) => {
-  const parts = parseDateParts(dateValue);
-  if (!parts) return null;
-  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
-  const firstDay = new Date(Date.UTC(parts.year, parts.month - 1, 1));
-  const dayOfWeek = date.getUTCDay();
-  const firstDayOfWeek = firstDay.getUTCDay();
-  
-  // Calculate the week number (1-5)
-  const dayOfMonth = parts.day;
-  const offset = (dayOfWeek - firstDayOfWeek + 7) % 7;
-  const weekNumber = Math.ceil((dayOfMonth + offset) / 7);
-  
-  return Math.min(weekNumber, 5); // Cap at 5 weeks
-};
-
-const getWeekDateRange = (year, month, weekNumber) => {
-  const firstDay = new Date(Date.UTC(year, month - 1, 1));
-  const firstDayOfWeek = firstDay.getUTCDay();
-  
-  // Calculate start and end dates for the week
-  const startDay = (weekNumber - 1) * 7 - firstDayOfWeek + 1;
-  const endDay = startDay + 6;
-  
-  const startDate = new Date(Date.UTC(year, month - 1, Math.max(1, startDay)));
-  const endDate = new Date(Date.UTC(year, month - 1, Math.min(endDay, new Date(year, month, 0).getDate())));
-  
-  return {
-    start: `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}-${String(startDate.getUTCDate()).padStart(2, '0')}`,
-    end: `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`
-  };
-};
-
 const weekendSetFrom = (weekendDays) => {
   const raw = String(weekendDays || '0,6');
   return new Set(
@@ -285,7 +252,8 @@ export default function Attendance() {
   const now = new Date();
   const [month, setMonth]  = useState(now.getMonth() + 1);
   const [year,  setYear]   = useState(now.getFullYear());
-  const [selectedWeek, setSelectedWeek] = useState(null); // null = show all weeks, number = week number (1-5)
+  const [startDate, setStartDate] = useState(`${year}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
+  const [endDate, setEndDate] = useState(`${year}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(year, now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`);
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [empRecords, setEmpRecords]   = useState([]);
   const [empLoading, setEmpLoading]   = useState(false);
@@ -410,12 +378,11 @@ export default function Attendance() {
   // Summary table columns
   const summaryTableData = useMemo(() => {
     const data = summary.map(s => {
-      // Filter records by selected week if applicable
+      // Filter records by date range if applicable
       let filteredRecords = s.records;
-      if (selectedWeek) {
+      if (startDate && endDate) {
         filteredRecords = s.records.filter(r => {
-          const weekNum = getWeekOfMonth(r.date);
-          return weekNum === selectedWeek;
+          return r.date >= startDate && r.date <= endDate;
         });
       }
 
@@ -445,7 +412,7 @@ export default function Attendance() {
       (row.empName?.toLowerCase() || '').includes(term) ||
       (row.device_user_id?.toString() || '').includes(term)
     );
-  }, [summary, searchTerm, selectedWeek]);
+  }, [summary, searchTerm, startDate, endDate]);
 
   const summaryColumns = [
     { key: 'device_user_id', label: t('deviceNo', 'Device No'), render: v => (
@@ -524,31 +491,33 @@ export default function Attendance() {
         <MetricCard label="Total hours"   value={`${totalHours.toFixed(0)}h`} />
       </div>
 
-      {/* Week selector */}
+      {/* Date range filter */}
       {!selectedEmp && (
         <Card padding="12px 16px" style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Filter by week:</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Filter by date range:</span>
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={e => setStartDate(e.target.value)}
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>to</span>
+            <input 
+              type="date" 
+              value={endDate} 
+              onChange={e => setEndDate(e.target.value)}
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
+            />
             <Btn 
               size="sm" 
-              variant={selectedWeek === null ? 'primary' : 'default'}
-              onClick={() => setSelectedWeek(null)}
+              onClick={() => {
+                setStartDate(`${year}-${String(month).padStart(2, '0')}-01`);
+                setEndDate(`${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`);
+              }}
             >
-              All weeks
+              Reset to month
             </Btn>
-            {[1, 2, 3, 4, 5].map(weekNum => {
-              const range = getWeekDateRange(year, month, weekNum);
-              return (
-                <Btn
-                  key={weekNum}
-                  size="sm"
-                  variant={selectedWeek === weekNum ? 'primary' : 'default'}
-                  onClick={() => setSelectedWeek(weekNum)}
-                >
-                  Week {weekNum} ({range.start} - {range.end})
-                </Btn>
-              );
-            })}
           </div>
         </Card>
       )}
