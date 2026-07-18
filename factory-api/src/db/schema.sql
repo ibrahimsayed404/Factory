@@ -332,7 +332,6 @@ CREATE TABLE IF NOT EXISTS payroll (
   hr_overtime NUMERIC(10,2) DEFAULT 0,
   paid_at TIMESTAMP,
   status VARCHAR(30) DEFAULT 'pending', -- pending, paid
-  UNIQUE(employee_id, month, year),
   UNIQUE(employee_id, week_start)
 );
 
