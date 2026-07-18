@@ -2,7 +2,7 @@ const pool = require('../db/pool');
 
 let hasWeekendDaysColumnCache = null;
 const hasWeekendDaysColumn = async () => {
-  if (hasWeekendDaysColumnCache === true) return true;
+  if (hasWeekendDaysColumnCache !== null) return hasWeekendDaysColumnCache;
   const result = await pool.query(
     `SELECT EXISTS (
       SELECT 1
