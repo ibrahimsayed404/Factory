@@ -1,4 +1,5 @@
 const payrollService = require('../services/payrollService');
+const { runAutoPayrollForCurrentWeek } = require('../services/autoPayrollScheduler');
 
 const getAll = async (req, res, next) => {
   try {
@@ -7,6 +8,8 @@ const getAll = async (req, res, next) => {
       month: req.query.month,
       year: req.query.year,
       status: req.query.status,
+      dateFrom: req.query.date_from,
+      dateTo: req.query.date_to,
       page: req.query.page,
       limit: req.query.limit,
     });
@@ -35,13 +38,6 @@ const updateManual = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-const generateMonthly = async (req, res, next) => {
-  try {
-    const result = await payrollService.generateMonthlyPayroll(req.body);
-    res.status(201).json(result);
-  } catch (err) { next(err); }
-};
-
 const deleteWeek = async (req, res, next) => {
   try {
     const result = await payrollService.deletePayrollWeek(req.params.weekStart);
@@ -49,4 +45,11 @@ const deleteWeek = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAll, create, markPaid, updateManual, generateMonthly, deleteWeek };
+const autoRun = async (req, res, next) => {
+  try {
+    await runAutoPayrollForCurrentWeek();
+    res.json({ success: true, message: 'Auto payroll check completed.' });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAll, create, markPaid, updateManual, deleteWeek, autoRun };

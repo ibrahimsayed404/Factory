@@ -4,6 +4,10 @@ import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
 import { useLanguage } from '../context/LanguageContext';
 import { groupPayrollByWeek } from '../utils/payrollGrouping';
+import { formatMinutes, formatCurrency } from '../utils/payrollFormat';
+
+// Weekly payroll periods run Saturday → Friday (7 days inclusive).
+const WEEK_LENGTH_DAYS = 6;
 
 const getCurrentWeekStartIso = () => {
   const now = new Date();
@@ -18,19 +22,21 @@ const getCurrentWeekStartIso = () => {
   return `${y}-${m}-${d}`;
 };
 
-/** Parse an ISO date string or Date object to a local Date object timezone-safely */
+/**
+ * Parse an ISO date string or Date object to a local-midnight Date object,
+ * timezone-safely. The API now serializes payroll dates as plain YYYY-MM-DD, but
+ * we still defensively extract the calendar date from any ISO-with-time string
+ * (rather than `new Date(str)`, which parses the trailing Z as UTC and can shift
+ * the day on negative-offset clients).
+ */
 const parseLocalDate = (dateVal) => {
   if (!dateVal) return null;
   if (dateVal instanceof Date) return dateVal;
-  const str = String(dateVal);
-  if (str.includes('T')) {
-    return new Date(str);
-  }
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateVal));
   if (match) {
     return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   }
-  return new Date(str);
+  return null;
 };
 
 const normalizeToSaturdayIso = (isoDate) => {
@@ -69,24 +75,11 @@ const getLocalDateString = (dateVal) => {
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 /**
- * Formats minutes to hours when > 60
- * @param {number} minutes - The minutes value to format
- * @returns {string} Formatted string (e.g., "90" -> "1h 30m", "45" -> "45m")
- */
-const formatMinutes = (minutes) => {
-  if (!minutes || minutes === 0) return '0';
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-};
-
-/**
- * Formats a week interval like: "from Saturday to Thursday from 4/7 to 9/7"
+ * Formats a week interval like: "from Saturday to Friday from 4/7 to 10/7"
  */
 const formatWeekInterval = (weekStart, weekEnd, t) => {
   const startDate = parseLocalDate(weekStart);
-  const endDate = parseLocalDate(weekEnd || (weekStart ? addDaysIso(weekStart, 5) : null));
+  const endDate = parseLocalDate(weekEnd || (weekStart ? addDaysIso(weekStart, WEEK_LENGTH_DAYS) : null));
   if (!startDate) return weekStart || '—';
 
   const startDay = startDate.getDate();
@@ -114,19 +107,42 @@ const loadReportExportModules = async () => {
   return reportExportModules;
 };
 
-export default function Payroll() {
-  const { t } = useLanguage();
+// Default the visible window to roughly the last 12 weeks, bounded so the fetch
+// never silently truncates. Users can widen the range via the filter bar.
+const defaultDateFrom = () => addDaysIso(getCurrentWeekStartIso(), -7 * 12);
 
-  const { data: records, loading, error, refetch } = useFetch(
-    () => payrollApi.list('?limit=1000'), []
+export default function Payroll() {
+  const { t, language } = useLanguage();
+
+  const [filters, setFilters] = useState({
+    from: defaultDateFrom(),
+    to: getCurrentWeekStartIso(),
+    status: '',      // '', 'pending', 'paid'
+    employee: '',    // client-side name search
+  });
+
+  const buildQuery = () => {
+    const params = new URLSearchParams({ limit: '2000' });
+    if (filters.from) params.set('date_from', filters.from);
+    if (filters.to) params.set('date_to', filters.to);
+    if (filters.status) params.set('status', filters.status);
+    return `?${params.toString()}`;
+  };
+
+  const { data: payrollPage, loading, error, refetch } = useFetch(
+    () => payrollApi.listPaged(buildQuery()),
+    [filters.from, filters.to, filters.status]
   );
+  const records = payrollPage?.data || [];
+  const truncated = payrollPage ? payrollPage.total > records.length : false;
 
   const [showModal, setShowModal] = useState(false);
   const [selectedBreakdown, setSelectedBreakdown] = useState(null);
   const [selectedWeekStart, setSelectedWeekStart] = useState(null);
-  const [form, setForm] = useState({ week_start: getCurrentWeekStartIso(), bonus: '0', deductions: '0' });
+  const [form, setForm] = useState({ week_start: getCurrentWeekStartIso() });
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [actionNotice, setActionNotice] = useState('');
 
   // Adjust modal state
   const [adjustTarget, setAdjustTarget] = useState(null);
@@ -146,17 +162,31 @@ export default function Payroll() {
     }
     setSaving(true);
     setActionError('');
+    setActionNotice('');
     try {
-      await payrollApi.create({
-        week_start: normalizedWeekStart,
-        bonus: form.bonus,
-        deductions: form.deductions,
-      });
+      const result = await payrollApi.create({ week_start: normalizedWeekStart });
       setShowModal(false);
-      await refetch({ silent: true });
+      // Bulk generation returns { generated, failed }. Surface any per-employee
+      // failures instead of silently succeeding.
+      const failed = Array.isArray(result?.failed) ? result.failed : [];
+      if (failed.length > 0) {
+        setActionError(
+          t('payrollPartialFail', 'Payroll generated with some failures')
+          + `: ${failed.length} employee(s) failed.`
+        );
+      } else {
+        const count = Array.isArray(result?.generated) ? result.generated.length : null;
+        setActionNotice(count !== null
+          ? `${t('payrollGenerated', 'Payroll generated for')} ${count} ${t('employees', 'employees')}.`
+          : t('payrollGeneratedOk', 'Payroll generated.'));
+      }
     } catch (e) {
       setActionError(e.message || t('payrollGenerateFailed', 'Failed to generate payroll.'));
-    } finally { setSaving(false); }
+    } finally {
+      // Always refetch so partial successes become visible regardless of outcome.
+      await refetch({ silent: true });
+      setSaving(false);
+    }
   };
 
   const handlePay = async (id) => {
@@ -223,24 +253,19 @@ export default function Payroll() {
 
   const handleExportPDF = async () => {
     if (!selectedWeek) return;
-    const isAr = t('appName') !== 'FabriCore';
+    const isAr = language === 'ar';
     const direction = isAr ? 'rtl' : 'ltr';
     const weekLabel = formatWeekInterval(selectedWeek.weekStart === 'monthly' ? null : selectedWeek.weekStart, selectedWeek.weekEnd, t);
 
     const { printHtmlDocument } = await import('../utils/printDocument');
 
-    const renderBreakdownField = (label, value, isCurrency = false) => {
-      if (value === 0 || value === null || value === undefined || value === '') return '';
-      const formatted = isCurrency ? `$${Number(value).toLocaleString()}` : value;
-      return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong>${formatted}</strong></div>`;
-    };
-
-    const formatMinutesForPDF = (minutes) => {
-      if (!minutes || minutes === 0) return 0;
-      if (minutes < 60) return `${minutes}m`;
-      const hours = Math.floor(minutes / 60);
-      const remainingMinutes = minutes % 60;
-      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    // `required` fields are always shown (even at 0) so the printed breakdown
+    // matches the on-screen modal and reconciles to the net total.
+    const renderBreakdownField = (label, value, { isCurrency = false, required = false } = {}) => {
+      const isEmpty = value === 0 || value === null || value === undefined || value === '';
+      if (isEmpty && !required) return '';
+      const displayValue = isCurrency ? formatCurrency(value) : (isEmpty ? formatMinutes(0) : value);
+      return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong>${displayValue}</strong></div>`;
     };
 
     const employeeBreakdowns = sortedRecords.map(row => {
@@ -251,22 +276,27 @@ export default function Payroll() {
         { label: t('autoDeductions', 'Auto deductions'), value: breakdown.auto_deductions, isCurrency: true, required: true },
         { label: t('manualBonus', 'Manual bonus'), value: breakdown.manual_bonus, isCurrency: true, required: false },
         { label: t('manualDeductions', 'Manual deductions'), value: breakdown.manual_deductions, isCurrency: true, required: false },
+        { label: t('hrBonus', 'HR bonus'), value: breakdown.hr_bonus, isCurrency: true, required: false },
+        { label: t('hrPenalty', 'HR penalty'), value: breakdown.hr_penalty, isCurrency: true, required: false },
+        { label: t('hrOvertime', 'HR overtime bonus'), value: breakdown.hr_overtime_bonus, isCurrency: true, required: false },
         { label: t('loanDeduction', 'Loan deduction'), value: breakdown.loan_deduction, isCurrency: true, required: false },
-        { label: t('lateMinutes', 'Late minutes'), value: formatMinutesForPDF(breakdown.late_minutes), required: true },
-        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: formatMinutesForPDF(breakdown.late_weighted_minutes), required: true },
-        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: formatMinutesForPDF(breakdown.early_leave_minutes), required: false },
-        { label: t('regularOvertime', 'Regular overtime'), value: formatMinutesForPDF(breakdown.overtime_minutes), required: false },
-        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: formatMinutesForPDF(breakdown.weekend_overtime_minutes), required: false },
-        { label: t('totalOvertime', 'Total overtime (×1.5)'), value: formatMinutesForPDF(Math.round((breakdown.overtime_minutes || 0) * 1.5)), required: false },
+        { label: t('lateMinutes', 'Late minutes'), value: formatMinutes(breakdown.late_minutes), required: true },
+        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: formatMinutes(breakdown.late_weighted_minutes), required: true },
+        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: formatMinutes(breakdown.early_leave_minutes), required: false },
+        { label: t('regularOvertime', 'Regular overtime'), value: formatMinutes(breakdown.regular_overtime_minutes ?? breakdown.overtime_minutes), required: false },
+        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: formatMinutes(breakdown.weekend_overtime_minutes), required: false },
+        { label: t('totalOvertime', 'Total overtime'), value: formatMinutes(breakdown.overtime_minutes), required: false },
         { label: t('absentDays', 'Absent days'), value: breakdown.absent_days, required: false },
         { label: t('halfDays', 'Half days'), value: breakdown.half_days, required: false },
         { label: t('inferredAbsentDays', 'Inferred absent days'), value: breakdown.inferred_absent_days, required: false },
       ];
 
-      const nonZeroFields = fields.filter(f => 
-        f.required || (f.value !== 0 && f.value !== null && f.value !== undefined && f.value !== '')
-      );
-      const fieldsHtml = nonZeroFields.map(f => renderBreakdownField(f.label, f.value, f.isCurrency)).join('');
+      const fieldsHtml = fields
+        .map(f => renderBreakdownField(f.label, f.value, { isCurrency: f.isCurrency, required: f.required }))
+        .join('');
+
+      const statusClass = row.status === 'paid' ? 'paid' : 'pending';
+      const statusLabel = row.status === 'paid' ? t('paid', 'Paid') : t('pending', 'Pending');
 
       return `
         <div style="page-break-inside: avoid; margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px;">
@@ -276,8 +306,9 @@ export default function Payroll() {
               <div style="font-size: 12px; color: #64748b;">${row.department_name || '—'} · ${row.role || '—'}</div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 18px; font-weight: 700; color: #0f6e56;">$${Number(row.net_salary || 0).toLocaleString()}</div>
+              <div style="font-size: 18px; font-weight: 700; color: #0f6e56;">${formatCurrency(row.net_salary)}</div>
               <div style="font-size: 11px; color: #64748b;">${t('netSalary', 'Net salary')}</div>
+              <span class="badge ${statusClass}" style="margin-top: 4px;">${statusLabel}</span>
             </div>
           </div>
           ${fieldsHtml}
@@ -426,7 +457,7 @@ export default function Payroll() {
           </div>
           <div class="metric-card">
             <div class="label">${t('totalNet', 'Total Net')}</div>
-            <div class="val">$${Number(selectedWeek.totalNet || 0).toLocaleString()}</div>
+            <div class="val">${formatCurrency(selectedWeek.totalNet)}</div>
           </div>
           <div class="metric-card">
             <div class="label">${t('status', 'Status')}</div>
@@ -444,7 +475,19 @@ export default function Payroll() {
     }
   };
 
-  const groupedPayroll = useMemo(() => groupPayrollByWeek(records || []), [records]);
+  // Client-side employee-name / status filtering over the (date-bounded) fetched
+  // set. Empty weeks are dropped so the week list only shows matching records.
+  const filteredRecords = useMemo(() => {
+    const term = filters.employee.trim().toLowerCase();
+    if (!term && !filters.status) return records;
+    return records.filter((r) => {
+      const matchesName = !term || String(r.employee_name || '').toLowerCase().includes(term);
+      const matchesStatus = !filters.status || r.status === filters.status;
+      return matchesName && matchesStatus;
+    });
+  }, [records, filters.employee, filters.status]);
+
+  const groupedPayroll = useMemo(() => groupPayrollByWeek(filteredRecords || []), [filteredRecords]);
   const selectedWeek = useMemo(
     () => groupedPayroll.find((group) => group.weekStart === selectedWeekStart) || null,
     [groupedPayroll, selectedWeekStart]
@@ -471,11 +514,15 @@ export default function Payroll() {
       return formatWeekInterval(row.week_start, row.week_end, t);
     } },
     { key: 'role', label: t('role', 'Role'), render: v => v || '—' },
-    { key: 'base_salary', label: t('base', 'Base'), render: v => `$${Number(v).toLocaleString()}` },
-    { key: 'bonus', label: t('bonus', 'Bonus'), render: v => v > 0 ? <span style={{ color: 'var(--accent)' }}>+${Number(v).toLocaleString()}</span> : '—' },
-    { key: 'deductions', label: t('deductions', 'Deductions'), render: v => v > 0 ? <span style={{ color: 'var(--danger)' }}>-${Number(v).toLocaleString()}</span> : '—' },
-    { key: 'net_salary', label: t('netSalary', 'Net salary'), render: v => <strong>${Number(v).toLocaleString()}</strong> },
-    { key: 'weekly_payment_estimate', label: t('weeklyPay', 'Weekly Pay'), render: (_, row) => `$${Number(row.payroll_breakdown?.weekly_payment_estimate || 0).toLocaleString()}` },
+    { key: 'base_salary', label: t('base', 'Base'), render: v => formatCurrency(v) },
+    { key: 'bonus', label: t('bonus', 'Bonus'), render: v => v > 0 ? <span style={{ color: 'var(--accent)' }}>+{formatCurrency(v)}</span> : '—' },
+    { key: 'deductions', label: t('deductions', 'Deductions'), render: v => v > 0 ? <span style={{ color: 'var(--danger)' }}>-{formatCurrency(v)}</span> : '—' },
+    { key: 'net_salary', label: t('netSalary', 'Net salary'), render: (v, row) => (
+      <strong title={row.has_recalc_drift ? t('recalcDriftHint', 'Recalculated total differs from the paid amount') : undefined}>
+        {formatCurrency(v)}{row.has_recalc_drift ? ' ⚠️' : ''}
+      </strong>
+    ) },
+    { key: 'weekly_payment_estimate', label: t('weeklyPay', 'Weekly Pay'), render: (_, row) => formatCurrency(row.payroll_breakdown?.weekly_payment_estimate || 0) },
     { key: 'payroll_breakdown', label: t('breakdown', 'Breakdown'), render: (_, row) => (
       <Btn size="sm" onClick={() => setSelectedBreakdown(row)}>{t('view', 'View')}</Btn>
     )},
@@ -493,17 +540,52 @@ export default function Payroll() {
       <PageHeader title={t('payroll', 'Payroll')} subtitle={t('weeklyPayroll', 'Manage weekly payroll (Saturday to Friday) and payments')}
         action={<Btn variant="primary" onClick={() => setShowModal(true)}>{t('generate', '+ Generate')}</Btn>}
       />
+      {!selectedWeek && (
+        <Card padding="12px 16px" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <Input label={t('fromDate', 'From')} type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} />
+            <Input label={t('toDate', 'To')} type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} />
+            <div style={{ minWidth: 140 }}>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('status', 'Status')}</label>
+              <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}>
+                <option value="">{t('all', 'All')}</option>
+                <option value="pending">{t('pending', 'Pending')}</option>
+                <option value="paid">{t('paid', 'Paid')}</option>
+              </select>
+            </div>
+            <Input label={t('employee', 'Employee')} placeholder={t('searchByName', 'Search by name…')} value={filters.employee} onChange={e => setFilters(f => ({ ...f, employee: e.target.value }))} />
+          </div>
+        </Card>
+      )}
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
+      {truncated && (
+        <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--warning-soft, #fef9c3)', color: 'var(--warning-strong, #a16207)', fontSize: 13 }}>
+          {t('payrollTruncated', 'Showing the most recent records only. Narrow the date range to see everything in range.')}
+        </div>
+      )}
       {actionError && <div style={{ marginBottom: 12 }}><ErrorMsg msg={actionError} /></div>}
-      {!loading && !selectedWeek && (
+      {actionNotice && (
+        <div style={{ marginBottom: 12, padding: '10px 14px', borderRadius: 8, background: 'var(--accent-soft, #e6f7f1)', color: 'var(--accent, #0f6e56)', fontSize: 13 }}>
+          {actionNotice}
+        </div>
+      )}
+      {!loading && !error && !selectedWeek && groupedPayroll.length === 0 && (
+        <Card padding="32px"><div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+          {(filters.employee || filters.status || records.length > 0)
+            ? t('noPayrollMatch', 'No payroll records match the current filters.')
+            : t('noPayrollYet', 'No payroll generated yet. Use "+ Generate" to create the first weekly payroll.')}
+        </div></Card>
+      )}
+      {!loading && !error && !selectedWeek && groupedPayroll.length > 0 && (
         <div style={{ display: 'grid', gap: 12 }}>
           {groupedPayroll.map((group) => (
             <Card key={group.weekStart} padding="16px 18px">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>{formatWeekInterval(group.weekStart === 'monthly' ? null : group.weekStart, group.weekEnd, t)}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{group.employeeCount} employee{group.employeeCount === 1 ? '' : 's'} · ${Number(group.totalNet || 0).toLocaleString()}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{group.employeeCount} employee{group.employeeCount === 1 ? '' : 's'} · {formatCurrency(group.totalNet)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Badge variant="default">{group.paidCount}/{group.employeeCount} paid</Badge>
@@ -517,7 +599,7 @@ export default function Payroll() {
                 {group.records.slice(0, 4).map((row) => (
                   <div key={row.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', minWidth: 150 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{row.employee_name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>${Number(row.net_salary || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatCurrency(row.net_salary)}</div>
                   </div>
                 ))}
                 {group.records.length > 4 && <div style={{ alignSelf: 'center', color: 'var(--text-muted)', fontSize: 12 }}>+{group.records.length - 4} more</div>}
@@ -548,10 +630,8 @@ export default function Payroll() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Input label={t('weekDate', 'Week date')} type="date" value={form.week_start} onChange={e => setForm({ ...form, week_start: e.target.value })} />
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {t('weeklyPayroll', 'Payroll weeks run Saturday to Friday. The selected date is mapped to that week, and salary is calculated from attendance within the week.')}
+              {t('weeklyPayrollHint', 'Payroll weeks run Saturday to Friday. The selected date is mapped to that week, and salary is calculated from attendance within the week. Per-employee bonuses and deductions can be set afterwards with the "Adjust" button on each row.')}
             </div>
-            <Input label={t('manualBonus', 'Manual bonus adjustment ($)')} type="number" value={form.bonus} onChange={e => setForm({ ...form, bonus: e.target.value })} />
-            <Input label={t('manualDeductions', 'Manual deduction adjustment ($)')} type="number" value={form.deductions} onChange={e => setForm({ ...form, deductions: e.target.value })} />
           </div>
           {actionError && <div style={{ marginTop: 12 }}><ErrorMsg msg={actionError} /></div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
@@ -594,25 +674,39 @@ export default function Payroll() {
 
       {selectedBreakdown && (
         <Modal title={`${t('payrollBreakdown', 'Payroll breakdown')} — ${selectedBreakdown.employee_name}`} onClose={() => setSelectedBreakdown(null)} width={520}>
+          {selectedBreakdown.has_recalc_drift && (
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--warning-soft, #fef9c3)', color: 'var(--warning-strong, #a16207)', fontSize: 12 }}>
+              ⚠️ {t('recalcDriftHint', 'Recalculated total differs from the paid amount')}: {formatCurrency(selectedBreakdown.recomputed_net_salary)} vs {formatCurrency(selectedBreakdown.net_salary)}
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
-            <Card padding="10px 12px"><strong>{t('autoBonus', 'Auto bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+${Number(selectedBreakdown.payroll_breakdown?.auto_bonus || 0).toLocaleString()}</div></Card>
-            <Card padding="10px 12px"><strong>{t('autoDeductions', 'Auto deductions')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-${Number(selectedBreakdown.payroll_breakdown?.auto_deductions || 0).toLocaleString()}</div></Card>
-            <Card padding="10px 12px"><strong>{t('manualBonus', 'Manual bonus')}</strong><div style={{ marginTop: 4 }}>+${Number(selectedBreakdown.payroll_breakdown?.manual_bonus || 0).toLocaleString()}</div></Card>
-            <Card padding="10px 12px"><strong>{t('manualDeductions', 'Manual deductions')}</strong><div style={{ marginTop: 4 }}>-${Number(selectedBreakdown.payroll_breakdown?.manual_deductions || 0).toLocaleString()}</div></Card>
-            <Card padding="10px 12px"><strong>{t('loanDeduction', 'Loan deduction')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-${Number(selectedBreakdown.payroll_breakdown?.loan_deduction || 0).toLocaleString()}</div></Card>
+            <Card padding="10px 12px"><strong>{t('autoBonus', 'Auto bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.auto_bonus || 0)}</div></Card>
+            <Card padding="10px 12px"><strong>{t('autoDeductions', 'Auto deductions')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.auto_deductions || 0)}</div></Card>
+            <Card padding="10px 12px"><strong>{t('manualBonus', 'Manual bonus')}</strong><div style={{ marginTop: 4 }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.manual_bonus || 0)}</div></Card>
+            <Card padding="10px 12px"><strong>{t('manualDeductions', 'Manual deductions')}</strong><div style={{ marginTop: 4 }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.manual_deductions || 0)}</div></Card>
+            <Card padding="10px 12px"><strong>{t('loanDeduction', 'Loan deduction')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.loan_deduction || 0)}</div></Card>
+            {Boolean(selectedBreakdown.payroll_breakdown?.hr_bonus) && (
+              <Card padding="10px 12px"><strong>{t('hrBonus', 'HR bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.hr_bonus)}</div></Card>
+            )}
+            {Boolean(selectedBreakdown.payroll_breakdown?.hr_penalty) && (
+              <Card padding="10px 12px"><strong>{t('hrPenalty', 'HR penalty')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.hr_penalty)}</div></Card>
+            )}
+            {Boolean(selectedBreakdown.payroll_breakdown?.hr_overtime_bonus) && (
+              <Card padding="10px 12px"><strong>{t('hrOvertime', 'HR overtime bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.hr_overtime_bonus)}</div></Card>
+            )}
           </div>
 
           <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12 }}>
             <Card padding="10px 12px">{t('lateMinutes', 'Late minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.late_minutes || 0)}</strong></Card>
             <Card padding="10px 12px">{t('lateWeightedMinutes', 'Late weighted minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.late_weighted_minutes || 0)}</strong></Card>
             <Card padding="10px 12px">{t('earlyLeaveMinutes', 'Early leave minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.early_leave_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.overtime_minutes || 0)}</strong></Card>
+            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.regular_overtime_minutes ?? selectedBreakdown.payroll_breakdown?.overtime_minutes ?? 0)}</strong></Card>
             <Card padding="10px 12px">{t('weekendWorkOvertime', 'Weekend work overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.weekend_overtime_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime (×1.5)')}: <strong>{formatMinutes(Math.round((selectedBreakdown.payroll_breakdown?.overtime_minutes || 0) * 1.5))}</strong></Card>
+            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.overtime_minutes || 0)}</strong></Card>
             <Card padding="10px 12px">{t('absentDays', 'Absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.absent_days || 0}</strong></Card>
             <Card padding="10px 12px">{t('halfDays', 'Half days')}: <strong>{selectedBreakdown.payroll_breakdown?.half_days || 0}</strong></Card>
             <Card padding="10px 12px">{t('inferredAbsentDays', 'Inferred absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.inferred_absent_days || 0}</strong></Card>
-            <Card padding="10px 12px">{t('weeklyPaymentEstimate', 'Weekly payment estimate')}: <strong>${Number(selectedBreakdown.payroll_breakdown?.weekly_payment_estimate || 0).toLocaleString()}</strong></Card>
+            <Card padding="10px 12px">{t('weeklyPaymentEstimate', 'Weekly payment estimate')}: <strong>{formatCurrency(selectedBreakdown.payroll_breakdown?.weekly_payment_estimate || 0)}</strong></Card>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>

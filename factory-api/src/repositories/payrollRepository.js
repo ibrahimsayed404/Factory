@@ -17,7 +17,7 @@ const hasWeekendDaysColumn = async () => {
   return hasWeekendDaysColumnCache;
 };
 
-const getPayrollRecordsCount = async ({ weekStart, month, year, status }) => {
+const getPayrollRecordsCount = async ({ weekStart, month, year, status, dateFrom, dateTo }) => {
   let countQuery = `
     SELECT COUNT(*)
     FROM payroll p
@@ -29,14 +29,20 @@ const getPayrollRecordsCount = async ({ weekStart, month, year, status }) => {
   if (month) { countParams.push(month); countQuery += ` AND p.month = $${countParams.length}`; }
   if (year) { countParams.push(year); countQuery += ` AND p.year = $${countParams.length}`; }
   if (status) { countParams.push(status); countQuery += ` AND p.status = $${countParams.length}`; }
+  if (dateFrom) { countParams.push(dateFrom); countQuery += ` AND p.week_start >= $${countParams.length}::date`; }
+  if (dateTo) { countParams.push(dateTo); countQuery += ` AND p.week_start <= $${countParams.length}::date`; }
   const countResult = await pool.query(countQuery, countParams);
   return Number.parseInt(countResult.rows[0].count, 10);
 };
 
-const getPayrollRecords = async ({ weekStart, month, year, status, limit, offset, weekendDaysExpr, supportsWeekendDays }) => {
+const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dateTo, limit, offset, weekendDaysExpr, supportsWeekendDays }) => {
   const weekendSelect = supportsWeekendDays ? 'COALESCE(e.weekend_days, \'5\') AS weekend_days,' : '\'5\' AS weekend_days,';
+  // week_start/week_end are cast to text (plain YYYY-MM-DD) so the JSON wire
+  // format is timezone-stable — DATE columns would otherwise serialize as UTC
+  // midnight ISO strings and shift a day on negative-UTC-offset clients.
   let query = `
-    SELECT p.*, e.name AS employee_name, e.role, ${weekendSelect}
+    SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end,
+      e.name AS employee_name, e.role, ${weekendSelect}
       d.name AS department_name,
       COALESCE(att.late_minutes, 0)::int AS late_minutes,
       COALESCE(att.late_weighted_minutes, 0)::float AS late_weighted_minutes,
@@ -65,7 +71,7 @@ const getPayrollRecords = async ({ weekStart, month, year, status, limit, offset
       FROM attendance a
       WHERE a.employee_id = p.employee_id
         AND (
-          (p.week_start IS NOT NULL AND a.date >= p.week_start AND a.date <= COALESCE(p.week_end, p.week_start))
+          (p.week_start IS NOT NULL AND a.date >= p.week_start AND a.date <= COALESCE(p.week_end, (p.week_start::date + INTERVAL '6 days')::date))
           OR
           (p.week_start IS NULL AND EXTRACT(MONTH FROM a.date) = p.month AND EXTRACT(YEAR FROM a.date) = p.year)
         )
@@ -77,7 +83,9 @@ const getPayrollRecords = async ({ weekStart, month, year, status, limit, offset
   if (month) { params.push(month); query += ` AND p.month = $${params.length}`; }
   if (year) { params.push(year); query += ` AND p.year = $${params.length}`; }
   if (status) { params.push(status); query += ` AND p.status = $${params.length}`; }
-  
+  if (dateFrom) { params.push(dateFrom); query += ` AND p.week_start >= $${params.length}::date`; }
+  if (dateTo) { params.push(dateTo); query += ` AND p.week_start <= $${params.length}::date`; }
+
   const dataParams = [...params, limit, offset];
   query += ` ORDER BY e.name LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`;
   const result = await pool.query(query, dataParams);
@@ -102,7 +110,7 @@ const getActiveEmployeesForPayroll = async (supportsWeekendDays) => {
 const getApprovedLeavesForPayroll = async (employeeId, startDate, endDate) => {
   if (!employeeId || !startDate || !endDate) return [];
   const result = await pool.query(
-    `SELECT start_date::text AS start_date, end_date::text AS end_date
+    `SELECT leave_type, start_date::text AS start_date, end_date::text AS end_date
      FROM hr_leave_requests
      WHERE employee_id = $1
        AND status = 'approved'
@@ -252,7 +260,10 @@ const updatePayrollPaid = async (id) => {
 };
 
 const getPayrollById = async (id) => {
-  const result = await pool.query('SELECT * FROM payroll WHERE id = $1', [id]);
+  const result = await pool.query(
+    'SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end FROM payroll p WHERE p.id = $1',
+    [id]
+  );
   return result.rows[0] || null;
 };
 
@@ -299,21 +310,96 @@ const getActiveLoansForPayroll = async (employeeId) => {
   }));
 };
 
-const applyLoanPayments = async (payments) => {
-  if (!payments || !payments.length) return;
-
-  const queries = payments.map((payment) =>
-    pool.query(
-      `UPDATE hr_loans
-       SET remaining_amount = GREATEST(remaining_amount - $1, 0),
-           status = CASE WHEN GREATEST(remaining_amount - $1, 0) = 0 THEN 'closed' ELSE status END,
-           updated_at = NOW()
-       WHERE id = $2`,
-      [payment.amount, payment.id]
-    )
+const getPayrollIdByWeek = async (employeeId, weekStart) => {
+  if (!employeeId || !weekStart) return null;
+  const result = await pool.query(
+    'SELECT id FROM payroll WHERE employee_id = $1 AND week_start = $2',
+    [employeeId, weekStart]
   );
+  return result.rows[0]?.id || null;
+};
 
-  await Promise.all(queries);
+const getLoanDeductionsForPayroll = async (payrollId) => {
+  if (!payrollId) return [];
+  const result = await pool.query(
+    'SELECT loan_id, amount FROM payroll_loan_deductions WHERE payroll_id = $1',
+    [payrollId]
+  );
+  return result.rows.map((r) => ({ loan_id: Number(r.loan_id), amount: Number(r.amount || 0) }));
+};
+
+/**
+ * Apply loan installments for a payroll record idempotently. The ledger's
+ * UNIQUE(payroll_id, loan_id) constraint guarantees a loan is only ever debited
+ * once per payroll record — a conflicting insert means it was already applied,
+ * so the balance is left untouched.
+ */
+const applyLoanDeductions = async (payrollId, payments) => {
+  if (!payrollId || !payments || !payments.length) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const payment of payments) {
+      const inserted = await client.query(
+        `INSERT INTO payroll_loan_deductions (payroll_id, loan_id, amount)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (payroll_id, loan_id) DO NOTHING`,
+        [payrollId, payment.id, payment.amount]
+      );
+      if (inserted.rowCount > 0) {
+        await client.query(
+          `UPDATE hr_loans
+           SET remaining_amount = GREATEST(remaining_amount - $1, 0),
+               status = CASE WHEN GREATEST(remaining_amount - $1, 0) = 0 THEN 'closed' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [payment.amount, payment.id]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Reverse the exact loan amounts recorded in the ledger for each payroll record
+ * and delete the records — atomically. Ledger rows cascade-delete with the
+ * payroll rows. A reversed loan that had been closed is reopened to 'active'.
+ */
+const reverseLoanDeductionsAndDeleteRecords = async (payrollIds) => {
+  if (!payrollIds || !payrollIds.length) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const payrollId of payrollIds) {
+      const ledger = await client.query(
+        'SELECT loan_id, amount FROM payroll_loan_deductions WHERE payroll_id = $1',
+        [payrollId]
+      );
+      for (const row of ledger.rows) {
+        await client.query(
+          `UPDATE hr_loans
+           SET remaining_amount = LEAST(remaining_amount + $1, principal_amount),
+               status = CASE WHEN LEAST(remaining_amount + $1, principal_amount) > 0 THEN 'active' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [Number(row.amount || 0), row.loan_id]
+        );
+      }
+      await client.query('DELETE FROM payroll WHERE id = $1', [payrollId]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 const getHrDataForWeeklyPayroll = async (employeeId, weekStart, weekEnd) => {
@@ -335,68 +421,16 @@ const getHrDataForWeeklyPayroll = async (employeeId, weekStart, weekEnd) => {
   };
 };
 
-const getHrDataForPayroll = async (employeeId, month, year) => {
-  // Get transactions for the month
-  const transactions = await pool.query(
-    `SELECT transaction_type, SUM(amount) as total_amount
-     FROM hr_transactions 
-     WHERE employee_id = $1 
-       AND EXTRACT(MONTH FROM transaction_date) = $2 
-       AND EXTRACT(YEAR FROM transaction_date) = $3
-     GROUP BY transaction_type`,
-    [employeeId, month, year]
-  );
-  
-  const loans = await getActiveLoansForPayroll(employeeId);
-  const loanDeduction = loans.reduce(
-    (sum, loan) => sum + Math.min(loan.monthly_installment, loan.remaining_amount),
-    0
-  );
-
-  return {
-    transactions: transactions.rows,
-    loanDeduction,
-    loans,
-  };
-};
-
 const getPayrollRecordsForWeek = async (weekStart) => {
   const result = await pool.query(
-    'SELECT * FROM payroll WHERE week_start = $1',
+    'SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end FROM payroll p WHERE p.week_start = $1',
     [weekStart]
   );
   return result.rows;
 };
 
-const getLoansForEmployee = async (employeeId) => {
-  const result = await pool.query(
-    `SELECT id, principal_amount, remaining_amount, monthly_installment, status
-     FROM hr_loans
-     WHERE employee_id = $1`,
-    [employeeId]
-  );
-  return result.rows.map((loan) => ({
-    id: loan.id,
-    principal_amount: Number(loan.principal_amount || 0),
-    remaining_amount: Number(loan.remaining_amount || 0),
-    monthly_installment: Number(loan.monthly_installment || 0),
-    status: loan.status,
-  }));
-};
-
 const deletePayrollRecord = async (id) => {
   await pool.query('DELETE FROM payroll WHERE id = $1', [id]);
-};
-
-const restoreLoanPayment = async (loanId, amount) => {
-  await pool.query(
-    `UPDATE hr_loans
-     SET remaining_amount = LEAST(remaining_amount + $1, principal_amount),
-         status = CASE WHEN LEAST(remaining_amount + $1, principal_amount) > 0 THEN 'active' ELSE status END,
-         updated_at = NOW()
-     WHERE id = $2`,
-    [amount, loanId]
-  );
 };
 
 module.exports = {
@@ -408,15 +442,15 @@ module.exports = {
   getApprovedLeavesForPayroll,
   getAttendanceForPayroll,
   getActiveLoansForPayroll,
-  applyLoanPayments,
-  getHrDataForPayroll,
+  getPayrollIdByWeek,
+  getLoanDeductionsForPayroll,
+  applyLoanDeductions,
+  reverseLoanDeductionsAndDeleteRecords,
   getHrDataForWeeklyPayroll,
   upsertPayroll,
   updatePayrollPaid,
   getPayrollById,
   updateManualAdjustments,
   getPayrollRecordsForWeek,
-  getLoansForEmployee,
   deletePayrollRecord,
-  restoreLoanPayment,
 };

@@ -1,4 +1,19 @@
 /**
+ * ⚠️  ONE-TIME HISTORICAL SCRIPT — DO NOT RUN AGAINST A LIVE DATABASE. ⚠️
+ *
+ * This script was used ONCE during the Neon -> Supabase cutover. It is
+ * DESTRUCTIVE: it TRUNCATE ... CASCADEs EVERY table in the target (DB_*)
+ * database before copying data in from the now-retired Neon source. Neon is
+ * stale/decommissioned, so re-running this WIPES the live Supabase data and
+ * replaces it with old/empty data. An accidental re-run is the suspected cause
+ * of the 2026-07-18 data-loss incident (see scripts/recover-2026-07-18-incident.js).
+ *
+ * It is intentionally disabled behind an explicit confirmation env var that
+ * must be passed on the command line (NOT via .env, so it can never be left on
+ * silently):
+ *
+ *   ALLOW_DESTRUCTIVE_NEON_MIGRATION=yes-i-am-sure node scripts/migrate-neon-to-supabase.js
+ *
  * Copy all public table data from Neon (source) into the current DB_* target
  * (Supabase Postgres after cutover).
  *
@@ -6,6 +21,12 @@
  *   NEON_DB_*  = source
  *   DB_*       = target (Supabase)
  */
+
+// Capture the confirmation flag from the *shell* environment BEFORE dotenv runs,
+// so putting it in .env can never satisfy the guard.
+const DESTRUCTIVE_CONFIRMED =
+  process.env.ALLOW_DESTRUCTIVE_NEON_MIGRATION === 'yes-i-am-sure';
+
 require('dotenv').config();
 const pg = require('pg');
 pg.types.setTypeParser(1082, (val) => val); // DATE
@@ -110,6 +131,25 @@ const getWritableColumns = async (client, tableName) => {
 };
 
 const main = async () => {
+  if (!DESTRUCTIVE_CONFIRMED) {
+    console.error('='.repeat(72));
+    console.error('❌ REFUSING TO RUN — this script TRUNCATEs every table in the target DB.');
+    console.error(`   Target (DB_HOST): ${process.env.DB_HOST || '(unset)'}`);
+    console.error('   Neon is a retired source; re-running this WIPES live Supabase data.');
+    console.error('   If you are truly certain this is a one-time cutover, re-run with:');
+    console.error('');
+    console.error('     ALLOW_DESTRUCTIVE_NEON_MIGRATION=yes-i-am-sure \\');
+    console.error('       node scripts/migrate-neon-to-supabase.js');
+    console.error('='.repeat(72));
+    process.exitCode = 1;
+    return;
+  }
+
+  console.warn(
+    `⚠️  DESTRUCTIVE migration confirmed. Target DB_HOST=${process.env.DB_HOST}. ` +
+    'All target tables will be TRUNCATEd.'
+  );
+
   for (const key of [
     'NEON_DB_HOST',
     'NEON_DB_NAME',

@@ -21,6 +21,9 @@ const schemaPath = path.join(__dirname, '..', '..', 'src', 'db', 'schema.sql');
 const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
 const resetData = async () => {
+  if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
+    return;
+  }
   await pool.query(`
     TRUNCATE TABLE
       inventory_transactions,
@@ -382,13 +385,16 @@ describe('Payroll auto-adjustments', () => {
     expect(emp.status).toBe(201);
 
     const employeeId = emp.body.id;
-    await pool.query("UPDATE employees SET hire_date = '2026-03-01', termination_date = '2026-03-04' WHERE id = $1", [employeeId]);
+    // Fully employed for the whole week (no proration): weekend_days '5,6' => 5
+    // working days (Sun–Thu). Week Sat 2026-07-04 → Fri 2026-07-10.
+    await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [employeeId]);
 
     const attendanceRows = [
-      { date: '2026-03-01', check_in: '09:30', check_out: '17:00', status: 'present' },
-      { date: '2026-03-02', check_in: '09:00', check_out: '17:00', status: 'absent' },
-      { date: '2026-03-03', check_in: '09:00', check_out: '18:00', status: 'present' },
-      { date: '2026-03-04', check_in: '09:00', check_out: '17:00', status: 'half-day' },
+      { date: '2026-07-05', check_in: '09:30', check_out: '17:00', status: 'present' }, // Sun: 30 - 10 grace = 20 late
+      { date: '2026-07-06', check_in: '09:00', check_out: '17:00', status: 'absent' },  // Mon: absent
+      { date: '2026-07-07', check_in: '09:00', check_out: '18:00', status: 'present' }, // Tue: 60 overtime
+      { date: '2026-07-08', check_in: '09:00', check_out: '17:00', status: 'half-day' }, // Wed: half-day (metrics zeroed)
+      { date: '2026-07-09', check_in: '09:00', check_out: '17:00', status: 'present' }, // Thu: clean
     ];
 
     for (const row of attendanceRows) {
@@ -400,7 +406,7 @@ describe('Payroll auto-adjustments', () => {
 
     const payroll = await agent
       .post('/api/payroll')
-      .send({ employee_id: employeeId, month: 3, year: 2026, bonus: 10, deductions: 5 });
+      .send({ employee_id: employeeId, week_start: '2026-07-04', bonus: 10, deductions: 5 });
 
     expect(payroll.status).toBe(201);
     expect(payroll.body.payroll_breakdown).toBeDefined();
@@ -411,24 +417,24 @@ describe('Payroll auto-adjustments', () => {
     expect(payroll.body.payroll_breakdown.absent_days).toBe(1);
     expect(payroll.body.payroll_breakdown.half_days).toBe(1);
 
-    // salary=3000 => daily=100, minute~=0.2083
+    // weekly salary=3000, 5 working days => daily=600, minute=1.25
     // one day late 20 (>10) => weighted 20*1.5 = 30
-    // auto deductions = late(30m)=6.25 + absent(1d)=100 + half-day(0.5d)=50 => 156.25
-    // auto bonus = overtime(60m)*minute*1.5 => 18.75
-    // final bonus = 18.75 + 10(manual) => 28.75
-    // final deductions = 156.25 + 5(manual) => 161.25
-    // net = 3000 + 28.75 - 161.25 => 2867.50
-    expect(Number(payroll.body.bonus)).toBeCloseTo(28.75, 2);
-    expect(Number(payroll.body.deductions)).toBeCloseTo(161.25, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(2867.5, 2);
+    // auto deductions = late(30m)*1.25=37.5 + absent(1d)=600 + half-day(0.5d)=300 => 937.5
+    // auto bonus = overtime(60m)*1.25*1.5 => 112.5
+    // final bonus = 112.5 + 10(manual) => 122.5
+    // final deductions = 937.5 + 5(manual) => 942.5
+    // net = 3000 + 122.5 - 942.5 => 2180
+    expect(Number(payroll.body.bonus)).toBeCloseTo(122.5, 2);
+    expect(Number(payroll.body.deductions)).toBeCloseTo(942.5, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(2180, 2);
     expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(30, 2);
 
-    const list = await agent.get('/api/payroll?month=3&year=2026');
+    const list = await agent.get('/api/payroll?week_start=2026-07-04');
     expect(list.status).toBe(200);
     expect(list.body.data).toHaveLength(1);
     expect(list.body.data[0].payroll_breakdown).toBeDefined();
-    expect(Number(list.body.data[0].payroll_breakdown.auto_bonus)).toBeCloseTo(18.75, 2);
-    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(156.25, 2);
+    expect(Number(list.body.data[0].payroll_breakdown.auto_bonus)).toBeCloseTo(112.5, 2);
+    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(937.5, 2);
   });
 
   test('weights late minutes per day, not on the weekly total', async () => {
@@ -490,10 +496,13 @@ describe('Payroll auto-adjustments', () => {
       .post('/api/payroll')
       .send({ week_start: '2026-03-07', bonus: 0, deductions: 0 });
 
+    // Bulk generation returns a per-employee result summary, not a bare array.
     expect(payroll.status).toBe(201);
-    expect(Array.isArray(payroll.body)).toBe(true);
-    expect(payroll.body).toHaveLength(2);
-    expect(payroll.body.map((row) => row.employee_id).sort()).toEqual([emp1.body.id, emp2.body.id].sort());
+    expect(Array.isArray(payroll.body.generated)).toBe(true);
+    expect(Array.isArray(payroll.body.failed)).toBe(true);
+    expect(payroll.body.failed).toHaveLength(0);
+    expect(payroll.body.generated).toHaveLength(2);
+    expect(payroll.body.generated.map((row) => row.employee_id).sort()).toEqual([emp1.body.id, emp2.body.id].sort());
 
     const list = await agent.get('/api/payroll?week_start=2026-03-07');
     expect(list.status).toBe(200);
@@ -514,12 +523,14 @@ describe('Payroll auto-adjustments', () => {
         salary: 3000,
       });
     expect(emp.status).toBe(201);
-    await pool.query("UPDATE employees SET hire_date = '2026-03-15', termination_date = '2026-03-15' WHERE id = $1", [emp.body.id]);
+    // weekend_days '0,6' (Sun+Sat). Fully employed. Week Sat 2026-07-04 → Fri
+    // 2026-07-10; Sat 07-04 is a weekend day worked (overtime).
+    await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [emp.body.id]);
 
     const attendance = await agent
       .post(`/api/employees/${emp.body.id}/attendance`)
       .send({
-        date: '2026-03-15',
+        date: '2026-07-04', // Saturday (weekend) worked
         check_in: '09:00',
         check_out: '17:00',
         status: 'present',
@@ -532,18 +543,26 @@ describe('Payroll auto-adjustments', () => {
     expect(Number(attendance.body.early_leave_minutes)).toBe(0);
     expect(Number(attendance.body.overtime_minutes)).toBe(480);
 
+    // Record the five regular working days (Mon–Fri) present so there is no
+    // inferred absence noise.
+    for (const date of ['2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09', '2026-07-10']) {
+      const resp = await agent.post(`/api/employees/${emp.body.id}/attendance`).send({ date, check_in: '09:00', check_out: '17:00', status: 'present' });
+      expect([200, 201]).toContain(resp.status);
+    }
+
     const payroll = await agent
       .post('/api/payroll')
-      .send({ employee_id: emp.body.id, month: 3, year: 2026, bonus: 0, deductions: 0 });
+      .send({ employee_id: emp.body.id, week_start: '2026-07-04', bonus: 0, deductions: 0 });
 
     expect(payroll.status).toBe(201);
     expect(payroll.body.payroll_breakdown.overtime_minutes).toBe(480);
     expect(payroll.body.payroll_breakdown.regular_overtime_minutes).toBe(0);
     expect(payroll.body.payroll_breakdown.weekend_overtime_minutes).toBe(480);
-    expect(Number(payroll.body.bonus)).toBeCloseTo(100, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(3100, 2);
+    // daily=3000/5=600, minute=1.25, weekend OT bonus = 480*1.25*1 = 600
+    expect(Number(payroll.body.bonus)).toBeCloseTo(600, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(3600, 2);
 
-    const list = await agent.get('/api/payroll?month=3&year=2026');
+    const list = await agent.get('/api/payroll?week_start=2026-07-04');
     expect(list.status).toBe(200);
     expect(list.body.data[0].payroll_breakdown.weekend_overtime_minutes).toBe(480);
     expect(list.body.data[0].payroll_breakdown.regular_overtime_minutes).toBe(0);
@@ -565,11 +584,16 @@ describe('Payroll auto-adjustments', () => {
     expect(emp.status).toBe(201);
 
     const employeeId = emp.body.id;
-    await pool.query("UPDATE employees SET hire_date = '2026-03-17', termination_date = '2026-03-19' WHERE id = $1", [employeeId]);
+    // Fully employed. weekend_days '0,6' => working days Mon–Fri. Record four of
+    // the five; the unrecorded Wed 2026-07-08 must be inferred absent.
+    await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [employeeId]);
 
     const rows = [
-      { date: '2026-03-17', check_in: '09:00', check_out: '17:00', status: 'present' },
-      { date: '2026-03-19', check_in: '09:00', check_out: '17:00', status: 'present' },
+      { date: '2026-07-06', check_in: '09:00', check_out: '17:00', status: 'present' }, // Mon
+      { date: '2026-07-07', check_in: '09:00', check_out: '17:00', status: 'present' }, // Tue
+      // 2026-07-08 (Wed) intentionally missing -> inferred absent
+      { date: '2026-07-09', check_in: '09:00', check_out: '17:00', status: 'present' }, // Thu
+      { date: '2026-07-10', check_in: '09:00', check_out: '17:00', status: 'present' }, // Fri
     ];
 
     for (const row of rows) {
@@ -581,14 +605,105 @@ describe('Payroll auto-adjustments', () => {
 
     const payroll = await agent
       .post('/api/payroll')
-      .send({ employee_id: employeeId, month: 3, year: 2026, bonus: 0, deductions: 0 });
+      .send({ employee_id: employeeId, week_start: '2026-07-04', bonus: 0, deductions: 0 });
 
     expect(payroll.status).toBe(201);
     expect(payroll.body.payroll_breakdown).toBeDefined();
     expect(payroll.body.payroll_breakdown.absent_days).toBe(1);
     expect(payroll.body.payroll_breakdown.inferred_absent_days).toBe(1);
-    expect(Number(payroll.body.deductions)).toBeCloseTo(100, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(2900, 2);
+    // daily = 3000/5 = 600; one inferred absent day => 600 deduction
+    expect(Number(payroll.body.deductions)).toBeCloseTo(600, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(2400, 2);
+  });
+
+  test('half-day is charged only the half-day penalty, not also early-leave minutes', async () => {
+    const agent = await createAdminAndLogin();
+
+    const emp = await agent.post('/api/employees').send({
+      name: 'Half Day Worker', email: 'half-day-worker@test.com', role: 'Operator',
+      shift: 'morning', weekend_days: '5,6', salary: 3000,
+    });
+    expect(emp.status).toBe(201);
+    await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [emp.body.id]);
+
+    // Present Sun–Wed, then a half-day on Thu with a real early checkout (12:00).
+    // The early checkout must NOT also generate early-leave minutes.
+    const days = [
+      { date: '2026-07-05', check_in: '09:00', check_out: '17:00', status: 'present' },
+      { date: '2026-07-06', check_in: '09:00', check_out: '17:00', status: 'present' },
+      { date: '2026-07-07', check_in: '09:00', check_out: '17:00', status: 'present' },
+      { date: '2026-07-08', check_in: '09:00', check_out: '17:00', status: 'present' },
+      { date: '2026-07-09', check_in: '09:00', check_out: '12:00', status: 'half-day' },
+    ];
+    for (const d of days) {
+      const resp = await agent.post(`/api/employees/${emp.body.id}/attendance`).send(d);
+      expect([200, 201]).toContain(resp.status);
+    }
+
+    const payroll = await agent.post('/api/payroll').send({ employee_id: emp.body.id, week_start: '2026-07-04' });
+    expect(payroll.status).toBe(201);
+    expect(payroll.body.payroll_breakdown.half_days).toBe(1);
+    expect(Number(payroll.body.payroll_breakdown.early_leave_minutes)).toBe(0);
+    // daily = 600; only the half-day penalty (300) is deducted, not early-leave.
+    expect(Number(payroll.body.deductions)).toBeCloseTo(300, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(2700, 2);
+  });
+
+  test('approved unpaid leave is deducted like an absence; paid leave is not', async () => {
+    const agent = await createAdminAndLogin();
+
+    const emp = await agent.post('/api/employees').send({
+      name: 'Leave Worker', email: 'leave-worker@test.com', role: 'Operator',
+      shift: 'morning', weekend_days: '5,6', salary: 3000,
+    });
+    expect(emp.status).toBe(201);
+    await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [emp.body.id]);
+
+    // Present Sun–Wed. Thu 2026-07-09 has no attendance but is covered by leave.
+    for (const date of ['2026-07-05', '2026-07-06', '2026-07-07', '2026-07-08']) {
+      const resp = await agent.post(`/api/employees/${emp.body.id}/attendance`).send({ date, check_in: '09:00', check_out: '17:00', status: 'present' });
+      expect([200, 201]).toContain(resp.status);
+    }
+
+    // Approved PAID leave for Thu -> no deduction (net 3000).
+    await pool.query(
+      "INSERT INTO hr_leave_requests (employee_id, leave_type, start_date, end_date, status) VALUES ($1,'vacation','2026-07-09','2026-07-09','approved')",
+      [emp.body.id]
+    );
+    const paid = await agent.post('/api/payroll').send({ employee_id: emp.body.id, week_start: '2026-07-04' });
+    expect(paid.status).toBe(201);
+    expect(paid.body.payroll_breakdown.inferred_absent_days).toBe(0);
+    expect(Number(paid.body.net_salary)).toBeCloseTo(3000, 2);
+
+    // Switch the same leave to UNPAID -> Thu now counts as an absence (net 2400).
+    await pool.query("UPDATE hr_leave_requests SET leave_type = 'unpaid' WHERE employee_id = $1", [emp.body.id]);
+    const unpaid = await agent.post('/api/payroll').send({ employee_id: emp.body.id, week_start: '2026-07-04' });
+    expect(unpaid.status).toBe(201);
+    expect(unpaid.body.payroll_breakdown.inferred_absent_days).toBe(1);
+    expect(Number(unpaid.body.net_salary)).toBeCloseTo(2400, 2);
+  });
+
+  test('prorates base salary for an employee hired mid-week', async () => {
+    const agent = await createAdminAndLogin();
+
+    const emp = await agent.post('/api/employees').send({
+      name: 'Midweek Hire', email: 'midweek-hire@test.com', role: 'Operator',
+      shift: 'morning', weekend_days: '5,6', salary: 3000,
+    });
+    expect(emp.status).toBe(201);
+    // Hired Wed 2026-07-08: working days Sun,Mon,Tue are before hire (excluded);
+    // employed working days = Wed, Thu = 2 of 5 => base = 3000 * 2/5 = 1200.
+    await pool.query("UPDATE employees SET hire_date = '2026-07-08', termination_date = NULL WHERE id = $1", [emp.body.id]);
+    for (const date of ['2026-07-08', '2026-07-09']) {
+      const resp = await agent.post(`/api/employees/${emp.body.id}/attendance`).send({ date, check_in: '09:00', check_out: '17:00', status: 'present' });
+      expect([200, 201]).toContain(resp.status);
+    }
+
+    const payroll = await agent.post('/api/payroll').send({ employee_id: emp.body.id, week_start: '2026-07-04' });
+    expect(payroll.status).toBe(201);
+    expect(Number(payroll.body.base_salary)).toBeCloseTo(1200, 2);
+    expect(Number(payroll.body.payroll_breakdown.inferred_absent_days)).toBe(0);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(1200, 2);
   });
 });
 
@@ -721,11 +836,18 @@ describe('Paid payroll spend reporting', () => {
         salary: 3000,
       });
     expect(emp.status).toBe(201);
+    // Fully employed, all working days present -> deterministic net = 3000.
+    await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [emp.body.id]);
+    for (const date of ['2026-07-05', '2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09']) {
+      const resp = await agent.post(`/api/employees/${emp.body.id}/attendance`).send({ date, check_in: '09:00', check_out: '17:00', status: 'present' });
+      expect([200, 201]).toContain(resp.status);
+    }
 
     const payroll = await agent
       .post('/api/payroll')
-      .send({ employee_id: emp.body.id, month: 3, year: 2026, bonus: 0, deductions: 0 });
+      .send({ employee_id: emp.body.id, week_start: '2026-07-04', bonus: 0, deductions: 0 });
     expect(payroll.status).toBe(201);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(3000, 2);
 
     const beforePayDashboard = await agent.get('/api/dashboard/stats');
     expect(beforePayDashboard.status).toBe(200);
@@ -739,17 +861,17 @@ describe('Paid payroll spend reporting', () => {
     expect(Number(afterPayDashboard.body.monthly_spent)).toBeCloseTo(3000, 2);
     expect(Number(afterPayDashboard.body.paid_payroll_spent)).toBeCloseTo(3000, 2);
 
-    const hr = await agent.get('/api/reports/hr?month=3&year=2026');
+    const hr = await agent.get('/api/reports/hr?month=7&year=2026');
     expect(hr.status).toBe(200);
     expect(Number(hr.body.payroll_summary.total_payout)).toBeCloseTo(3000, 2);
     expect(Number(hr.body.payroll_summary.paid_payout)).toBeCloseTo(3000, 2);
     expect(Number(hr.body.payroll_summary.pending_payout)).toBeCloseTo(0, 2);
     expect(Number(hr.body.payroll_summary.paid_count)).toBe(1);
-    const marchHistory = (hr.body.payroll_history || []).find((row) => Number(row.month) === 3);
-    expect(marchHistory).toBeDefined();
-    expect(Number(marchHistory.paid_payout)).toBeCloseTo(3000, 2);
-    expect(Number(marchHistory.pending_payout)).toBeCloseTo(0, 2);
-    expect(Number(marchHistory.total_payout)).toBeCloseTo(3000, 2);
+    const julyHistory = (hr.body.payroll_history || []).find((row) => Number(row.month) === 7);
+    expect(julyHistory).toBeDefined();
+    expect(Number(julyHistory.paid_payout)).toBeCloseTo(3000, 2);
+    expect(Number(julyHistory.pending_payout)).toBeCloseTo(0, 2);
+    expect(Number(julyHistory.total_payout)).toBeCloseTo(3000, 2);
   });
 });
 

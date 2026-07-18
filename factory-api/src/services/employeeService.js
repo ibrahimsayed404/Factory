@@ -70,14 +70,19 @@ const logAttendance = async (id, data) => {
   if (!employeeRecord) throw new ApiError(404, 'Employee not found');
 
   const isAbsent = status === 'absent';
+  const isHalfDay = status === 'half-day';
+  // A half-day is a flat half-day deduction in payroll. Zero out the per-minute
+  // late/early-leave/overtime metrics for it (as we do for absent) so the same
+  // day is never charged both the half-day penalty AND early-leave minutes.
+  const zeroMetrics = isAbsent || isHalfDay;
   const resolvedCheckIn = isAbsent ? null : (check_in || null);
   const resolvedCheckOut = isAbsent ? null : (check_out || null);
 
   const policy = await getAttendancePayrollPolicy();
-  const isWeekendAttendance = !isAbsent && isWeekendDate(employeeRecord, date) && Boolean(resolvedCheckIn || resolvedCheckOut);
-  const workedMinutes = isAbsent ? 0 : calculateWorkedMinutes(resolvedCheckIn, resolvedCheckOut);
-  
-  const metrics = isAbsent
+  const isWeekendAttendance = !zeroMetrics && isWeekendDate(employeeRecord, date) && Boolean(resolvedCheckIn || resolvedCheckOut);
+  const workedMinutes = zeroMetrics ? 0 : calculateWorkedMinutes(resolvedCheckIn, resolvedCheckOut);
+
+  const metrics = zeroMetrics
     ? { late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0 }
     : (isWeekendAttendance
         ? {
@@ -86,28 +91,30 @@ const logAttendance = async (id, data) => {
           overtime_minutes: workedMinutes || 0,
         }
         : calculateShiftMetrics(employeeRecord, resolvedCheckIn, resolvedCheckOut, { lateGraceMinutes: policy.attendanceLateGraceMinutes }));
-    
+
   const resolvedHoursWorked = isAbsent ? null : calculateHoursWorked(resolvedCheckIn, resolvedCheckOut, hours_worked);
-  
-  const resolvedLateMinutes = isAbsent ? 0 : (isWeekendAttendance
+
+  const resolvedLateMinutes = zeroMetrics ? 0 : (isWeekendAttendance
     ? 0
     : (Number.isFinite(Number(late_minutes)) ? Number(late_minutes) : metrics.late_minutes));
-    
-  const resolvedEarlyLeaveMinutes = isAbsent ? 0 : (isWeekendAttendance
+
+  const resolvedEarlyLeaveMinutes = zeroMetrics ? 0 : (isWeekendAttendance
     ? 0
     : (Number.isFinite(Number(early_leave_minutes)) ? Number(early_leave_minutes) : metrics.early_leave_minutes));
-    
-  const resolvedOvertimeMinutes = isAbsent ? 0 : (isWeekendAttendance
+
+  const resolvedOvertimeMinutes = zeroMetrics ? 0 : (isWeekendAttendance
     ? (workedMinutes || 0)
     : (Number.isFinite(Number(overtime_minutes)) ? Number(overtime_minutes) : metrics.overtime_minutes));
-    
+
   const resolvedStatus = isAbsent
     ? 'absent'
-    : (isWeekendAttendance
-        ? 'present'
-        : ((status === 'present' || status === 'late')
-          ? (resolvedLateMinutes > 0 ? 'late' : 'present')
-          : status));
+    : (isHalfDay
+        ? 'half-day'
+        : (isWeekendAttendance
+          ? 'present'
+          : ((status === 'present' || status === 'late')
+            ? (resolvedLateMinutes > 0 ? 'late' : 'present')
+            : status)));
       
   const resolvedNotes = isWeekendAttendance ? WEEKEND_PRESENT_NOTE : notes;
 

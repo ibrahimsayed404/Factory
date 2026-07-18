@@ -1,6 +1,6 @@
 const pool = require('../db/pool');
 const ApiError = require('../utils/ApiError');
-const { normalizeLoanPayload } = require('../utils/loanUtils');
+const { normalizeLoanPayload, normalizeLoanUpdatePayload } = require('../utils/loanUtils');
 
 // Positions
 exports.getPositions = async () => {
@@ -63,7 +63,12 @@ exports.createLeave = async (data) => {
   return result.rows[0];
 };
 
+const LEAVE_STATUSES = ['pending', 'approved', 'rejected'];
+
 exports.updateLeaveStatus = async (id, status) => {
+  if (!LEAVE_STATUSES.includes(status)) {
+    throw new ApiError(400, `status must be one of: ${LEAVE_STATUSES.join(', ')}`);
+  }
   const result = await pool.query(
     'UPDATE hr_leave_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
     [status, id]
@@ -127,6 +132,19 @@ exports.createLoan = async (data) => {
     'INSERT INTO hr_loans (employee_id, principal_amount, remaining_amount, monthly_installment, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
     [normalized.employee_id, normalized.principal_amount, normalized.remaining_amount, normalized.monthly_installment, normalized.status]
   );
+  return result.rows[0];
+};
+
+exports.updateLoan = async (id, data) => {
+  const update = normalizeLoanUpdatePayload(data);
+  const fields = Object.keys(update);
+  const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
+  const values = fields.map((f) => update[f]);
+  const result = await pool.query(
+    `UPDATE hr_loans SET ${setClause}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+    [id, ...values]
+  );
+  if (result.rows.length === 0) throw new ApiError(404, 'Loan not found');
   return result.rows[0];
 };
 

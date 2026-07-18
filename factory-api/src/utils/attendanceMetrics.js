@@ -13,8 +13,11 @@ const toMinutes = (value) => {
   return (h * 60) + m;
 };
 
+// Default weekend is Friday-only ('5'), matching the payroll engine and the
+// new-employee form. Keeping these in sync prevents attendance-time and
+// payroll-time weekend detection from disagreeing.
 const parseWeekendDays = (weekendDays) => new Set(
-  String(weekendDays || '0,6')
+  String(weekendDays || '5')
     .split(',')
     .map((value) => Number(String(value).trim()))
     .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6)
