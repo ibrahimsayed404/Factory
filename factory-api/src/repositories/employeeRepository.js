@@ -56,38 +56,70 @@ const getEmployeeById = async (id) => {
 };
 
 const createEmployee = async (data) => {
-  const { name, email, phone, department_id, role, shift, shift_start, shift_end, weekend_days, salary, hire_date, device_user_id } = data;
+  const { name, email, phone, department_id, role, shift, shift_start, shift_end, weekend_days, salary, hire_date, status = 'active', termination_date, device_user_id } = data;
   const supportsWeekendDays = await hasWeekendDaysColumn();
   
+  const resolvedTerminationDate = (status === 'inactive')
+    ? (termination_date || new Date().toISOString().slice(0, 10))
+    : null;
+
   const result = supportsWeekendDays
     ? await pool.query(
-      `INSERT INTO employees (name, email, phone, department_id, role, shift, shift_start, shift_end, weekend_days, salary, hire_date, device_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [name, email, phone, department_id, role, shift, shift_start || null, shift_end || null, weekend_days || null, salary, hire_date, device_user_id || null]
+      `INSERT INTO employees (name, email, phone, department_id, role, shift, shift_start, shift_end, weekend_days, salary, hire_date, status, termination_date, device_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [name, email, phone, department_id, role, shift, shift_start || null, shift_end || null, weekend_days || null, salary, hire_date, status, resolvedTerminationDate, device_user_id || null]
     )
     : await pool.query(
-      `INSERT INTO employees (name, email, phone, department_id, role, shift, shift_start, shift_end, salary, hire_date, device_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [name, email, phone, department_id, role, shift, shift_start || null, shift_end || null, salary, hire_date, device_user_id || null]
+      `INSERT INTO employees (name, email, phone, department_id, role, shift, shift_start, shift_end, salary, hire_date, status, termination_date, device_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [name, email, phone, department_id, role, shift, shift_start || null, shift_end || null, salary, hire_date, status, resolvedTerminationDate, device_user_id || null]
     );
     
   return result.rows[0];
 };
 
 const updateEmployee = async (id, data) => {
-  const { name, email, phone, department_id, role, shift, shift_start, shift_end, weekend_days, salary, hire_date, status, device_user_id } = data;
+  const existing = await getEmployeeById(id);
+  if (!existing) return null;
+
+  const resolvedName = data.name !== undefined ? data.name : existing.name;
+  const resolvedEmail = data.email !== undefined ? data.email : existing.email;
+  const resolvedPhone = data.phone !== undefined ? data.phone : existing.phone;
+  const resolvedDept = data.department_id !== undefined ? data.department_id : existing.department_id;
+  const resolvedRole = data.role !== undefined ? data.role : existing.role;
+  const resolvedShift = data.shift !== undefined ? data.shift : existing.shift;
+  const resolvedShiftStart = data.shift_start !== undefined ? data.shift_start : existing.shift_start;
+  const resolvedShiftEnd = data.shift_end !== undefined ? data.shift_end : existing.shift_end;
+  const resolvedWeekendDays = data.weekend_days !== undefined ? data.weekend_days : existing.weekend_days;
+  const resolvedSalary = data.salary !== undefined ? data.salary : existing.salary;
+  const resolvedHireDate = data.hire_date !== undefined ? data.hire_date : existing.hire_date;
+  const resolvedDeviceUserId = data.device_user_id !== undefined ? data.device_user_id : existing.device_user_id;
+
+  const resolvedStatus = data.status !== undefined ? data.status : existing.status;
+  let resolvedTerminationDate = existing.termination_date;
+
+  if (data.status !== undefined) {
+    if (data.status === 'inactive') {
+      resolvedTerminationDate = data.termination_date || existing.termination_date || new Date().toISOString().slice(0, 10);
+    } else if (data.status === 'active') {
+      resolvedTerminationDate = null;
+    }
+  } else if (data.termination_date !== undefined) {
+    resolvedTerminationDate = data.termination_date;
+  }
+
   const supportsWeekendDays = await hasWeekendDaysColumn();
   
   const result = supportsWeekendDays
     ? await pool.query(
       `UPDATE employees SET name=$1, email=$2, phone=$3, department_id=$4, role=$5,
-       shift=$6, shift_start=$7, shift_end=$8, weekend_days=$9, salary=$10, hire_date=$11, status=$12, device_user_id=$13 WHERE id=$14 RETURNING *`,
-      [name, email, phone, department_id, role, shift, shift_start || null, shift_end || null, weekend_days || null, salary, hire_date, status, device_user_id || null, id]
+       shift=$6, shift_start=$7, shift_end=$8, weekend_days=$9, salary=$10, hire_date=$11, status=$12, termination_date=$13, device_user_id=$14 WHERE id=$15 RETURNING *`,
+      [resolvedName, resolvedEmail, resolvedPhone, resolvedDept, resolvedRole, resolvedShift, resolvedShiftStart || null, resolvedShiftEnd || null, resolvedWeekendDays || null, resolvedSalary, resolvedHireDate, resolvedStatus, resolvedTerminationDate, resolvedDeviceUserId || null, id]
     )
     : await pool.query(
       `UPDATE employees SET name=$1, email=$2, phone=$3, department_id=$4, role=$5,
-       shift=$6, shift_start=$7, shift_end=$8, salary=$9, hire_date=$10, status=$11, device_user_id=$12 WHERE id=$13 RETURNING *`,
-      [name, email, phone, department_id, role, shift, shift_start || null, shift_end || null, salary, hire_date, status, device_user_id || null, id]
+       shift=$6, shift_start=$7, shift_end=$8, salary=$9, hire_date=$10, status=$11, termination_date=$12, device_user_id=$13 WHERE id=$14 RETURNING *`,
+      [resolvedName, resolvedEmail, resolvedPhone, resolvedDept, resolvedRole, resolvedShift, resolvedShiftStart || null, resolvedShiftEnd || null, resolvedSalary, resolvedHireDate, resolvedStatus, resolvedTerminationDate, resolvedDeviceUserId || null, id]
     );
     
   return result.rows[0] || null;

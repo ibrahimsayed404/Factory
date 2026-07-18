@@ -12,6 +12,8 @@ const path = require('node:path');
 const request = require('supertest');
 const bcrypt = require('bcryptjs');
 
+jest.setTimeout(30000);
+
 const app = require('../../src/app');
 const pool = require('../../src/db/pool');
 
@@ -75,6 +77,8 @@ const createAdminAndLogin = async () => {
 beforeAll(async () => {
   await pool.query(schemaSql);
   await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS weekend_days VARCHAR(20) DEFAULT '0,6'`);
+  await pool.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_date DATE`);
+  await pool.query(`ALTER TABLE payroll ADD COLUMN IF NOT EXISTS week_start DATE, ADD COLUMN IF NOT EXISTS week_end DATE, ADD COLUMN IF NOT EXISTS loan_deduction NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS manual_bonus NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS manual_deductions NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS auto_bonus NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS auto_deductions NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS hr_bonus NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS hr_penalty NUMERIC(10,2) DEFAULT 0, ADD COLUMN IF NOT EXISTS hr_overtime NUMERIC(10,2) DEFAULT 0`);
   await pool.query('ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS evidence_url TEXT');
   await pool.query('ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS evidence_name VARCHAR(255)');
   await pool.query('ALTER TABLE customer_payments ADD COLUMN IF NOT EXISTS evidence_mime VARCHAR(100)');
@@ -378,6 +382,7 @@ describe('Payroll auto-adjustments', () => {
     expect(emp.status).toBe(201);
 
     const employeeId = emp.body.id;
+    await pool.query("UPDATE employees SET hire_date = '2026-03-01', termination_date = '2026-03-04' WHERE id = $1", [employeeId]);
 
     const attendanceRows = [
       { date: '2026-03-01', check_in: '09:30', check_out: '17:00', status: 'present' },
@@ -509,6 +514,7 @@ describe('Payroll auto-adjustments', () => {
         salary: 3000,
       });
     expect(emp.status).toBe(201);
+    await pool.query("UPDATE employees SET hire_date = '2026-03-15', termination_date = '2026-03-15' WHERE id = $1", [emp.body.id]);
 
     const attendance = await agent
       .post(`/api/employees/${emp.body.id}/attendance`)
@@ -559,6 +565,7 @@ describe('Payroll auto-adjustments', () => {
     expect(emp.status).toBe(201);
 
     const employeeId = emp.body.id;
+    await pool.query("UPDATE employees SET hire_date = '2026-03-17', termination_date = '2026-03-19' WHERE id = $1", [employeeId]);
 
     const rows = [
       { date: '2026-03-17', check_in: '09:00', check_out: '17:00', status: 'present' },

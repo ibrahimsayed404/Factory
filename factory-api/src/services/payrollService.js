@@ -52,24 +52,103 @@ const weekendSetFrom = (weekendDays) => {
   );
 };
 
-const inferredAbsentDaysBetweenRecords = (records, weekendSet) => {
-  if (!records.length) return 0;
+const toIsoDateString = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value));
+  return match ? match[1] : null;
+};
 
-  const sorted = [...records].sort((a, b) => new Date(a.date) - new Date(b.date));
-  const start = new Date(`${sorted[0].date}T00:00:00Z`);
-  const end = new Date(`${sorted.at(-1).date}T00:00:00Z`);
-  const recorded = new Set(sorted.map((r) => String(r.date)));
+const getPayrollPeriodRange = ({ weekStart, weekEnd, effectiveMonth, effectiveYear }) => {
+  if (weekStart) {
+    const start = toIsoDateString(weekStart);
+    let end;
+    if (weekEnd) {
+      end = toIsoDateString(weekEnd);
+    } else {
+      const startDate = normalizeToUtcDate(start);
+      const endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + 5));
+      end = toIsoDate(endDate);
+    }
+    return { periodStart: start, periodEnd: end };
+  } else if (effectiveMonth && effectiveYear) {
+    const m = Number(effectiveMonth);
+    const y = Number(effectiveYear);
+    const start = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { periodStart: start, periodEnd: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}` };
+  }
+  return { periodStart: null, periodEnd: null };
+};
+
+const getBusinessTodayIso = () => {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Cairo' });
+};
+
+const buildApprovedLeaveDatesSet = (leaveRows = []) => {
+  const approvedSet = new Set();
+  for (const row of leaveRows) {
+    const startStr = toIsoDateString(row.start_date);
+    const endStr = toIsoDateString(row.end_date);
+    if (!startStr || !endStr) continue;
+
+    let cursor = normalizeToUtcDate(startStr);
+    const endDate = normalizeToUtcDate(endStr);
+    while (cursor <= endDate) {
+      approvedSet.add(toIsoDate(cursor));
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
+    }
+  }
+  return approvedSet;
+};
+
+const calculateInferredAbsentDays = (records = [], weekendSet, periodStart, periodEnd, employee = {}, approvedLeaveDates = new Set()) => {
+  const startIso = toIsoDateString(periodStart);
+  const periodEndIso = toIsoDateString(periodEnd);
+  if (!startIso || !periodEndIso) return 0;
+
+  // Cap end date at Egypt business date so future, unoccurred days in open periods are not marked absent
+  const todayIso = getBusinessTodayIso();
+  const endIso = (todayIso && periodEndIso > todayIso) ? todayIso : periodEndIso;
+
+  const hireIso = toIsoDateString(employee?.hire_date);
+  const terminationIso = toIsoDateString(employee?.termination_date);
+
+  const recordedDates = new Set(
+    records.map((r) => toIsoDateString(r.date)).filter(Boolean)
+  );
 
   let inferred = 0;
-  let cursor = new Date(start);
-  while (cursor <= end) {
-    const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}-${String(cursor.getUTCDate()).padStart(2, '0')}`;
+  let cursor = normalizeToUtcDate(startIso);
+  const endDate = normalizeToUtcDate(endIso);
+
+  while (cursor <= endDate) {
+    const dateStr = toIsoDate(cursor);
     const day = cursor.getUTCDay();
-    if (!weekendSet.has(day) && !recorded.has(key)) inferred += 1;
+
+    const isWeekend = weekendSet.has(day);
+    const hasRecord = recordedDates.has(dateStr);
+    const beforeHire = hireIso ? dateStr < hireIso : false;
+    const afterTermination = terminationIso ? dateStr > terminationIso : false;
+    const isApprovedLeave = approvedLeaveDates ? approvedLeaveDates.has(dateStr) : false;
+
+    if (!isWeekend && !hasRecord && !beforeHire && !afterTermination && !isApprovedLeave) {
+      inferred += 1;
+    }
+
     cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
   }
+
   return inferred;
 };
+
+const inferredAbsentDaysBetweenRecords = calculateInferredAbsentDays;
 
 const isWeekendAttendanceDate = (dateValue, weekendSet) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue || '').slice(0, 10));
@@ -104,8 +183,6 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary) => {
 };
 
 const getPayroll = async ({ weekStartInput, month, year, status, page, limit }) => {
-  await payrollRepository.ensureWeeklyPayrollColumns();
-  
   const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
   if (weekStartInput && !normalizedWeekStartDate) {
     throw new ApiError(400, 'Invalid week_start date format');
@@ -202,6 +279,10 @@ const calculatePayrollForEmployee = async (employee, options) => {
     employee.id, weekStart, weekEnd, effectiveMonth, effectiveYear
   );
 
+  const { periodStart, periodEnd } = getPayrollPeriodRange({ weekStart, weekEnd, effectiveMonth, effectiveYear });
+  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(employee.id, periodStart, periodEnd);
+  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
   const totals = attendanceRecords.reduce((acc, row) => ({
     late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
     early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
@@ -214,7 +295,14 @@ const calculatePayrollForEmployee = async (employee, options) => {
     weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
   });
 
-  const inferredAbsentDays = inferredAbsentDaysBetweenRecords(attendanceRecords, weekendSet);
+  const inferredAbsentDays = calculateInferredAbsentDays(
+    attendanceRecords,
+    weekendSet,
+    periodStart,
+    periodEnd,
+    employee,
+    approvedLeaveDates
+  );
 
   const overtimeMinutes = totals.overtime_minutes;
   const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
@@ -318,7 +406,6 @@ const calculatePayrollForEmployee = async (employee, options) => {
 };
 
 const generatePayroll = async (data) => {
-  await payrollRepository.ensureWeeklyPayrollColumns();
   const { employee_id, week_start: weekStartInput, month: monthInput, year: yearInput, bonus = 0, deductions = 0 } = data;
   const manualBonus = Number(bonus || 0);
   const manualDeductions = Number(deductions || 0);
@@ -390,7 +477,6 @@ const markPaid = async (id) => {
 };
 
 const updateManualAdjustments = async (id, data = {}) => {
-  await payrollRepository.ensureWeeklyPayrollColumns();
   const record = await payrollRepository.getPayrollById(id);
   if (!record) throw new ApiError(404, 'Payroll record not found');
   if (record.status === 'paid') {
@@ -430,6 +516,15 @@ const updateManualAdjustments = async (id, data = {}) => {
     record.year
   );
 
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: record.week_start,
+    weekEnd: record.week_end,
+    effectiveMonth: record.month,
+    effectiveYear: record.year,
+  });
+  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(record.employee_id, periodStart, periodEnd);
+  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
   const totals = attendanceRecords.reduce((acc, row) => ({
     late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
     early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
@@ -442,7 +537,14 @@ const updateManualAdjustments = async (id, data = {}) => {
     weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
   });
 
-  const inferredAbsentDays = inferredAbsentDaysBetweenRecords(attendanceRecords, weekendSet);
+  const inferredAbsentDays = calculateInferredAbsentDays(
+    attendanceRecords,
+    weekendSet,
+    periodStart,
+    periodEnd,
+    employee,
+    approvedLeaveDates
+  );
   const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
   const regularOvertimeMinutes = Math.max(0, totals.overtime_minutes - weekendOvertimeMinutes);
   const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
@@ -526,6 +628,15 @@ const generateMonthlyPayroll = async (data) => {
     employee_id, null, null, month, year
   );
 
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: null,
+    weekEnd: null,
+    effectiveMonth: month,
+    effectiveYear: year,
+  });
+  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(employee_id, periodStart, periodEnd);
+  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
   const totals = attendanceRecords.reduce((acc, row) => ({
     late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
     early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
@@ -538,7 +649,14 @@ const generateMonthlyPayroll = async (data) => {
     weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
   });
 
-  const inferredAbsentDays = inferredAbsentDaysBetweenRecords(attendanceRecords, weekendSet);
+  const inferredAbsentDays = calculateInferredAbsentDays(
+    attendanceRecords,
+    weekendSet,
+    periodStart,
+    periodEnd,
+    emp,
+    approvedLeaveDates
+  );
 
   const overtimeMinutes = totals.overtime_minutes;
   const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
@@ -626,7 +744,6 @@ const generateMonthlyPayroll = async (data) => {
 };
 
 const deletePayrollWeek = async (weekStartInput) => {
-  await payrollRepository.ensureWeeklyPayrollColumns();
   const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
   if (weekStartInput && !normalizedWeekStartDate) {
     throw new ApiError(400, 'Invalid week_start date format');
@@ -673,4 +790,5 @@ module.exports = {
   markPaid,
   updateManualAdjustments,
   deletePayrollWeek,
+  calculateInferredAbsentDays,
 };

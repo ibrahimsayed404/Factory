@@ -25,7 +25,7 @@ beforeAll(async () => {
 
   adminToken = jwt.sign({ id: userId, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
   
-  const empRes = await pool.query("INSERT INTO employees (name, email, salary) VALUES ('HR Test', 'hr@test.com', 5000) RETURNING id");
+  const empRes = await pool.query("INSERT INTO employees (name, email, salary, weekend_days) VALUES ('HR Test', 'hr@test.com', 5000, '5') RETURNING id");
   employeeId = empRes.rows[0].id;
 });
 
@@ -48,6 +48,15 @@ describe('HR & Monthly Payroll Integration Tests', () => {
       "INSERT INTO hr_loans (employee_id, principal_amount, remaining_amount, monthly_installment) VALUES ($1, 1000, 1000, 100)",
       [employeeId]
     );
+
+    // Bulk insert present attendance for August 2023 workdays (excluding Fridays)
+    await pool.query(`
+      INSERT INTO attendance (employee_id, date, status, check_in, check_out)
+      SELECT $1, d::date, 'present', '09:00', '17:00'
+      FROM generate_series('2023-08-01'::date, '2023-08-31'::date, '1 day'::interval) d
+      WHERE EXTRACT(DOW FROM d) != 5
+      ON CONFLICT DO NOTHING
+    `, [employeeId]);
 
     const generateRes = await request(server)
       .post('/api/payroll/monthly')

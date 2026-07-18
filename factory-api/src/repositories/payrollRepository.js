@@ -1,38 +1,6 @@
 const pool = require('../db/pool');
 
 let hasWeekendDaysColumnCache = null;
-let weeklyColumnsEnsured = false;
-
-const ensureWeeklyPayrollColumns = async () => {
-  if (weeklyColumnsEnsured) return;
-  await pool.query(`
-    ALTER TABLE payroll
-      ADD COLUMN IF NOT EXISTS week_start DATE,
-      ADD COLUMN IF NOT EXISTS week_end DATE,
-      ADD COLUMN IF NOT EXISTS loan_deduction NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS manual_bonus NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS manual_deductions NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS auto_bonus NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS auto_deductions NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS hr_bonus NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS hr_penalty NUMERIC(10,2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS hr_overtime NUMERIC(10,2) DEFAULT 0
-  `);
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'payroll_employee_id_week_start_key'
-      ) THEN
-        ALTER TABLE payroll
-          ADD CONSTRAINT payroll_employee_id_week_start_key UNIQUE (employee_id, week_start);
-      END IF;
-    END $$;
-  `);
-  weeklyColumnsEnsured = true;
-};
 
 const hasWeekendDaysColumn = async () => {
   if (hasWeekendDaysColumnCache === true) return true;
@@ -118,16 +86,30 @@ const getPayrollRecords = async ({ weekStart, month, year, status, limit, offset
 
 const getEmployeeForPayroll = async (employeeId, supportsWeekendDays) => {
   const emp = supportsWeekendDays
-    ? await pool.query('SELECT id, salary, weekend_days FROM employees WHERE id = $1', [employeeId])
-    : await pool.query('SELECT id, salary FROM employees WHERE id = $1', [employeeId]);
+    ? await pool.query('SELECT id, salary, weekend_days, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId])
+    : await pool.query('SELECT id, salary, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId]);
   return emp.rows[0] || null;
 };
 
 const getActiveEmployeesForPayroll = async (supportsWeekendDays) => {
   const query = supportsWeekendDays
-    ? 'SELECT id, salary, weekend_days FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id'
-    : 'SELECT id, salary FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id';
+    ? 'SELECT id, salary, weekend_days, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id'
+    : 'SELECT id, salary, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id';
   const result = await pool.query(query);
+  return result.rows;
+};
+
+const getApprovedLeavesForPayroll = async (employeeId, startDate, endDate) => {
+  if (!employeeId || !startDate || !endDate) return [];
+  const result = await pool.query(
+    `SELECT start_date::text AS start_date, end_date::text AS end_date
+     FROM hr_leave_requests
+     WHERE employee_id = $1
+       AND status = 'approved'
+       AND end_date >= $2::date
+       AND start_date <= $3::date`,
+    [employeeId, startDate, endDate]
+  );
   return result.rows;
 };
 
@@ -418,12 +400,12 @@ const restoreLoanPayment = async (loanId, amount) => {
 };
 
 module.exports = {
-  ensureWeeklyPayrollColumns,
   hasWeekendDaysColumn,
   getPayrollRecordsCount,
   getPayrollRecords,
   getEmployeeForPayroll,
   getActiveEmployeesForPayroll,
+  getApprovedLeavesForPayroll,
   getAttendanceForPayroll,
   getActiveLoansForPayroll,
   applyLoanPayments,

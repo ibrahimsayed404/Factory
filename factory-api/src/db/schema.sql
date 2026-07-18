@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS employees (
   device_user_id VARCHAR(100) UNIQUE,
   salary NUMERIC(10,2),
   hire_date DATE,
+  termination_date DATE,
   status VARCHAR(30) DEFAULT 'active', -- active, inactive
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -321,6 +322,14 @@ CREATE TABLE IF NOT EXISTS payroll (
   bonus NUMERIC(10,2) DEFAULT 0,
   deductions NUMERIC(10,2) DEFAULT 0,
   net_salary NUMERIC(10,2),
+  loan_deduction NUMERIC(10,2) DEFAULT 0,
+  manual_bonus NUMERIC(10,2) DEFAULT 0,
+  manual_deductions NUMERIC(10,2) DEFAULT 0,
+  auto_bonus NUMERIC(10,2) DEFAULT 0,
+  auto_deductions NUMERIC(10,2) DEFAULT 0,
+  hr_bonus NUMERIC(10,2) DEFAULT 0,
+  hr_penalty NUMERIC(10,2) DEFAULT 0,
+  hr_overtime NUMERIC(10,2) DEFAULT 0,
   paid_at TIMESTAMP,
   status VARCHAR(30) DEFAULT 'pending', -- pending, paid
   UNIQUE(employee_id, month, year),
