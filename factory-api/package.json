@@ -11,7 +11,9 @@
     "seed:sample": "node scripts/seed-sample-data.js",
     "seed:loan": "node scripts/seed-loan-test.js",
     "migrate": "npm run db:ensure && node scripts/run-migration.js",
-    "test": "jest --runInBand",
+    "test": "jest tests/unit",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration --runInBand",
     "lint": "eslint src --ext .js",
     "format": "prettier --write src"
   },

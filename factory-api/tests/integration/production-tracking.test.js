@@ -1,6 +1,9 @@
 /* eslint-env jest */
 
 require('dotenv').config();
+if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
+  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
+}
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_value';
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';

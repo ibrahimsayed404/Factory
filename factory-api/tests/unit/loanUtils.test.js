@@ -41,8 +41,8 @@ describe('normalizeLoanPayload', () => {
 
 describe('normalizeLoanUpdatePayload', () => {
   it('returns only the provided fields', () => {
-    expect(normalizeLoanUpdatePayload({ remaining_amount: '500', status: 'closed' }))
-      .toEqual({ remaining_amount: 500, status: 'closed' });
+    expect(normalizeLoanUpdatePayload({ employee_id: 5, remaining_amount: '500', status: 'closed' }))
+      .toEqual({ employee_id: 5, remaining_amount: 500, status: 'closed' });
   });
 
   it('rejects an empty update', () => {

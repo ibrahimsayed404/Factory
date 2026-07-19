@@ -1,3 +1,7 @@
+require('dotenv').config();
+if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
+  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
+}
 const request = require('supertest');
 const path = require('path');
 const fs = require('fs');

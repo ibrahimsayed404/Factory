@@ -39,6 +39,13 @@ const normalizeLoanPayload = (data = {}) => {
 // admin can correct a balance; status is enum-checked.
 const normalizeLoanUpdatePayload = (data = {}) => {
   const update = {};
+  if (data.employee_id !== undefined) {
+    const empId = Number(data.employee_id);
+    if (!Number.isInteger(empId) || empId <= 0) {
+      throw new ApiError(400, 'employee_id must be a valid positive integer');
+    }
+    update.employee_id = empId;
+  }
   if (data.principal_amount !== undefined) update.principal_amount = requirePositiveNumber(data.principal_amount, 'principal_amount');
   if (data.remaining_amount !== undefined) update.remaining_amount = requirePositiveNumber(data.remaining_amount, 'remaining_amount');
   if (data.monthly_installment !== undefined) {
