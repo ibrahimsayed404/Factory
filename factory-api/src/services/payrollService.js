@@ -261,15 +261,20 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
     const lateWeighted = Number(row.late_weighted_minutes || 0);
     const earlyLeaveMinutes = earlyLeaveChargeMinutes(row.early_leave_minutes);
 
-    const autoDeductions =
-      ((lateWeighted + earlyLeaveMinutes) * minuteRate) +
-      (Number(row.absent_days) * dailyRate) +
-      (Number(row.half_days) * (dailyRate / 2));
+    const absentDays = Number(row.absent_days);
+    const halfDays = Number(row.half_days);
+    // Per-component dollar amounts, so each line in the breakdown/PDF is
+    // transparent and independently verifiable (rather than one lumped total).
+    const lateDeductionAmount = lateWeighted * minuteRate;
+    const earlyLeaveDeductionAmount = earlyLeaveMinutes * minuteRate;
+    const absentDeductionAmount = absentDays * dailyRate;
+    const halfDayDeductionAmount = halfDays * (dailyRate / 2);
+    const autoDeductions = lateDeductionAmount + earlyLeaveDeductionAmount + absentDeductionAmount + halfDayDeductionAmount;
     const weekendOvertimeMinutes = Number(row.weekend_overtime_minutes || 0);
     const regularOvertimeMinutes = Math.max(0, Number(row.overtime_minutes || 0) - weekendOvertimeMinutes);
-    const autoBonus =
-      (regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier) +
-      (weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier);
+    const regularOvertimeAmount = regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
+    const weekendOvertimeAmount = weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier;
+    const autoBonus = regularOvertimeAmount + weekendOvertimeAmount;
 
     const hrBonus = Number(row.hr_bonus || 0);
     const hrPenalty = Number(row.hr_penalty || 0);
@@ -319,10 +324,17 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
         overtime_minutes: Number(row.overtime_minutes),
         regular_overtime_minutes: regularOvertimeMinutes,
         weekend_overtime_minutes: weekendOvertimeMinutes,
-        absent_days: Number(row.absent_days),
-        half_days: Number(row.half_days),
+        absent_days: absentDays,
+        half_days: halfDays,
         inferred_absent_days: Number(row.inferred_absent_days || 0),
         late_weighted_minutes: round2(lateWeighted),
+        // Per-component dollar amounts (for a transparent, verifiable breakdown).
+        late_deduction: round2(lateDeductionAmount),
+        early_leave_deduction: round2(earlyLeaveDeductionAmount),
+        absent_deduction: round2(absentDeductionAmount),
+        half_day_deduction: round2(halfDayDeductionAmount),
+        regular_overtime_bonus: round2(regularOvertimeAmount),
+        weekend_overtime_bonus: round2(weekendOvertimeAmount),
         weekly_payment_estimate: round2(weeklyPaymentEstimate),
       },
     };

@@ -259,41 +259,41 @@ export default function Payroll() {
 
     const { printHtmlDocument } = await import('../utils/printDocument');
 
-    // `required` fields are always shown (even at 0) so the printed breakdown
-    // matches the on-screen modal and reconciles to the net total.
-    const renderBreakdownField = (label, value, { isCurrency = false, required = false } = {}) => {
-      const isEmpty = value === 0 || value === null || value === undefined || value === '';
-      if (isEmpty && !required) return '';
-      const displayValue = isCurrency ? formatCurrency(value) : (isEmpty ? formatMinutes(0) : value);
-      return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong>${displayValue}</strong></div>`;
+    // Only render rows that carry a value — zero/empty rows are omitted so the
+    // breakdown shows just what actually affected this employee's pay.
+    const renderBreakdownRow = (label, amount, { positive = false } = {}) => {
+      const sign = positive ? '+' : '-';
+      const color = positive ? '#0f6e56' : '#b91c1c';
+      return `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong style="color:${color}">${sign}${formatCurrency(amount)}</strong></div>`;
     };
+    const renderPlainRow = (label, value) => (
+      `<div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #f1f5f9;"><span>${label}</span><strong>${value}</strong></div>`
+    );
 
     const employeeBreakdowns = sortedRecords.map(row => {
-      const breakdown = row.payroll_breakdown || {};
-      const fields = [
-        { label: t('base', 'Base'), value: row.base_salary, isCurrency: true, required: true },
-        { label: t('autoBonus', 'Auto bonus'), value: breakdown.auto_bonus, isCurrency: true, required: false },
-        { label: t('autoDeductions', 'Auto deductions'), value: breakdown.auto_deductions, isCurrency: true, required: true },
-        { label: t('manualBonus', 'Manual bonus'), value: breakdown.manual_bonus, isCurrency: true, required: false },
-        { label: t('manualDeductions', 'Manual deductions'), value: breakdown.manual_deductions, isCurrency: true, required: false },
-        { label: t('hrBonus', 'HR bonus'), value: breakdown.hr_bonus, isCurrency: true, required: false },
-        { label: t('hrPenalty', 'HR penalty'), value: breakdown.hr_penalty, isCurrency: true, required: false },
-        { label: t('hrOvertime', 'HR overtime bonus'), value: breakdown.hr_overtime_bonus, isCurrency: true, required: false },
-        { label: t('loanDeduction', 'Loan deduction'), value: breakdown.loan_deduction, isCurrency: true, required: false },
-        { label: t('lateMinutes', 'Late minutes'), value: formatMinutes(breakdown.late_minutes), required: true },
-        { label: t('lateWeightedMinutes', 'Late weighted minutes'), value: formatMinutes(breakdown.late_weighted_minutes), required: true },
-        { label: t('earlyLeaveMinutes', 'Early leave minutes'), value: formatMinutes(breakdown.early_leave_minutes), required: false },
-        { label: t('regularOvertime', 'Regular overtime'), value: formatMinutes(breakdown.regular_overtime_minutes ?? breakdown.overtime_minutes), required: false },
-        { label: t('weekendWorkOvertime', 'Weekend work overtime'), value: formatMinutes(breakdown.weekend_overtime_minutes), required: false },
-        { label: t('totalOvertime', 'Total overtime'), value: formatMinutes(breakdown.overtime_minutes), required: false },
-        { label: t('absentDays', 'Absent days'), value: breakdown.absent_days, required: false },
-        { label: t('halfDays', 'Half days'), value: breakdown.half_days, required: false },
-        { label: t('inferredAbsentDays', 'Inferred absent days'), value: breakdown.inferred_absent_days, required: false },
-      ];
+      const b = row.payroll_breakdown || {};
+      const rows = [];
+      // Base salary always shows (the anchor of the calculation).
+      rows.push(renderPlainRow(t('base', 'Base salary'), formatCurrency(row.base_salary)));
 
-      const fieldsHtml = fields
-        .map(f => renderBreakdownField(f.label, f.value, { isCurrency: f.isCurrency, required: f.required }))
-        .join('');
+      // Deductions — each shown only when non-zero, with its detail in the label.
+      if (b.late_deduction > 0) rows.push(renderBreakdownRow(`${t('lateDeduction', 'Late')} (${formatMinutes(b.late_minutes)} → ${formatMinutes(b.late_weighted_minutes)} ${t('weighted', 'weighted')})`, b.late_deduction));
+      if (b.early_leave_deduction > 0) rows.push(renderBreakdownRow(`${t('earlyLeave', 'Early leave')} (${formatMinutes(b.early_leave_minutes)})`, b.early_leave_deduction));
+      const totalAbsent = (b.absent_days || 0) + (b.inferred_absent_days || 0);
+      if (b.absent_deduction > 0) rows.push(renderBreakdownRow(`${t('absent', 'Absent')} (${totalAbsent} ${t('days', 'day(s)')})`, b.absent_deduction));
+      if (b.half_day_deduction > 0) rows.push(renderBreakdownRow(`${t('halfDay', 'Half day')} (${b.half_days})`, b.half_day_deduction));
+      if (b.hr_penalty > 0) rows.push(renderBreakdownRow(t('hrPenalty', 'HR penalty'), b.hr_penalty));
+      if (b.manual_deductions > 0) rows.push(renderBreakdownRow(t('manualDeductions', 'Manual deduction'), b.manual_deductions));
+      if (b.loan_deduction > 0) rows.push(renderBreakdownRow(t('loanDeduction', 'Loan deduction'), b.loan_deduction));
+
+      // Bonuses — each shown only when non-zero.
+      if (b.regular_overtime_bonus > 0) rows.push(renderBreakdownRow(`${t('regularOvertime', 'Overtime')} (${formatMinutes(b.regular_overtime_minutes)})`, b.regular_overtime_bonus, { positive: true }));
+      if (b.weekend_overtime_bonus > 0) rows.push(renderBreakdownRow(`${t('weekendWorkOvertime', 'Weekend overtime')} (${formatMinutes(b.weekend_overtime_minutes)})`, b.weekend_overtime_bonus, { positive: true }));
+      if (b.hr_bonus > 0) rows.push(renderBreakdownRow(t('hrBonus', 'HR bonus'), b.hr_bonus, { positive: true }));
+      if (b.hr_overtime_bonus > 0) rows.push(renderBreakdownRow(t('hrOvertime', 'HR overtime bonus'), b.hr_overtime_bonus, { positive: true }));
+      if (b.manual_bonus > 0) rows.push(renderBreakdownRow(t('manualBonus', 'Manual bonus'), b.manual_bonus, { positive: true }));
+
+      const fieldsHtml = rows.join('');
 
       const statusClass = row.status === 'paid' ? 'paid' : 'pending';
       const statusLabel = row.status === 'paid' ? t('paid', 'Paid') : t('pending', 'Pending');
@@ -679,35 +679,46 @@ export default function Payroll() {
               ⚠️ {t('recalcDriftHint', 'Recalculated total differs from the paid amount')}: {formatCurrency(selectedBreakdown.recomputed_net_salary)} vs {formatCurrency(selectedBreakdown.net_salary)}
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
-            <Card padding="10px 12px"><strong>{t('autoBonus', 'Auto bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.auto_bonus || 0)}</div></Card>
-            <Card padding="10px 12px"><strong>{t('autoDeductions', 'Auto deductions')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.auto_deductions || 0)}</div></Card>
-            <Card padding="10px 12px"><strong>{t('manualBonus', 'Manual bonus')}</strong><div style={{ marginTop: 4 }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.manual_bonus || 0)}</div></Card>
-            <Card padding="10px 12px"><strong>{t('manualDeductions', 'Manual deductions')}</strong><div style={{ marginTop: 4 }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.manual_deductions || 0)}</div></Card>
-            <Card padding="10px 12px"><strong>{t('loanDeduction', 'Loan deduction')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.loan_deduction || 0)}</div></Card>
-            {Boolean(selectedBreakdown.payroll_breakdown?.hr_bonus) && (
-              <Card padding="10px 12px"><strong>{t('hrBonus', 'HR bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.hr_bonus)}</div></Card>
-            )}
-            {Boolean(selectedBreakdown.payroll_breakdown?.hr_penalty) && (
-              <Card padding="10px 12px"><strong>{t('hrPenalty', 'HR penalty')}</strong><div style={{ marginTop: 4, color: 'var(--danger)' }}>-{formatCurrency(selectedBreakdown.payroll_breakdown?.hr_penalty)}</div></Card>
-            )}
-            {Boolean(selectedBreakdown.payroll_breakdown?.hr_overtime_bonus) && (
-              <Card padding="10px 12px"><strong>{t('hrOvertime', 'HR overtime bonus')}</strong><div style={{ marginTop: 4, color: 'var(--accent)' }}>+{formatCurrency(selectedBreakdown.payroll_breakdown?.hr_overtime_bonus)}</div></Card>
-            )}
-          </div>
+          {(() => {
+            const b = selectedBreakdown.payroll_breakdown || {};
+            const totalAbsent = (b.absent_days || 0) + (b.inferred_absent_days || 0);
+            // Only itemize rows that actually affected pay (non-zero).
+            const items = [
+              { label: `${t('lateDeduction', 'Late')} (${formatMinutes(b.late_minutes)} → ${formatMinutes(b.late_weighted_minutes)} ${t('weighted', 'weighted')})`, amount: b.late_deduction, positive: false },
+              { label: `${t('earlyLeave', 'Early leave')} (${formatMinutes(b.early_leave_minutes)})`, amount: b.early_leave_deduction, positive: false },
+              { label: `${t('absent', 'Absent')} (${totalAbsent} ${t('days', 'day(s)')})`, amount: b.absent_deduction, positive: false },
+              { label: `${t('halfDay', 'Half day')} (${b.half_days})`, amount: b.half_day_deduction, positive: false },
+              { label: t('hrPenalty', 'HR penalty'), amount: b.hr_penalty, positive: false },
+              { label: t('manualDeductions', 'Manual deduction'), amount: b.manual_deductions, positive: false },
+              { label: t('loanDeduction', 'Loan deduction'), amount: b.loan_deduction, positive: false },
+              { label: `${t('regularOvertime', 'Overtime')} (${formatMinutes(b.regular_overtime_minutes)})`, amount: b.regular_overtime_bonus, positive: true },
+              { label: `${t('weekendWorkOvertime', 'Weekend overtime')} (${formatMinutes(b.weekend_overtime_minutes)})`, amount: b.weekend_overtime_bonus, positive: true },
+              { label: t('hrBonus', 'HR bonus'), amount: b.hr_bonus, positive: true },
+              { label: t('hrOvertime', 'HR overtime bonus'), amount: b.hr_overtime_bonus, positive: true },
+              { label: t('manualBonus', 'Manual bonus'), amount: b.manual_bonus, positive: true },
+            ].filter(it => Number(it.amount) > 0);
 
-          <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12 }}>
-            <Card padding="10px 12px">{t('lateMinutes', 'Late minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.late_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('lateWeightedMinutes', 'Late weighted minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.late_weighted_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('earlyLeaveMinutes', 'Early leave minutes')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.early_leave_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('regularOvertime', 'Regular overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.regular_overtime_minutes ?? selectedBreakdown.payroll_breakdown?.overtime_minutes ?? 0)}</strong></Card>
-            <Card padding="10px 12px">{t('weekendWorkOvertime', 'Weekend work overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.weekend_overtime_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('totalOvertime', 'Total overtime')}: <strong>{formatMinutes(selectedBreakdown.payroll_breakdown?.overtime_minutes || 0)}</strong></Card>
-            <Card padding="10px 12px">{t('absentDays', 'Absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.absent_days || 0}</strong></Card>
-            <Card padding="10px 12px">{t('halfDays', 'Half days')}: <strong>{selectedBreakdown.payroll_breakdown?.half_days || 0}</strong></Card>
-            <Card padding="10px 12px">{t('inferredAbsentDays', 'Inferred absent days')}: <strong>{selectedBreakdown.payroll_breakdown?.inferred_absent_days || 0}</strong></Card>
-            <Card padding="10px 12px">{t('weeklyPaymentEstimate', 'Weekly payment estimate')}: <strong>{formatCurrency(selectedBreakdown.payroll_breakdown?.weekly_payment_estimate || 0)}</strong></Card>
-          </div>
+            const rowStyle = { display: 'flex', justifyContent: 'space-between', padding: '8px 2px', borderBottom: '1px solid var(--border)', fontSize: 13 };
+            return (
+              <div>
+                <div style={{ ...rowStyle, fontWeight: 700 }}>
+                  <span>{t('base', 'Base salary')}</span><span>{formatCurrency(selectedBreakdown.base_salary)}</span>
+                </div>
+                {items.map((it) => (
+                  <div key={it.label} style={rowStyle}>
+                    <span>{it.label}</span>
+                    <strong style={{ color: it.positive ? 'var(--accent)' : 'var(--danger)' }}>{it.positive ? '+' : '-'}{formatCurrency(it.amount)}</strong>
+                  </div>
+                ))}
+                {items.length === 0 && (
+                  <div style={{ ...rowStyle, color: 'var(--text-muted)' }}>{t('noAdjustments', 'No deductions or bonuses this week.')}</div>
+                )}
+                <div style={{ ...rowStyle, fontWeight: 700, fontSize: 15, borderBottom: 'none', marginTop: 4 }}>
+                  <span>{t('netSalary', 'Net salary')}</span><span style={{ color: 'var(--accent)' }}>{formatCurrency(selectedBreakdown.net_salary)}</span>
+                </div>
+              </div>
+            );
+          })()}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             <Btn onClick={() => setSelectedBreakdown(null)}>{t('close', 'Close')}</Btn>
