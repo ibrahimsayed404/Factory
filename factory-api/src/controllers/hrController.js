@@ -85,6 +85,13 @@ exports.createLoan = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.updateLoan = async (req, res, next) => {
+  try {
+    const data = await hrService.updateLoan(req.params.id, req.body);
+    res.json(data);
+  } catch (err) { next(err); }
+};
+
 exports.getDocuments = async (req, res, next) => {
   try {
     const data = await hrService.getDocuments(req.params.employeeId);

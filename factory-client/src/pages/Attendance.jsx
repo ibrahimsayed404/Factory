@@ -116,7 +116,7 @@ const computeShiftMetrics = (employee, checkIn, checkOut) => {
 const toDateKey = (value) => String(value || '').split('T')[0];
 
 const weekendSetFrom = (weekendDays) => {
-  const raw = String(weekendDays || '0,6');
+  const raw = String(weekendDays || '5');
   return new Set(
     raw
       .split(',')

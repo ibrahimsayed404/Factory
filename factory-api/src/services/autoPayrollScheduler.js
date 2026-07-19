@@ -18,27 +18,29 @@ const isSaturdayUtc = () => new Date().getUTCDay() === 6;
 
 
 
-const getLastAutoWeekStart = async () => {
-  const result = await pool.query('SELECT value FROM app_settings WHERE key = $1', [AUTO_PAYROLL_SETTING_KEY]);
-  return result.rows[0]?.value || null;
-};
-
-const setLastAutoWeekStart = async (weekStart) => {
-  await pool.query(
+// Atomically claim a week before running. Returns true only for the caller that
+// wins the claim; concurrent/duplicate invocations (e.g. the hourly interval and
+// an admin-triggered run overlapping) get false and skip, closing the race where
+// the "already ran" flag was previously written only AFTER the whole loop.
+const claimAutoWeek = async (weekStart) => {
+  const result = await pool.query(
     `INSERT INTO app_settings (key, value, updated_at)
      VALUES ($1, $2, NOW())
      ON CONFLICT (key)
-     DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+     DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+     WHERE app_settings.value IS DISTINCT FROM EXCLUDED.value`,
     [AUTO_PAYROLL_SETTING_KEY, weekStart]
   );
+  return result.rowCount > 0;
 };
 
 const runAutoPayrollForCurrentWeek = async () => {
   if (!isSaturdayUtc()) return;
 
   const weekStart = getCurrentSaturdayIso();
-  const lastRunWeek = await getLastAutoWeekStart();
-  if (lastRunWeek === weekStart) return;
+  // Claim the week up front. If another run already claimed it, skip.
+  const claimed = await claimAutoWeek(weekStart);
+  if (!claimed) return;
 
   const employees = await pool.query(
     "SELECT id FROM employees WHERE COALESCE(status, 'active') = 'active' ORDER BY id"
@@ -55,7 +57,6 @@ const runAutoPayrollForCurrentWeek = async () => {
     }
   }
 
-  await setLastAutoWeekStart(weekStart);
   console.log(`[auto-payroll] Weekly payroll generated for week starting ${weekStart}.`);
 };
 

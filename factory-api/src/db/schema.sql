@@ -211,7 +211,7 @@ CREATE TABLE IF NOT EXISTS employees (
   shift VARCHAR(30),                   -- morning, evening, night (legacy)
   shift_start TIME,                    -- legacy
   shift_end TIME,                      -- legacy
-  weekend_days VARCHAR(20) DEFAULT '0,6', -- legacy
+  weekend_days VARCHAR(20) DEFAULT '5', -- comma-separated DOW indexes (0=Sun..6=Sat); Friday-only default
   device_user_id VARCHAR(100) UNIQUE,
   salary NUMERIC(10,2),
   hire_date DATE,
@@ -334,6 +334,20 @@ CREATE TABLE IF NOT EXISTS payroll (
   status VARCHAR(30) DEFAULT 'pending', -- pending, paid
   UNIQUE(employee_id, week_start)
 );
+
+-- Records the exact loan installment deducted per payroll record, so loan
+-- repayment is idempotent across regeneration and delete-week reverses the
+-- precise amount that was deducted (not a recomputed heuristic).
+CREATE TABLE IF NOT EXISTS payroll_loan_deductions (
+  id SERIAL PRIMARY KEY,
+  payroll_id INT NOT NULL REFERENCES payroll(id) ON DELETE CASCADE,
+  loan_id INT NOT NULL REFERENCES hr_loans(id) ON DELETE CASCADE,
+  amount NUMERIC(10,2) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (payroll_id, loan_id)
+);
+CREATE INDEX IF NOT EXISTS idx_payroll_loan_deductions_payroll ON payroll_loan_deductions(payroll_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_loan_deductions_loan ON payroll_loan_deductions(loan_id);
 
 -- ============================================================
 -- CUSTOMERS & SALES MODULE

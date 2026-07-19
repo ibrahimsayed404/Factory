@@ -37,4 +37,17 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { authenticate, authorizeAdmin, authorize };
+// Allow a request from the Vercel Cron (which sends `Authorization: Bearer
+// <CRON_SECRET>` when CRON_SECRET is configured) OR an authenticated admin.
+// Blocks anonymous callers — the point of securing /payroll/auto-run — while
+// keeping the scheduled cron working.
+const authorizeCronOrAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization || '';
+  const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (process.env.CRON_SECRET && bearer && bearer === process.env.CRON_SECRET) {
+    return next();
+  }
+  return authenticate(req, res, () => authorizeAdmin(req, res, next));
+};
+
+module.exports = { authenticate, authorizeAdmin, authorize, authorizeCronOrAdmin };

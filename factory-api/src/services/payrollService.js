@@ -10,6 +10,9 @@ const round2 = (n) => Number(Number(n || 0).toFixed(2));
  * - day late ≤ 10 min → ×1 (e.g. Saturday 5 → 5)
  * - day late > 10 min → full day late ×1.5 (e.g. Sunday 40 → 60)
  * Example week: 5 + (40 * 1.5) = 65 charged minutes.
+ * NOTE: `late_minutes` here is already net of the configurable attendance grace
+ * period (attendanceLateGraceMinutes) applied at logging time; this 10-minute
+ * weighting threshold is an independent payroll rule, not the same grace period.
  */
 const weightedLateMinutesForDay = (lateMinutes) => {
   const total = Math.max(0, Number(lateMinutes || 0));
@@ -42,6 +45,13 @@ const currentWeekSaturdayUtc = () => toSaturdayUtc(new Date());
 
 const toIsoDate = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 
+// Weekly payroll periods run Saturday → Friday (7 calendar days). The weekend day
+// (Friday by default) IS included in the period so that work performed on the
+// weekend day is captured for weekend-overtime detection.
+const WEEK_LENGTH_DAYS = 6; // offset from Saturday to Friday inclusive
+
+const nextUtcDay = (cursor) => new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
+
 const weekendSetFrom = (weekendDays) => {
   const raw = String(weekendDays || process.env.PAYROLL_WEEKEND_DAYS || '5');
   return new Set(
@@ -73,7 +83,7 @@ const getPayrollPeriodRange = ({ weekStart, weekEnd, effectiveMonth, effectiveYe
       end = toIsoDateString(weekEnd);
     } else {
       const startDate = normalizeToUtcDate(start);
-      const endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + 5));
+      const endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + WEEK_LENGTH_DAYS));
       end = toIsoDate(endDate);
     }
     return { periodStart: start, periodEnd: end };
@@ -91,9 +101,15 @@ const getBusinessTodayIso = () => {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Cairo' });
 };
 
+/**
+ * Build the set of dates covered by approved leave that should be EXCLUDED from
+ * absence penalties. Unpaid leave is intentionally NOT excluded — an unpaid-leave
+ * day is treated like an absence (the employee is not paid for it).
+ */
 const buildApprovedLeaveDatesSet = (leaveRows = []) => {
   const approvedSet = new Set();
   for (const row of leaveRows) {
+    if (String(row.leave_type || '').toLowerCase() === 'unpaid') continue;
     const startStr = toIsoDateString(row.start_date);
     const endStr = toIsoDateString(row.end_date);
     if (!startStr || !endStr) continue;
@@ -102,7 +118,7 @@ const buildApprovedLeaveDatesSet = (leaveRows = []) => {
     const endDate = normalizeToUtcDate(endStr);
     while (cursor <= endDate) {
       approvedSet.add(toIsoDate(cursor));
-      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
+      cursor = nextUtcDay(cursor);
     }
   }
   return approvedSet;
@@ -142,13 +158,44 @@ const calculateInferredAbsentDays = (records = [], weekendSet, periodStart, peri
       inferred += 1;
     }
 
-    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
+    cursor = nextUtcDay(cursor);
   }
 
   return inferred;
 };
 
 const inferredAbsentDaysBetweenRecords = calculateInferredAbsentDays;
+
+/**
+ * Count working (non-weekend) days in [periodStart, periodEnd] and how many of
+ * them the employee was actually employed for (between hire and termination).
+ * Used to prorate base salary for partial weeks around hire/termination.
+ */
+const countEmployedWorkDays = (periodStart, periodEnd, weekendSet, employee = {}) => {
+  const startIso = toIsoDateString(periodStart);
+  const endIso = toIsoDateString(periodEnd);
+  if (!startIso || !endIso) return { employed: 0, total: 0 };
+
+  const hireIso = toIsoDateString(employee?.hire_date);
+  const terminationIso = toIsoDateString(employee?.termination_date);
+
+  let employed = 0;
+  let total = 0;
+  let cursor = normalizeToUtcDate(startIso);
+  const endDate = normalizeToUtcDate(endIso);
+  while (cursor <= endDate) {
+    const day = cursor.getUTCDay();
+    if (!weekendSet.has(day)) {
+      total += 1;
+      const dateStr = toIsoDate(cursor);
+      const beforeHire = hireIso ? dateStr < hireIso : false;
+      const afterTermination = terminationIso ? dateStr > terminationIso : false;
+      if (!beforeHire && !afterTermination) employed += 1;
+    }
+    cursor = nextUtcDay(cursor);
+  }
+  return { employed, total };
+};
 
 const isWeekendAttendanceDate = (dateValue, weekendSet) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue || '').slice(0, 10));
@@ -182,22 +229,26 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary) => {
   return { dailyRate, minuteRate };
 };
 
-const getPayroll = async ({ weekStartInput, month, year, status, page, limit }) => {
+const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateTo, page, limit }) => {
   const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
   if (weekStartInput && !normalizedWeekStartDate) {
     throw new ApiError(400, 'Invalid week_start date format');
   }
   const weekStart = normalizedWeekStartDate ? toIsoDate(toSaturdayUtc(normalizedWeekStartDate)) : null;
+  // Optional week_start range filter (bounds the fetch so the list never
+  // silently truncates). Snap to the enclosing Saturday for consistency.
+  const from = dateFrom && normalizeToUtcDate(dateFrom) ? toIsoDate(toSaturdayUtc(normalizeToUtcDate(dateFrom))) : null;
+  const to = dateTo && normalizeToUtcDate(dateTo) ? toIsoDate(toSaturdayUtc(normalizeToUtcDate(dateTo))) : null;
   const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
-  const pageSize = Math.min(1000, Math.max(1, Number.parseInt(limit, 10) || 50));
+  const pageSize = Math.min(2000, Math.max(1, Number.parseInt(limit, 10) || 50));
   const offset = (pageNum - 1) * pageSize;
-  
+
   const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
   const weekendDaysExpr = supportsWeekendDays ? "COALESCE(e.weekend_days, '5')" : "'5'";
 
-  const total = await payrollRepository.getPayrollRecordsCount({ weekStart, month, year, status });
+  const total = await payrollRepository.getPayrollRecordsCount({ weekStart, month, year, status, dateFrom: from, dateTo: to });
   const rows = await payrollRepository.getPayrollRecords({
-    weekStart, month, year, status, limit: pageSize, offset, weekendDaysExpr, supportsWeekendDays
+    weekStart, month, year, status, dateFrom: from, dateTo: to, limit: pageSize, offset, weekendDaysExpr, supportsWeekendDays
   });
 
   const policy = await getPayrollPolicy();
@@ -230,9 +281,19 @@ const getPayroll = async ({ weekStartInput, month, year, status, page, limit }) 
     const storedManualDeductions = Number(row.manual_deductions || 0);
     // Always recompute auto_* from attendance so late-day weighting stays correct even
     // when older payroll rows were saved with weekly-total weighting.
-    const displayBonus = round2(computedAutoBonus + storedManualBonus + hrBonus + hrOvertime);
-    const displayDeductions = round2(computedAutoDeductions + storedManualDeductions + hrPenalty + loanDeduction);
-    const displayNet = round2(baseSalary + displayBonus - displayDeductions);
+    const recomputedBonus = round2(computedAutoBonus + storedManualBonus + hrBonus + hrOvertime);
+    const recomputedDeductions = round2(computedAutoDeductions + storedManualDeductions + hrPenalty + loanDeduction);
+    const recomputedNet = round2(baseSalary + recomputedBonus - recomputedDeductions);
+
+    // For PAID records the frozen stored figures are authoritative (they were
+    // journaled to accounting). Show those, but flag any drift vs. a fresh
+    // recompute so the admin can spot attendance edited after payment.
+    const isPaid = row.status === 'paid';
+    const storedNet = round2(Number(row.net_salary || 0));
+    const hasRecalcDrift = isPaid && Math.abs(recomputedNet - storedNet) >= 0.01;
+    const displayBonus = isPaid ? round2(Number(row.bonus || 0)) : recomputedBonus;
+    const displayDeductions = isPaid ? round2(Number(row.deductions || 0)) : recomputedDeductions;
+    const displayNet = isPaid ? storedNet : recomputedNet;
     const weeklyPaymentEstimate = row.week_start
       ? displayNet
       : (displayNet / Math.max(1, policy.weeksPerMonth));
@@ -242,6 +303,8 @@ const getPayroll = async ({ weekStartInput, month, year, status, page, limit }) 
       bonus: displayBonus,
       deductions: displayDeductions,
       net_salary: displayNet,
+      recomputed_net_salary: recomputedNet,
+      has_recalc_drift: hasRecalcDrift,
       payroll_breakdown: {
         manual_bonus: round2(storedManualBonus),
         manual_deductions: round2(storedManualDeductions),
@@ -270,10 +333,10 @@ const getPayroll = async ({ weekStartInput, month, year, status, page, limit }) 
 
 const calculatePayrollForEmployee = async (employee, options) => {
   const { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy } = options;
-  const base_salary = Number(employee.salary || 0);
+  const fullBaseSalary = Number(employee.salary || 0);
   const weekendSet = weekendSetFrom(employee.weekend_days);
   const useWeeklySalary = Boolean(weekStart);
-  const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary);
+  const { dailyRate, minuteRate } = getRates(fullBaseSalary, weekendSet, policy, useWeeklySalary);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
     employee.id, weekStart, weekEnd, effectiveMonth, effectiveYear
@@ -282,6 +345,12 @@ const calculatePayrollForEmployee = async (employee, options) => {
   const { periodStart, periodEnd } = getPayrollPeriodRange({ weekStart, weekEnd, effectiveMonth, effectiveYear });
   const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(employee.id, periodStart, periodEnd);
   const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
+  // Prorate base salary for partial employment (hire/termination mid-period).
+  const { employed, total } = countEmployedWorkDays(periodStart, periodEnd, weekendSet, employee);
+  const base_salary = (useWeeklySalary && total > 0 && employed < total)
+    ? round2(fullBaseSalary * (employed / total))
+    : fullBaseSalary;
 
   const totals = attendanceRecords.reduce((acc, row) => ({
     late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
@@ -324,18 +393,48 @@ const calculatePayrollForEmployee = async (employee, options) => {
   let hrPenalty = 0;
   let hrOvertime = 0;
   let loanDeduction = 0;
-  let loans = [];
+  // Loan payments that still need to be applied to hr_loans for this payroll
+  // record (i.e. not yet recorded in the payroll_loan_deductions ledger).
+  let loanPaymentsToApply = [];
 
   if (useWeeklySalary) {
     const hrData = await payrollRepository.getHrDataForWeeklyPayroll(employee.id, weekStart, weekEnd);
-    loans = hrData.loans;
-    
-    loanDeduction = loans.reduce(
-      (sum, loan) => sum + Math.min(loan.monthly_installment, loan.remaining_amount),
-      0
-    );
+    const activeLoans = hrData.loans;
+    // Prorate the monthly installment across the weeks in a month so a full
+    // installment is not deducted every single week.
+    const weeksPerMonth = Math.max(1, Number(policy.weeksPerMonth || 4));
 
-    hrData.transactions.forEach(t => {
+    // Reconcile against what has already been deducted for this exact payroll
+    // record so regeneration never double-charges a loan.
+    const existingPayrollId = await payrollRepository.getPayrollIdByWeek(employee.id, weekStart);
+    const existingLedger = existingPayrollId
+      ? await payrollRepository.getLoanDeductionsForPayroll(existingPayrollId)
+      : [];
+    const ledgerByLoan = new Map(existingLedger.map((r) => [Number(r.loan_id), Number(r.amount)]));
+
+    const activeLoanIds = new Set();
+    for (const loan of activeLoans) {
+      activeLoanIds.add(loan.id);
+      if (ledgerByLoan.has(loan.id)) {
+        // Already deducted for this record — keep the same amount, do not re-apply.
+        loanDeduction += ledgerByLoan.get(loan.id);
+      } else {
+        const installment = round2(Number(loan.monthly_installment || 0) / weeksPerMonth);
+        const amount = round2(Math.min(installment, Number(loan.remaining_amount || 0)));
+        if (amount > 0) {
+          loanDeduction += amount;
+          loanPaymentsToApply.push({ id: loan.id, amount });
+        }
+      }
+    }
+    // Ledger entries for loans already closed by this record's earlier run still
+    // count toward this record's loan_deduction.
+    for (const [loanId, amount] of ledgerByLoan) {
+      if (!activeLoanIds.has(loanId)) loanDeduction += amount;
+    }
+    loanDeduction = round2(loanDeduction);
+
+    hrData.transactions.forEach((t) => {
       if (t.transaction_type === 'bonus') hrBonus += Number(t.total_amount);
       if (t.transaction_type === 'penalty') hrPenalty += Number(t.total_amount);
       if (t.transaction_type === 'overtime') hrOvertime += Number(t.total_amount);
@@ -366,15 +465,15 @@ const calculatePayrollForEmployee = async (employee, options) => {
     hr_overtime: hrOvertime,
   });
 
-  await accountingService.postPayrollAccrual(savedRecord);
-
-  if (useWeeklySalary && loans.length) {
-    const loanPayments = loans.map((loan) => ({
-      id: loan.id,
-      amount: Math.min(loan.monthly_installment, loan.remaining_amount),
-    }));
-    await payrollRepository.applyLoanPayments(loanPayments);
+  // Apply loan payments idempotently: the ledger uniqueness constraint on
+  // (payroll_id, loan_id) guarantees a loan is only ever debited once per record.
+  if (useWeeklySalary && loanPaymentsToApply.length) {
+    await payrollRepository.applyLoanDeductions(savedRecord.id, loanPaymentsToApply);
   }
+
+  // Post/reconcile the accounting accrual (adjusts the ledger if net_salary changed
+  // on regeneration instead of silently keeping the stale amount).
+  await accountingService.reconcilePayrollAccrual(savedRecord);
 
   return {
     ...savedRecord,
@@ -406,67 +505,51 @@ const calculatePayrollForEmployee = async (employee, options) => {
 };
 
 const generatePayroll = async (data) => {
-  const { employee_id, week_start: weekStartInput, month: monthInput, year: yearInput, bonus = 0, deductions = 0 } = data;
-  const manualBonus = Number(bonus || 0);
-  const manualDeductions = Number(deductions || 0);
+  const { employee_id, week_start: weekStartInput, bonus = 0, deductions = 0 } = data;
+  // Manual bonus/deductions are clamped non-negative (a negative here would
+  // silently invert into the opposite adjustment).
+  const manualBonus = Math.max(0, Number(bonus || 0));
+  const manualDeductions = Math.max(0, Number(deductions || 0));
 
   const weekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
   if (weekStartInput && !weekStartDate) {
     throw new ApiError(400, 'Invalid week_start date format');
   }
 
-  let effectiveMonth;
-  let effectiveYear;
-  let weekStart;
-  let weekEnd;
-
-  const hasLegacyMonthYear = monthInput !== undefined && yearInput !== undefined;
-  let effectiveWeekStartDate = null;
-  if (weekStartDate) {
-    effectiveWeekStartDate = toSaturdayUtc(weekStartDate);
-  } else if (!hasLegacyMonthYear) {
-    effectiveWeekStartDate = currentWeekSaturdayUtc();
-  }
-
-  if (effectiveWeekStartDate) {
-    weekStart = toIsoDate(effectiveWeekStartDate);
-    const weekEndDate = new Date(effectiveWeekStartDate);
-    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 5);
-    weekEnd = toIsoDate(weekEndDate);
-    effectiveMonth = effectiveWeekStartDate.getUTCMonth() + 1;
-    effectiveYear = effectiveWeekStartDate.getUTCFullYear();
-  } else {
-    effectiveMonth = Number(monthInput);
-    effectiveYear = Number(yearInput);
-    weekStart = null;
-    weekEnd = null;
-  }
+  const effectiveWeekStartDate = weekStartDate ? toSaturdayUtc(weekStartDate) : currentWeekSaturdayUtc();
+  const weekStart = toIsoDate(effectiveWeekStartDate);
+  const weekEndDate = new Date(effectiveWeekStartDate);
+  weekEndDate.setUTCDate(weekEndDate.getUTCDate() + WEEK_LENGTH_DAYS);
+  const weekEnd = toIsoDate(weekEndDate);
+  const effectiveMonth = effectiveWeekStartDate.getUTCMonth() + 1;
+  const effectiveYear = effectiveWeekStartDate.getUTCFullYear();
 
   const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
-  const employees = employee_id
-    ? [await payrollRepository.getEmployeeForPayroll(employee_id, supportsWeekendDays)]
-    : await payrollRepository.getActiveEmployeesForPayroll(supportsWeekendDays);
-
-  if (employee_id && !employees[0]) throw new ApiError(404, 'Employee not found');
-
   const policy = await getPayrollPolicy();
-  const payrollResults = [];
 
-  for (const employee of employees) {
-    if (!employee) continue;
-    const result = await calculatePayrollForEmployee(employee, {
-      weekStart,
-      weekEnd,
-      effectiveMonth,
-      effectiveYear,
-      manualBonus,
-      manualDeductions,
-      policy,
-    });
-    payrollResults.push(result);
+  const commonOptions = { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy };
+
+  if (employee_id) {
+    const employee = await payrollRepository.getEmployeeForPayroll(employee_id, supportsWeekendDays);
+    if (!employee) throw new ApiError(404, 'Employee not found');
+    return calculatePayrollForEmployee(employee, commonOptions);
   }
 
-  return employee_id ? payrollResults[0] : payrollResults;
+  // Bulk generation for all active employees: never fail the whole batch because
+  // one employee errored — collect per-employee outcomes so the caller can see
+  // exactly which succeeded and which failed.
+  const employees = await payrollRepository.getActiveEmployeesForPayroll(supportsWeekendDays);
+  const generated = [];
+  const failed = [];
+  for (const employee of employees) {
+    if (!employee) continue;
+    try {
+      generated.push(await calculatePayrollForEmployee(employee, commonOptions));
+    } catch (err) {
+      failed.push({ employee_id: employee.id, error: err?.message || 'Unknown error' });
+    }
+  }
+  return { generated, failed, week_start: weekStart };
 };
 
 const markPaid = async (id) => {
@@ -496,16 +579,17 @@ const updateManualAdjustments = async (id, data = {}) => {
   const policy = await getPayrollPolicy();
   const weekendSet = weekendSetFrom(employee.weekend_days);
   const useWeeklySalary = Boolean(record.week_start);
-  const asIsoDate = (value) => {
-    if (!value) return null;
-    if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      return value.toISOString().slice(0, 10);
-    }
-    const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value));
-    return match ? match[1] : null;
-  };
-  const weekStart = asIsoDate(record.week_start);
-  const weekEnd = asIsoDate(record.week_end) || weekStart;
+
+  // Use the canonical period range (timezone-safe, correct Sat→Fri length) for
+  // both the attendance query and the inferred-absence/leave window.
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: record.week_start,
+    weekEnd: record.week_end,
+    effectiveMonth: record.month,
+    effectiveYear: record.year,
+  });
+  const weekStart = record.week_start ? periodStart : null;
+  const weekEnd = record.week_start ? periodEnd : null;
   const { dailyRate, minuteRate } = getRates(Number(employee.salary || record.base_salary || 0), weekendSet, policy, useWeeklySalary);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
@@ -516,12 +600,6 @@ const updateManualAdjustments = async (id, data = {}) => {
     record.year
   );
 
-  const { periodStart, periodEnd } = getPayrollPeriodRange({
-    weekStart: record.week_start,
-    weekEnd: record.week_end,
-    effectiveMonth: record.month,
-    effectiveYear: record.year,
-  });
   const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(record.employee_id, periodStart, periodEnd);
   const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
 
@@ -581,6 +659,9 @@ const updateManualAdjustments = async (id, data = {}) => {
     netSalary,
   });
 
+  // Keep the accounting accrual in sync with the adjusted net salary.
+  await accountingService.reconcilePayrollAccrual(saved);
+
   return {
     ...saved,
     base_salary: Number(saved.base_salary || 0),
@@ -600,145 +681,6 @@ const updateManualAdjustments = async (id, data = {}) => {
       late_weighted_minutes: round2(lateWeighted),
       early_leave_minutes: earlyLeaveMinutes,
       weekly_payment_estimate: round2(saved.week_start ? netSalary : (netSalary / Math.max(1, policy.weeksPerMonth))),
-    },
-  };
-};
-
-const generateMonthlyPayroll = async (data) => {
-  const { employee_id, month, year } = data;
-  
-  if (!month || !year || !employee_id) {
-    throw new ApiError(400, 'month, year, and employee_id are required');
-  }
-
-  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
-  const emp = await payrollRepository.getEmployeeForPayroll(employee_id, supportsWeekendDays);
-  if (!emp) throw new ApiError(404, 'Employee not found');
-
-  const base_salary = Number(emp.salary || 0);
-  const policy = await getPayrollPolicy();
-  // `salary` stored on employee is weekly salary. Convert to monthly equivalent
-  // when generating monthly payroll by multiplying weeksPerMonth.
-  const monthlyBaseSalary = base_salary * Number(policy.weeksPerMonth || 4);
-  const dailyRate = monthlyBaseSalary / policy.workingDaysPerMonth;
-  const minuteRate = dailyRate / (policy.workHoursPerDay * 60);
-  const weekendSet = weekendSetFrom(emp.weekend_days);
-
-  const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
-    employee_id, null, null, month, year
-  );
-
-  const { periodStart, periodEnd } = getPayrollPeriodRange({
-    weekStart: null,
-    weekEnd: null,
-    effectiveMonth: month,
-    effectiveYear: year,
-  });
-  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(employee_id, periodStart, periodEnd);
-  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
-
-  const totals = attendanceRecords.reduce((acc, row) => ({
-    late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
-    early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
-    overtime_minutes: acc.overtime_minutes + Number(row.overtime_minutes || 0),
-    weekend_overtime_minutes: acc.weekend_overtime_minutes + (isWeekendAttendanceDate(row.date, weekendSet) ? Number(row.overtime_minutes || 0) : 0),
-    absent_days: acc.absent_days + Number(row.absent_days || 0),
-    half_days: acc.half_days + Number(row.half_days || 0),
-  }), {
-    late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0,
-    weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
-  });
-
-  const inferredAbsentDays = calculateInferredAbsentDays(
-    attendanceRecords,
-    weekendSet,
-    periodStart,
-    periodEnd,
-    emp,
-    approvedLeaveDates
-  );
-
-  const overtimeMinutes = totals.overtime_minutes;
-  const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
-  const regularOvertimeMinutes = Math.max(0, overtimeMinutes - weekendOvertimeMinutes);
-  const absentDays = totals.absent_days + inferredAbsentDays;
-  const halfDays = totals.half_days;
-  const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
-  const earlyLeaveMinutes = earlyLeaveChargeMinutes(totals.early_leave_minutes);
-
-  const autoDeductions =
-    ((lateWeighted + earlyLeaveMinutes) * minuteRate) +
-    (absentDays * dailyRate) +
-    (halfDays * (dailyRate / 2));
-    
-  const autoBonus =
-    (regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier) +
-    (weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier);
-
-  // Get HR data (transactions and loans)
-  const { transactions, loanDeduction, loans } = await payrollRepository.getHrDataForPayroll(employee_id, month, year);
-  
-  let hrBonus = 0;
-  let hrPenalty = 0;
-  let hrOvertime = 0;
-  
-  transactions.forEach(t => {
-    if (t.transaction_type === 'bonus') hrBonus += Number(t.total_amount);
-    if (t.transaction_type === 'penalty') hrPenalty += Number(t.total_amount);
-    if (t.transaction_type === 'overtime') hrOvertime += Number(t.total_amount);
-  });
-
-  const finalBonus = round2(autoBonus + hrBonus + hrOvertime);
-  const finalDeductions = round2(autoDeductions + hrPenalty + loanDeduction);
-  // Net salary for the month: monthly equivalent of weekly salary plus bonuses minus deductions
-  const net_salary = round2(monthlyBaseSalary + finalBonus - finalDeductions);
-
-  const savedRecord = await payrollRepository.upsertPayroll({
-    employee_id, effectiveMonth: month, effectiveYear: year, 
-    weekStart: null, weekEnd: null,
-    base_salary, finalBonus, finalDeductions, net_salary,
-    loan_deduction: loanDeduction,
-    manual_bonus: 0,
-    manual_deductions: 0,
-    auto_bonus: autoBonus,
-    auto_deductions: autoDeductions,
-    hr_bonus: hrBonus,
-    hr_penalty: hrPenalty,
-    hr_overtime: hrOvertime,
-  });
-
-  await accountingService.postPayrollAccrual(savedRecord);
-
-  if (loans.length) {
-    const loanPayments = loans.map((loan) => ({
-      id: loan.id,
-      amount: Math.min(loan.monthly_installment, loan.remaining_amount),
-    }));
-    await payrollRepository.applyLoanPayments(loanPayments);
-  }
-
-  return {
-    ...savedRecord,
-    base_salary: Number(savedRecord.base_salary || 0),
-    bonus: Number(savedRecord.bonus || 0),
-    deductions: Number(savedRecord.deductions || 0),
-    net_salary: Number(savedRecord.net_salary || 0),
-    payroll_breakdown: {
-      hr_bonus: round2(hrBonus),
-      hr_penalty: round2(hrPenalty),
-      hr_overtime_bonus: round2(hrOvertime),
-      loan_deduction: round2(loanDeduction),
-      auto_bonus: round2(autoBonus),
-      auto_deductions: round2(autoDeductions),
-      late_minutes: Number(totals.late_minutes),
-      late_weighted_minutes: round2(lateWeighted),
-      early_leave_minutes: earlyLeaveMinutes,
-      overtime_minutes: Number(totals.overtime_minutes),
-      regular_overtime_minutes: regularOvertimeMinutes,
-      weekend_overtime_minutes: weekendOvertimeMinutes,
-      absent_days: absentDays,
-      inferred_absent_days: inferredAbsentDays,
-      half_days: halfDays,
     },
   };
 };
@@ -766,29 +708,21 @@ const deletePayrollWeek = async (weekStartInput) => {
     }
   }
 
-  for (const record of records) {
-    // 1. Revert loan payments applied during generation
-    const loans = await payrollRepository.getLoansForEmployee(record.employee_id);
-    for (const loan of loans) {
-      const restoreAmount = Math.min(loan.monthly_installment, loan.principal_amount - loan.remaining_amount);
-      if (restoreAmount > 0) {
-        await payrollRepository.restoreLoanPayment(loan.id, restoreAmount);
-      }
-    }
+  // Reverse the exact loan amounts recorded in the ledger for each record, then
+  // delete the records — all within a single transaction. The ledger rows are
+  // removed automatically via ON DELETE CASCADE.
+  await payrollRepository.reverseLoanDeductionsAndDeleteRecords(records.map((r) => r.id));
 
-    // 2. Delete the payroll record
-    await payrollRepository.deletePayrollRecord(record.id);
-  }
-
-  return { success: true, message: 'Payroll week deleted successfully' };
+  return { success: true, message: 'Payroll week deleted successfully', deleted: records.length };
 };
 
 module.exports = {
   getPayroll,
   generatePayroll,
-  generateMonthlyPayroll,
   markPaid,
   updateManualAdjustments,
   deletePayrollWeek,
   calculateInferredAbsentDays,
+  countEmployedWorkDays,
+  buildApprovedLeaveDatesSet,
 };

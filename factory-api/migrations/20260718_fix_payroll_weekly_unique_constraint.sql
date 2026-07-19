@@ -18,6 +18,6 @@ BEGIN
 END $$;
 
 -- Create partial unique index for legacy monthly payrolls (where week_start is NULL)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_employee_month_year_monthly 
-  ON payroll (employee_id, month, year) 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payroll_employee_month_year_monthly
+  ON payroll (employee_id, month, year)
   WHERE week_start IS NULL;

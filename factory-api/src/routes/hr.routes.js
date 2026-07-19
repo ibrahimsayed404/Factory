@@ -31,6 +31,7 @@ router.delete('/transactions/:id', authorize('admin', 'hr', 'finance'), hrContro
 // Loans
 router.get('/loans', authorize('admin', 'hr', 'finance'), hrController.getLoans);
 router.post('/loans', authorize('admin', 'hr', 'finance'), hrController.createLoan);
+router.put('/loans/:id', authorize('admin', 'hr', 'finance'), hrController.updateLoan);
 
 // Documents
 router.get('/employees/:employeeId/documents', hrController.getDocuments);

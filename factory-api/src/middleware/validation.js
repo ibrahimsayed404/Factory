@@ -82,19 +82,8 @@ const attendanceUpsert = [
 const payrollCreate = [
   body('employee_id').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage('employee_id must be valid'),
   body('week_start').optional({ checkFalsy: true }).isISO8601().withMessage('week_start must be YYYY-MM-DD'),
-  body('month').optional({ checkFalsy: true }).isInt({ min: 1, max: 12 }).withMessage('month must be between 1 and 12'),
-  body('year').optional({ checkFalsy: true }).isInt({ min: 2000, max: 2100 }).withMessage('year must be valid'),
-  body().custom((value) => {
-    const hasWeekStart = Boolean(value.week_start);
-    const hasMonth = value.month !== undefined && value.month !== null && value.month !== '';
-    const hasYear = value.year !== undefined && value.year !== null && value.year !== '';
-    if (!hasWeekStart && hasMonth !== hasYear) {
-      throw new Error('Provide both month and year together, or omit both for default weekly Saturday period');
-    }
-    return true;
-  }),
-  body('bonus').optional({ nullable: true }).isFloat().withMessage('bonus must be numeric'),
-  body('deductions').optional({ nullable: true }).isFloat().withMessage('deductions must be numeric'),
+  body('bonus').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('bonus must be a non-negative number'),
+  body('deductions').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('deductions must be a non-negative number'),
   handleValidation,
 ];
 

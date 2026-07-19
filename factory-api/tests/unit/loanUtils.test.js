@@ -1,4 +1,4 @@
-const { normalizeLoanPayload } = require('../../src/utils/loanUtils');
+const { normalizeLoanPayload, normalizeLoanUpdatePayload } = require('../../src/utils/loanUtils');
 
 describe('normalizeLoanPayload', () => {
   it('converts and defaults loan values for a new loan', () => {
@@ -18,15 +18,38 @@ describe('normalizeLoanPayload', () => {
     });
   });
 
-  it('uses zero values when numeric inputs are invalid', () => {
-    const payload = normalizeLoanPayload({ employee_id: 3, principal_amount: 'abc', monthly_installment: '' });
+  it('rejects invalid numeric inputs instead of silently coercing to zero', () => {
+    expect(() => normalizeLoanPayload({ employee_id: 3, principal_amount: 'abc', monthly_installment: '' }))
+      .toThrow(/principal_amount must be a non-negative number/);
+  });
 
-    expect(payload).toEqual({
-      employee_id: 3,
-      principal_amount: 0,
-      remaining_amount: 0,
-      monthly_installment: 0,
-      status: 'active',
-    });
+  it('rejects a zero monthly installment', () => {
+    expect(() => normalizeLoanPayload({ employee_id: 3, principal_amount: 1000, monthly_installment: 0 }))
+      .toThrow(/monthly_installment must be greater than 0/);
+  });
+
+  it('rejects an invalid employee id', () => {
+    expect(() => normalizeLoanPayload({ employee_id: 0, principal_amount: 1000, monthly_installment: 100 }))
+      .toThrow(/employee_id must be a valid positive integer/);
+  });
+
+  it('rejects an unknown status', () => {
+    expect(() => normalizeLoanPayload({ employee_id: 3, principal_amount: 1000, monthly_installment: 100, status: 'paid_off' }))
+      .toThrow(/status must be one of/);
+  });
+});
+
+describe('normalizeLoanUpdatePayload', () => {
+  it('returns only the provided fields', () => {
+    expect(normalizeLoanUpdatePayload({ remaining_amount: '500', status: 'closed' }))
+      .toEqual({ remaining_amount: 500, status: 'closed' });
+  });
+
+  it('rejects an empty update', () => {
+    expect(() => normalizeLoanUpdatePayload({})).toThrow(/No valid loan fields to update/);
+  });
+
+  it('rejects an unknown status on update', () => {
+    expect(() => normalizeLoanUpdatePayload({ status: 'weird' })).toThrow(/status must be one of/);
   });
 });

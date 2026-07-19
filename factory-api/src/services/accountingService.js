@@ -404,6 +404,41 @@ const postPayrollAccrual = (payroll, client = null) => {
   }, client);
 };
 
+// Post the initial payroll accrual, or — if the record was already accrued and
+// its net salary later changed (e.g. attendance corrected before payment) —
+// post a balancing adjustment for the delta so the ledger never silently
+// diverges from payroll.net_salary. No-op when the amount is unchanged.
+const reconcilePayrollAccrual = (payroll, client = null) => withClient(client, async (txClient) => {
+  const target = round2(payroll.net_salary);
+  const existing = await accountingRepository.getExistingJournalEntry('payroll_accrual', payroll.id, txClient);
+  if (!existing) {
+    return postPayrollAccrual(payroll, txClient);
+  }
+
+  const accruedSoFar = round2(await accountingRepository.getSourceAccountNet(
+    ['payroll_accrual', 'payroll_accrual_adjustment'],
+    payroll.id,
+    ACCOUNTS.payrollExpense,
+    txClient
+  ));
+  const delta = round2(target - accruedSoFar);
+  if (Math.abs(delta) < 0.01) return existing;
+
+  const amount = Math.abs(delta);
+  const lines = delta > 0
+    ? [{ account_code: ACCOUNTS.payrollExpense, debit: amount }, { account_code: ACCOUNTS.payrollPayable, credit: amount }]
+    : [{ account_code: ACCOUNTS.payrollPayable, debit: amount }, { account_code: ACCOUNTS.payrollExpense, credit: amount }];
+
+  return postJournalEntry({
+    entry_date: payroll.week_end || new Date().toISOString().slice(0, 10),
+    source_type: 'payroll_accrual_adjustment',
+    source_id: payroll.id,
+    description: `Payroll accrual adjustment ${payroll.id}`,
+    idempotent: false,
+    lines,
+  }, txClient);
+});
+
 const postPayrollPayment = (payroll, client = null) => {
   const amount = round2(payroll.net_salary);
   if (amount <= 0) return null;
@@ -505,6 +540,7 @@ module.exports = {
   postPurchaseReceipt,
   postSupplierPayment,
   postPayrollAccrual,
+  reconcilePayrollAccrual,
   postPayrollPayment,
   postInventoryTransaction,
   postProductionCompletion,

@@ -160,6 +160,22 @@ const getExistingJournalEntry = async (sourceType, sourceId, client = pool) => {
   return result.rows[0] || null;
 };
 
+// Net amount already posted to a given account (by code) across all journal
+// entries tied to a source record. Used to reconcile payroll accrual amounts
+// when a payroll record is regenerated with a different net salary.
+const getSourceAccountNet = async (sourceTypes, sourceId, accountCode, client = pool) => {
+  const result = await client.query(
+    `SELECT COALESCE(SUM(jl.debit) - SUM(jl.credit), 0) AS net
+     FROM accounting_journal_lines jl
+     JOIN accounting_journal_entries je ON je.id = jl.journal_entry_id
+     WHERE je.source_type = ANY($1)
+       AND je.source_id = $2
+       AND jl.account_code = $3`,
+    [sourceTypes, sourceId, accountCode]
+  );
+  return Number(result.rows[0]?.net || 0);
+};
+
 const insertJournalEntry = async (client, data) => {
   const result = await client.query(
     `INSERT INTO accounting_journal_entries (
@@ -379,6 +395,7 @@ module.exports = {
   createCashAccount,
   createBankAccount,
   getExistingJournalEntry,
+  getSourceAccountNet,
   insertJournalEntry,
   insertJournalLine,
   listJournalEntries,
