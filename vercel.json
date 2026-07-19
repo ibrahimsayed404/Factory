@@ -22,16 +22,11 @@
       "dest": "api/index.js"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "factory-client/build/assets/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "factory-client/build/favicon.ico"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "factory-client/build/index.html"
+      "dest": "factory-client/index.html"
     }
   ],
   "crons": [
