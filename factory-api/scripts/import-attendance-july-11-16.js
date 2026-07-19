@@ -24,7 +24,7 @@ const cloudConfig = {
   ssl: { rejectUnauthorized: false },
 };
 
-// Employee name to ID mapping (confirmed matches)
+// Employee name to ID mapping (all database matches from attendance file)
 const EMPLOYEE_MAP = {
   'ام يوسف': 4,
   'ام هبه': 5,
@@ -53,6 +53,29 @@ const EMPLOYEE_MAP = {
   'اسامة': 61,
   'أميرة': 12,
   'ياسمين': 26,
+  'ملك': 59,
+  'ام عمار': 70,
+  'ام رحمة': 25,
+  'زياد': 85,
+  'نور': 42,
+  'بلال': 63,
+  'عزت': 65,
+  'محمد عبده': 68,
+  'مريم': 69,
+  'رويدا': 95,
+  'الاء': 34,
+  'فرح': 36,
+  'يوسف': 39,
+  'منة': 40,
+  'محمود': 41,
+  'أحمد': 43,
+  'كريم': 89,
+  'فاطمة': 46,
+  'وفاء': 50,
+  'زينة': 51,
+  'رحمة': 52,
+  'ام دعاء': 53,
+  'منة صبحي': 91,
 };
 
 // Day name to date mapping for July 2026
