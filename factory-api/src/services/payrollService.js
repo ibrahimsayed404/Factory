@@ -328,6 +328,9 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
         half_days: halfDays,
         inferred_absent_days: Number(row.inferred_absent_days || 0),
         late_weighted_minutes: round2(lateWeighted),
+        // Overtime shown as raw → weighted (raw × multiplier), parallel to late.
+        regular_overtime_weighted_minutes: round2(regularOvertimeMinutes * policy.overtimeMultiplier),
+        weekend_overtime_weighted_minutes: round2(weekendOvertimeMinutes * policy.vacationOvertimeMultiplier),
         // Per-component dollar amounts (for a transparent, verifiable breakdown).
         late_deduction: round2(lateDeductionAmount),
         early_leave_deduction: round2(earlyLeaveDeductionAmount),

@@ -287,8 +287,8 @@ export default function Payroll() {
       if (b.loan_deduction > 0) rows.push(renderBreakdownRow(t('loanDeduction', 'Loan deduction'), b.loan_deduction));
 
       // Bonuses — each shown only when non-zero.
-      if (b.regular_overtime_bonus > 0) rows.push(renderBreakdownRow(`${t('regularOvertime', 'Overtime')} (${formatMinutes(b.regular_overtime_minutes)})`, b.regular_overtime_bonus, { positive: true }));
-      if (b.weekend_overtime_bonus > 0) rows.push(renderBreakdownRow(`${t('weekendWorkOvertime', 'Weekend overtime')} (${formatMinutes(b.weekend_overtime_minutes)})`, b.weekend_overtime_bonus, { positive: true }));
+      if (b.regular_overtime_bonus > 0) rows.push(renderBreakdownRow(`${t('regularOvertime', 'Overtime')} (${formatMinutes(b.regular_overtime_minutes)} → ${formatMinutes(b.regular_overtime_weighted_minutes ?? b.regular_overtime_minutes)} ${t('weighted', 'weighted')})`, b.regular_overtime_bonus, { positive: true }));
+      if (b.weekend_overtime_bonus > 0) rows.push(renderBreakdownRow(`${t('weekendWorkOvertime', 'Weekend overtime')} (${formatMinutes(b.weekend_overtime_minutes)} → ${formatMinutes(b.weekend_overtime_weighted_minutes ?? b.weekend_overtime_minutes)} ${t('weighted', 'weighted')})`, b.weekend_overtime_bonus, { positive: true }));
       if (b.hr_bonus > 0) rows.push(renderBreakdownRow(t('hrBonus', 'HR bonus'), b.hr_bonus, { positive: true }));
       if (b.hr_overtime_bonus > 0) rows.push(renderBreakdownRow(t('hrOvertime', 'HR overtime bonus'), b.hr_overtime_bonus, { positive: true }));
       if (b.manual_bonus > 0) rows.push(renderBreakdownRow(t('manualBonus', 'Manual bonus'), b.manual_bonus, { positive: true }));
@@ -691,8 +691,8 @@ export default function Payroll() {
               { label: t('hrPenalty', 'HR penalty'), amount: b.hr_penalty, positive: false },
               { label: t('manualDeductions', 'Manual deduction'), amount: b.manual_deductions, positive: false },
               { label: t('loanDeduction', 'Loan deduction'), amount: b.loan_deduction, positive: false },
-              { label: `${t('regularOvertime', 'Overtime')} (${formatMinutes(b.regular_overtime_minutes)})`, amount: b.regular_overtime_bonus, positive: true },
-              { label: `${t('weekendWorkOvertime', 'Weekend overtime')} (${formatMinutes(b.weekend_overtime_minutes)})`, amount: b.weekend_overtime_bonus, positive: true },
+              { label: `${t('regularOvertime', 'Overtime')} (${formatMinutes(b.regular_overtime_minutes)} → ${formatMinutes(b.regular_overtime_weighted_minutes ?? b.regular_overtime_minutes)} ${t('weighted', 'weighted')})`, amount: b.regular_overtime_bonus, positive: true },
+              { label: `${t('weekendWorkOvertime', 'Weekend overtime')} (${formatMinutes(b.weekend_overtime_minutes)} → ${formatMinutes(b.weekend_overtime_weighted_minutes ?? b.weekend_overtime_minutes)} ${t('weighted', 'weighted')})`, amount: b.weekend_overtime_bonus, positive: true },
               { label: t('hrBonus', 'HR bonus'), amount: b.hr_bonus, positive: true },
               { label: t('hrOvertime', 'HR overtime bonus'), amount: b.hr_overtime_bonus, positive: true },
               { label: t('manualBonus', 'Manual bonus'), amount: b.manual_bonus, positive: true },
