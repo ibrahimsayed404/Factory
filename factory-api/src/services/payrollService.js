@@ -434,7 +434,7 @@ const calculatePayrollForEmployee = async (employee, options) => {
         // Already deducted for this record — keep the same amount, do not re-apply.
         loanDeduction += ledgerByLoan.get(loan.id);
       } else {
-        const installment = round2(Number(loan.monthly_installment || 0) / weeksPerMonth);
+        const installment = round2(Number(loan.monthly_installment || 0));
         const amount = round2(Math.min(installment, Number(loan.remaining_amount || 0)));
         if (amount > 0) {
           loanDeduction += amount;

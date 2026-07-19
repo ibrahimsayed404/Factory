@@ -56,7 +56,7 @@ describe('HR & Weekly Payroll Integration', () => {
       "INSERT INTO hr_transactions (employee_id, transaction_type, amount, transaction_date) VALUES ($1,'bonus',500,$2), ($1,'penalty',200,$3)",
       [employeeId, '2023-08-06', '2023-08-07']
     );
-    // Monthly installment 100 -> weekly prorated = 100 / weeksPerMonth(4) = 25.
+    // Monthly installment 100 -> deducted in full = 100.
     await pool.query(
       'INSERT INTO hr_loans (employee_id, principal_amount, remaining_amount, monthly_installment) VALUES ($1,1000,1000,100)',
       [employeeId]
@@ -76,12 +76,12 @@ describe('HR & Weekly Payroll Integration', () => {
 
     if (res.status !== 201) console.log(res.body);
     expect(res.status).toBe(201);
-    // 6000 base + 500 bonus - 200 penalty - 25 loan = 6275
-    expect(Number(res.body.net_salary)).toBe(6275);
-    expect(Number(res.body.payroll_breakdown.loan_deduction)).toBe(25);
+    // 6000 base + 500 bonus - 200 penalty - 100 loan = 6200
+    expect(Number(res.body.net_salary)).toBe(6200);
+    expect(Number(res.body.payroll_breakdown.loan_deduction)).toBe(100);
 
     const loan = await pool.query('SELECT remaining_amount FROM hr_loans WHERE employee_id = $1', [employeeId]);
-    expect(Number(loan.rows[0].remaining_amount)).toBe(975); // 1000 - 25
+    expect(Number(loan.rows[0].remaining_amount)).toBe(900); // 1000 - 100
   });
 
   it('does not double-deduct the loan when the same week is regenerated', async () => {
