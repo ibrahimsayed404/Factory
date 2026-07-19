@@ -16,14 +16,22 @@
       }
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/index.js"
+      "src": "/api/(.*)",
+      "dest": "api/index.js"
     },
     {
-      "source": "/((?!api/|assets/|favicon.ico).*)",
-      "destination": "/index.html"
+      "src": "/assets/(.*)",
+      "dest": "factory-client/assets/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "factory-client/favicon.ico"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "factory-client/index.html"
     }
   ],
   "crons": [
