@@ -23,15 +23,15 @@
     },
     {
       "src": "/assets/(.*)",
-      "dest": "factory-client/assets/$1"
+      "dest": "factory-client/build/assets/$1"
     },
     {
       "src": "/favicon.ico",
-      "dest": "factory-client/favicon.ico"
+      "dest": "factory-client/build/favicon.ico"
     },
     {
       "src": "/(.*)",
-      "dest": "factory-client/index.html"
+      "dest": "factory-client/build/index.html"
     }
   ],
   "crons": [
