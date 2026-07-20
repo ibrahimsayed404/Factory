@@ -92,7 +92,10 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate,
       overtime_minutes: workedMinutes || 0,
     }
     : hasCheckout
-    ? calculateShiftMetrics(employee, checkIn, checkOut, { lateGraceMinutes: policy.attendanceLateGraceMinutes })
+    ? calculateShiftMetrics(employee, checkIn, checkOut, {
+      lateGraceMinutes: policy.attendanceLateGraceMinutes,
+      overtimeGraceMinutes: policy.attendanceOvertimeGraceMinutes,
+    })
     : {
       late_minutes: calculateLateMinutesOnly(employee, checkIn, { lateGraceMinutes: policy.attendanceLateGraceMinutes }),
       early_leave_minutes: 0,

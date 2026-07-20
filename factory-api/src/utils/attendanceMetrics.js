@@ -5,6 +5,7 @@ const SHIFT_SCHEDULES = {
 };
 
 const getLateGraceMinutes = () => Math.max(0, Number(process.env.ATTENDANCE_LATE_GRACE_MINUTES || 10));
+const getOvertimeGraceMinutes = () => Math.max(0, Number(process.env.ATTENDANCE_OVERTIME_GRACE_MINUTES || 15));
 
 const toMinutes = (value) => {
   if (!value) return null;
@@ -97,14 +98,19 @@ const calculateShiftMetrics = (employee, checkIn, checkOut, options = {}) => {
   if (normalizedOut < normalizedIn) normalizedOut += 24 * 60;
 
   const lateWithoutGrace = Math.max(0, normalizedIn - shiftStart);
-  const graceMinutes = Number.isFinite(Number(options.lateGraceMinutes))
+  const lateGraceMinutes = Number.isFinite(Number(options.lateGraceMinutes))
     ? Number(options.lateGraceMinutes)
     : getLateGraceMinutes();
 
+  const rawOvertime = Math.max(0, normalizedOut - normalizedShiftEnd);
+  const overtimeGraceMinutes = Number.isFinite(Number(options.overtimeGraceMinutes))
+    ? Number(options.overtimeGraceMinutes)
+    : getOvertimeGraceMinutes();
+
   return {
-    late_minutes: Math.max(0, lateWithoutGrace - Math.max(0, graceMinutes)),
+    late_minutes: Math.max(0, lateWithoutGrace - Math.max(0, lateGraceMinutes)),
     early_leave_minutes: Math.max(0, normalizedShiftEnd - normalizedOut),
-    overtime_minutes: Math.max(0, normalizedOut - normalizedShiftEnd),
+    overtime_minutes: Math.max(0, rawOvertime - Math.max(0, overtimeGraceMinutes)),
   };
 };
 

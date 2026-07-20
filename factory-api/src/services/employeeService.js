@@ -90,7 +90,10 @@ const logAttendance = async (id, data) => {
           early_leave_minutes: 0,
           overtime_minutes: workedMinutes || 0,
         }
-        : calculateShiftMetrics(employeeRecord, resolvedCheckIn, resolvedCheckOut, { lateGraceMinutes: policy.attendanceLateGraceMinutes }));
+        : calculateShiftMetrics(employeeRecord, resolvedCheckIn, resolvedCheckOut, {
+          lateGraceMinutes: policy.attendanceLateGraceMinutes,
+          overtimeGraceMinutes: policy.attendanceOvertimeGraceMinutes,
+        }));
 
   const resolvedHoursWorked = isAbsent ? null : calculateHoursWorked(resolvedCheckIn, resolvedCheckOut, hours_worked);
 

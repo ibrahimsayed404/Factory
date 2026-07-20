@@ -2,6 +2,7 @@ const pool = require('../db/pool');
 
 const DEFAULTS = {
   attendanceLateGraceMinutes: Number(process.env.ATTENDANCE_LATE_GRACE_MINUTES || 10),
+  attendanceOvertimeGraceMinutes: Number(process.env.ATTENDANCE_OVERTIME_GRACE_MINUTES || 15),
   payrollOvertimeMultiplier: Number(process.env.PAYROLL_OVERTIME_MULTIPLIER || 1.5),
   payrollVacationOvertimeMultiplier: Number(process.env.PAYROLL_VACATION_OVERTIME_MULTIPLIER || 1),
   payrollWeeksPerMonth: Number(process.env.PAYROLL_WEEKS_PER_MONTH || 4),
@@ -9,6 +10,7 @@ const DEFAULTS = {
 
 const KEY_MAP = {
   attendance_late_grace_minutes: 'attendanceLateGraceMinutes',
+  attendance_overtime_grace_minutes: 'attendanceOvertimeGraceMinutes',
   payroll_overtime_multiplier: 'payrollOvertimeMultiplier',
   payroll_vacation_overtime_multiplier: 'payrollVacationOvertimeMultiplier',
   payroll_weeks_per_month: 'payrollWeeksPerMonth',
@@ -63,6 +65,7 @@ const updateAttendancePayrollPolicy = async (updates, client = null) => {
 
   const entries = [
     ['attendance_late_grace_minutes', updates.attendanceLateGraceMinutes],
+    ['attendance_overtime_grace_minutes', updates.attendanceOvertimeGraceMinutes],
     ['payroll_overtime_multiplier', updates.payrollOvertimeMultiplier],
     ['payroll_vacation_overtime_multiplier', updates.payrollVacationOvertimeMultiplier],
     ['payroll_weeks_per_month', updates.payrollWeeksPerMonth],
@@ -80,6 +83,9 @@ const updateAttendancePayrollPolicy = async (updates, client = null) => {
 
   if (updates.attendanceLateGraceMinutes !== undefined) {
     process.env.ATTENDANCE_LATE_GRACE_MINUTES = String(updates.attendanceLateGraceMinutes);
+  }
+  if (updates.attendanceOvertimeGraceMinutes !== undefined) {
+    process.env.ATTENDANCE_OVERTIME_GRACE_MINUTES = String(updates.attendanceOvertimeGraceMinutes);
   }
   if (updates.payrollOvertimeMultiplier !== undefined) {
     process.env.PAYROLL_OVERTIME_MULTIPLIER = String(updates.payrollOvertimeMultiplier);
