@@ -34,14 +34,14 @@ describe('Attendance Time Parsing Unit Tests', () => {
     const emp5 = { shift_start: '09:00', shift_end: '17:00' };
     // Checkout at 5:15 PM -> 0 overtime minutes
     expect(calculateShiftMetrics(emp5, '09:00', '17:15', { overtimeGraceMinutes: 15 }).overtime_minutes).toBe(0);
-    // Checkout at 5:20 PM -> 5 overtime minutes
-    expect(calculateShiftMetrics(emp5, '09:00', '17:20', { overtimeGraceMinutes: 15 }).overtime_minutes).toBe(5);
+    // Checkout at 5:20 PM -> ALL 20 overtime minutes count
+    expect(calculateShiftMetrics(emp5, '09:00', '17:20', { overtimeGraceMinutes: 15 }).overtime_minutes).toBe(20);
 
     // Shift ending at 18:00 (6:00 PM)
     const emp6 = { shift_start: '10:00', shift_end: '18:00' };
     // Checkout at 6:15 PM -> 0 overtime minutes
     expect(calculateShiftMetrics(emp6, '10:00', '18:15', { overtimeGraceMinutes: 15 }).overtime_minutes).toBe(0);
-    // Checkout at 6:20 PM -> 5 overtime minutes
-    expect(calculateShiftMetrics(emp6, '10:00', '18:20', { overtimeGraceMinutes: 15 }).overtime_minutes).toBe(5);
+    // Checkout at 6:20 PM -> ALL 20 overtime minutes count
+    expect(calculateShiftMetrics(emp6, '10:00', '18:20', { overtimeGraceMinutes: 15 }).overtime_minutes).toBe(20);
   });
 });

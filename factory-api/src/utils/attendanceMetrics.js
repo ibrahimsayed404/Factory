@@ -107,10 +107,12 @@ const calculateShiftMetrics = (employee, checkIn, checkOut, options = {}) => {
     ? Number(options.overtimeGraceMinutes)
     : getOvertimeGraceMinutes();
 
+  const overtimeMinutes = rawOvertime <= Math.max(0, overtimeGraceMinutes) ? 0 : rawOvertime;
+
   return {
     late_minutes: Math.max(0, lateWithoutGrace - Math.max(0, lateGraceMinutes)),
     early_leave_minutes: Math.max(0, normalizedShiftEnd - normalizedOut),
-    overtime_minutes: Math.max(0, rawOvertime - Math.max(0, overtimeGraceMinutes)),
+    overtime_minutes: overtimeMinutes,
   };
 };
 
