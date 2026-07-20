@@ -11,7 +11,7 @@ const localConfig = {
   port: 5432,
   database: 'factory_db',
   user: 'postgres',
-  password: 'salma136',
+  password: process.env.LOCAL_DB_PASSWORD,
 };
 
 const cloudConfig = {
