@@ -48,10 +48,16 @@ const formatAttendanceDate = (value) => {
 };
 
 const formatTime = (value) => {
-  if (!value) return '—';
+  if (!value || value === '—') return '—';
   const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
   if (!match) return String(value);
-  return `${match[1].padStart(2, '0')}:${match[2]}`;
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  if (Number.isNaN(h)) return String(value);
+  const period = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${period}`;
 };
 
 const toMinutes = (value) => {

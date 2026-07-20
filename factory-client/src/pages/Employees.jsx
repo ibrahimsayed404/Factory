@@ -35,6 +35,19 @@ const serializeWeekendDays = (days) =>
     .sort((a, b) => a - b)
     .join(',');
 
+const formatTime12h = (value) => {
+  if (!value || value === '—') return '—';
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return String(value);
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  if (Number.isNaN(h)) return String(value);
+  const period = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${period}`;
+};
+
 const WeekendChips = ({ value }) => {
   const days = parseWeekendDays(value);
   if (!days.length) {
@@ -181,9 +194,9 @@ export default function Employees() {
     { key: 'role', label: 'Role', render: v => v || '—' },
     { key: 'shift', label: 'Shift', render: (v, row) => {
       const label = v ? v.charAt(0).toUpperCase() + v.slice(1) : '—';
-      const start = row.shift_start ? String(row.shift_start).slice(0, 5) : '—';
-      const end = row.shift_end ? String(row.shift_end).slice(0, 5) : '—';
-      return `${label} (${start}-${end})`;
+      const start = row.shift_start ? formatTime12h(row.shift_start) : '—';
+      const end = row.shift_end ? formatTime12h(row.shift_end) : '—';
+      return `${label} (${start} - ${end})`;
     } },
     { key: 'weekend_days', label: 'Weekend', render: v => <WeekendChips value={v} /> },
     { key: 'salary', label: 'Weekly Salary', render: v => v ? `$${Number(v).toLocaleString()}` : '—' },
