@@ -12,6 +12,7 @@ const {
 const { getAttendancePayrollPolicy } = require('../utils/policySettings');
 
 const WEEKEND_PRESENT_NOTE = 'present vacation';
+const DUPLICATE_PUNCH_WINDOW_MINUTES = Number(process.env.ATTENDANCE_DUPLICATE_PUNCH_MINUTES || 3);
 
 const normalizePunchTimestamp = (input) => {
   const raw = String(input || '').trim();
@@ -77,9 +78,24 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate,
 
   if (!punches.rows.length) return null;
 
-  const checkIn = punches.rows[0].punch_time;
-  const hasCheckout = punches.rows.length > 1;
-  const checkOut = hasCheckout ? punches.rows[punches.rows.length - 1].punch_time : null;
+  const duplicateWindowMs = Math.max(0, DUPLICATE_PUNCH_WINDOW_MINUTES) * 60 * 1000;
+  const dedupedPunches = [];
+  for (const punch of punches.rows) {
+    if (!dedupedPunches.length) {
+      dedupedPunches.push(punch);
+      continue;
+    }
+    const prevTime = new Date(dedupedPunches[dedupedPunches.length - 1].punched_at).getTime();
+    const currTime = new Date(punch.punched_at).getTime();
+    if (!Number.isNaN(prevTime) && !Number.isNaN(currTime) && (currTime - prevTime) < duplicateWindowMs) {
+      continue;
+    }
+    dedupedPunches.push(punch);
+  }
+
+  const checkIn = dedupedPunches[0].punch_time;
+  const hasCheckout = dedupedPunches.length > 1;
+  const checkOut = hasCheckout ? dedupedPunches[dedupedPunches.length - 1].punch_time : null;
   const hoursWorked = hasCheckout ? calculateHoursWorked(checkIn, checkOut, null) : null;
   const weekendAttendance = isWeekendDate(employee, attendanceDate);
   const workedMinutes = hasCheckout ? calculateWorkedMinutes(checkIn, checkOut) : 0;
