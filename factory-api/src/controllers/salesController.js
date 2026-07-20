@@ -60,7 +60,8 @@ const updateStatus = async (req, res, next) => {
 
 const deleteOrder = async (req, res, next) => {
   try {
-    await verifyUserPassword(req.user.id, req.body.password);
+    const password = req.body?.password || req.query?.password || req.headers['x-confirm-password'] || req.headers['x-password'];
+    await verifyUserPassword(req.user.id, password);
     const result = await salesService.removeOrder(req.user.id, req.params.id, extractReqContext(req));
     res.json(result);
   } catch (err) { next(err); }

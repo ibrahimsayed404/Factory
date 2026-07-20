@@ -96,15 +96,15 @@ const logAttendance = async (id, data) => {
 
   const resolvedLateMinutes = zeroMetrics ? 0 : (isWeekendAttendance
     ? 0
-    : (Number.isFinite(Number(late_minutes)) ? Number(late_minutes) : metrics.late_minutes));
+    : (resolvedCheckIn ? metrics.late_minutes : (Number.isFinite(Number(late_minutes)) ? Number(late_minutes) : metrics.late_minutes)));
 
   const resolvedEarlyLeaveMinutes = zeroMetrics ? 0 : (isWeekendAttendance
     ? 0
-    : (Number.isFinite(Number(early_leave_minutes)) ? Number(early_leave_minutes) : metrics.early_leave_minutes));
+    : (resolvedCheckOut ? metrics.early_leave_minutes : (Number.isFinite(Number(early_leave_minutes)) ? Number(early_leave_minutes) : metrics.early_leave_minutes)));
 
   const resolvedOvertimeMinutes = zeroMetrics ? 0 : (isWeekendAttendance
     ? (workedMinutes || 0)
-    : (Number.isFinite(Number(overtime_minutes)) ? Number(overtime_minutes) : metrics.overtime_minutes));
+    : (resolvedCheckIn && resolvedCheckOut ? metrics.overtime_minutes : (Number.isFinite(Number(overtime_minutes)) ? Number(overtime_minutes) : metrics.overtime_minutes)));
 
   const resolvedStatus = isAbsent
     ? 'absent'

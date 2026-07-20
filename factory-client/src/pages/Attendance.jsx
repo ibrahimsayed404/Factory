@@ -47,10 +47,20 @@ const formatAttendanceDate = (value) => {
   return `${weekDayName(dayOfWeekFromDate(value))}, ${monthName(parts.month)} ${parts.day}`;
 };
 
+const formatTime = (value) => {
+  if (!value) return '—';
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return String(value);
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+};
+
 const toMinutes = (value) => {
   if (!value) return null;
-  const [h, m] = String(value).slice(0, 5).split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
   return (h * 60) + m;
 };
 
@@ -456,8 +466,8 @@ export default function Attendance() {
   const detailColumns = [
     { key: 'date', label: 'Date', render: v => formatAttendanceDate(v) },
     { key: 'status', label: 'Status', render: v => <Badge variant={statusVariant(v)}>{v}</Badge> },
-    { key: 'check_in',  label: 'Check in',  render: v => v || '—' },
-    { key: 'check_out', label: 'Check out', render: v => v || '—' },
+    { key: 'check_in',  label: 'Check in',  render: v => formatTime(v) },
+    { key: 'check_out', label: 'Check out', render: v => formatTime(v) },
     { key: 'hours_worked', label: 'Hours', render: v => v ? `${v}h` : '—' },
     { key: 'late_minutes', label: 'Late', render: v => `${v || 0}m` },
     { key: 'early_leave_minutes', label: 'Early leave', render: v => `${v || 0}m` },

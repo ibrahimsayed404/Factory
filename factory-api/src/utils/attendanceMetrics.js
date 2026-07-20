@@ -8,8 +8,11 @@ const getLateGraceMinutes = () => Math.max(0, Number(process.env.ATTENDANCE_LATE
 
 const toMinutes = (value) => {
   if (!value) return null;
-  const [h, m] = String(value).slice(0, 5).split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
   return (h * 60) + m;
 };
 

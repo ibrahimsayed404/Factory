@@ -234,8 +234,15 @@ const partnerFactoryCreate = [
 ];
 
 const productionOrderDelete = [
-  body('password').isString().notEmpty().withMessage('password is required'),
-  handleValidation,
+  (req, res, next) => {
+    const password = req.body?.password || req.query?.password || req.headers['x-confirm-password'] || req.headers['x-password'];
+    if (!password || typeof password !== 'string' || !password.trim()) {
+      return res.status(400).json({ error: req.t ? req.t('passwordRequired', 'Password is required.') : 'Password is required.' });
+    }
+    req.body = req.body || {};
+    req.body.password = String(password).trim();
+    next();
+  },
 ];
 
 module.exports = {

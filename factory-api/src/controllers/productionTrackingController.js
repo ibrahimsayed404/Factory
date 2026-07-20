@@ -134,7 +134,8 @@ const getReport = async (req, res, next) => {
 
 const deleteOrder = async (req, res, next) => {
   try {
-    await verifyUserPassword(req.user.id, req.body.password);
+    const password = req.body?.password || req.query?.password || req.headers['x-confirm-password'] || req.headers['x-password'];
+    await verifyUserPassword(req.user.id, password);
     const data = await productionTrackingService.deleteOrder(req.params.id, { force: true });
     await auditService.log(req.user.id, 'DELETE', 'production_orders', req.params.id, { order_number: data.order_number }, auditService.extractReqContext(req));
     res.json(data);

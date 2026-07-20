@@ -110,12 +110,22 @@ const doFetch = async (method, path, body) => {
     : { 'Content-Type': 'application/json', 'Accept-Language': lang, 'X-Lang': lang };
   const token = localStorage.getItem('token');
   if (token) headers.Authorization = `Bearer ${token}`;
+
+  let finalPath = path;
+  if (body && typeof body === 'object' && body.password) {
+    headers['X-Confirm-Password'] = body.password;
+    if (!finalPath.includes('password=')) {
+      const sep = finalPath.includes('?') ? '&' : '?';
+      finalPath = `${finalPath}${sep}password=${encodeURIComponent(body.password)}`;
+    }
+  }
+
   let payload;
   if (!body) payload = undefined;
   else if (isFormData) payload = body;
   else payload = JSON.stringify(body);
 
-  return fetch(`${BASE}${path}`, {
+  return fetch(`${BASE}${finalPath}`, {
     method,
     headers,
     credentials: 'include',
@@ -191,7 +201,7 @@ export const api = {
   get:    (path)         => request('GET',    path),
   post:   (path, body)   => request('POST',   path, body),
   put:    (path, body)   => request('PUT',    path, body),
-  delete: (path)         => request('DELETE', path),
+  delete: (path, body)   => request('DELETE', path, body),
 };
 
 export default api;
@@ -297,7 +307,7 @@ export const salesApi = {
   order:          (id)      => api.get(`/sales/${id}`),
   createOrder:    (body)    => api.post('/sales', body),
   updateStatus:   (id, body)=> api.put(`/sales/${id}/status`, body),
-  delete:         (id)      => api.delete(`/sales/${id}`),
+  delete:         (id, body)=> api.delete(`/sales/${id}`, body),
   analytics:      ()        => api.get('/sales/analytics'),
   outstanding:    ()        => api.get('/sales/outstanding-balances'),
   quotations:     (params = '?limit=1000') => api.get(`/sales-quotations${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
@@ -391,7 +401,7 @@ export const productionTrackingApi = {
   addOutsourcing: (id, body) => api.post(`/production-orders/${id}/outsourcing`, body),
   addFinal: (id, body) => api.post(`/production-orders/${id}/final`, body),
   getReport: (id) => api.get(`/production-orders/${id}/report`),
-  deleteOrder: (id) => api.delete(`/production-orders/${id}`),
+  deleteOrder: (id, body) => api.delete(`/production-orders/${id}`, body),
 };
 
 export const qcApi = {
