@@ -152,7 +152,11 @@ const updateAttendanceRecord = async (employeeId, date, data) => {
     `UPDATE attendance
      SET check_in=$1, check_out=$2, hours_worked=$3, status=$4, notes=$5,
          late_minutes=$6, early_leave_minutes=$7, overtime_minutes=$8
-     WHERE employee_id=$9 AND date=$10 RETURNING *`,
+     WHERE employee_id=$9 AND date=$10
+     RETURNING id, employee_id, date::text AS date,
+               TO_CHAR(check_in, 'HH24:MI') AS check_in,
+               TO_CHAR(check_out, 'HH24:MI') AS check_out,
+               hours_worked, late_minutes, early_leave_minutes, overtime_minutes, status, notes`,
     [check_in, check_out, hours_worked, status, notes, late_minutes, early_leave_minutes, overtime_minutes, employeeId, date]
   );
   return result.rows[0];
@@ -165,7 +169,11 @@ const createAttendanceRecord = async (employeeId, date, data) => {
       employee_id, date, check_in, check_out, hours_worked, status, notes,
       late_minutes, early_leave_minutes, overtime_minutes
     )
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+     RETURNING id, employee_id, date::text AS date,
+               TO_CHAR(check_in, 'HH24:MI') AS check_in,
+               TO_CHAR(check_out, 'HH24:MI') AS check_out,
+               hours_worked, late_minutes, early_leave_minutes, overtime_minutes, status, notes`,
     [employeeId, date, check_in, check_out, hours_worked, status, notes, late_minutes, early_leave_minutes, overtime_minutes]
   );
   return result.rows[0];
@@ -177,8 +185,8 @@ const getAttendanceHistory = async (employeeId, month, year) => {
       id,
       employee_id,
       date::text AS date,
-      check_in,
-      check_out,
+      TO_CHAR(check_in, 'HH24:MI') AS check_in,
+      TO_CHAR(check_out, 'HH24:MI') AS check_out,
       hours_worked,
       late_minutes,
       early_leave_minutes,

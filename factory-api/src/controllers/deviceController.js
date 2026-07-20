@@ -15,9 +15,10 @@ const WEEKEND_PRESENT_NOTE = 'present vacation';
 
 const normalizePunchTimestamp = (input) => {
   const raw = String(input || '').trim();
-  const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/);
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (match) {
-    const [, datePart, hhmm, sec] = match;
+    const [, datePart, h, m, sec] = match;
+    const hhmm = `${String(h).padStart(2, '0')}:${m}`;
     return {
       datePart,
       timePart: hhmm,
