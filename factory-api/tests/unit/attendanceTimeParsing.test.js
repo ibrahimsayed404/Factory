@@ -17,16 +17,24 @@ describe('Attendance Time Parsing Unit Tests', () => {
     expect(calculateWorkedMinutes('22:00', '06:00')).toBe(480);
   });
 
-  test('calculateShiftMetrics respects configurable late grace minutes', () => {
+  test('calculateShiftMetrics returns raw late minutes (no grace subtracted)', () => {
     const employee = { shift: 'morning', shift_start: '09:00', shift_end: '17:00' };
     
-    // 5 mins late with 10 min grace -> 0 late minutes
-    const m1 = calculateShiftMetrics(employee, '09:05', '17:00', { lateGraceMinutes: 10 });
-    expect(m1.late_minutes).toBe(0);
+    // 5 mins late -> 5 late minutes (grace does NOT apply to late)
+    const m1 = calculateShiftMetrics(employee, '09:05', '17:00');
+    expect(m1.late_minutes).toBe(5);
 
-    // 15 mins late with 10 min grace -> 5 late minutes
-    const m2 = calculateShiftMetrics(employee, '09:15', '17:00', { lateGraceMinutes: 10 });
-    expect(m2.late_minutes).toBe(5);
+    // 15 mins late -> 15 late minutes (grace does NOT apply to late)
+    const m2 = calculateShiftMetrics(employee, '09:15', '17:00');
+    expect(m2.late_minutes).toBe(15);
+
+    // On time -> 0 late minutes
+    const m3 = calculateShiftMetrics(employee, '09:00', '17:00');
+    expect(m3.late_minutes).toBe(0);
+
+    // Early -> 0 late minutes
+    const m4 = calculateShiftMetrics(employee, '08:50', '17:00');
+    expect(m4.late_minutes).toBe(0);
   });
 
   test('calculateShiftMetrics starts overtime after 15 minutes past shift end', () => {
