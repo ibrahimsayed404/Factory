@@ -346,7 +346,7 @@ export default function Attendance() {
       const autoStatus = weekendAttendance
         ? 'present'
         : (prev.status === 'present' || prev.status === 'late'
-          ? (metrics.late_minutes > 0 ? 'late' : 'present')
+          ? (metrics.late_minutes > 0 || metrics.early_leave_minutes > 0 ? 'late' : 'present')
           : prev.status);
       
       const next = {

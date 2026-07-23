@@ -116,7 +116,7 @@ const logAttendance = async (id, data) => {
         : (isWeekendAttendance
           ? 'present'
           : ((status === 'present' || status === 'late')
-            ? (resolvedLateMinutes > 0 ? 'late' : 'present')
+            ? ((resolvedLateMinutes > 0 || resolvedEarlyLeaveMinutes > 0) ? 'late' : 'present')
             : status)));
       
   const resolvedNotes = isWeekendAttendance ? WEEKEND_PRESENT_NOTE : notes;

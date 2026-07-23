@@ -118,7 +118,7 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate,
       overtime_minutes: 0,
     };
 
-  const status = weekendAttendance ? 'present' : (metrics.late_minutes > 0 ? 'late' : 'present');
+  const status = weekendAttendance ? 'present' : ((metrics.late_minutes > 0 || metrics.early_leave_minutes > 0) ? 'late' : 'present');
   const notes = weekendAttendance ? WEEKEND_PRESENT_NOTE : 'auto-ingested-from-device';
 
   const upsert = await client.query(

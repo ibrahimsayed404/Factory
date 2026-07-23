@@ -8,6 +8,8 @@ const sumWeightedLateMinutes = (attendanceRows = []) => (
   attendanceRows.reduce((sum, row) => sum + weightedLateMinutesForDay(row.late_minutes), 0)
 );
 
+const earlyLeaveChargeMinutes = (earlyLeaveMinutes) => Math.max(0, Number(earlyLeaveMinutes || 0));
+
 describe('per-day late weighting', () => {
   test('keeps days <= 10 at x1 and days > 10 at x1.5', () => {
     // Saturday 5 + Sunday 40 => 5 + (40 * 1.5) = 65
@@ -32,5 +34,11 @@ describe('per-day late weighting', () => {
       { late_minutes: 15 },
       { late_minutes: 20 },
     ])).toBe(15 * 1.5 + 20 * 1.5);
+  });
+
+  test('early leave is always charged at x1 multiplier', () => {
+    expect(earlyLeaveChargeMinutes(30)).toBe(30);
+    expect(earlyLeaveChargeMinutes(60)).toBe(60);
+    expect(earlyLeaveChargeMinutes(0)).toBe(0);
   });
 });
