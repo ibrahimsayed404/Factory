@@ -279,7 +279,7 @@ export default function Payroll() {
       // Deductions — each shown only when non-zero, with its detail in the label.
       if (b.late_deduction > 0) rows.push(renderBreakdownRow(`${t('lateDeduction', 'Late')} (${formatMinutes(b.late_minutes)} → ${formatMinutes(b.late_weighted_minutes)} ${t('weighted', 'weighted')})`, b.late_deduction));
       if (b.early_leave_deduction > 0) rows.push(renderBreakdownRow(`${t('earlyLeave', 'Early leave')} (${formatMinutes(b.early_leave_minutes)})`, b.early_leave_deduction));
-      const totalAbsent = (b.absent_days || 0) + (b.inferred_absent_days || 0);
+      const totalAbsent = b.absent_days || 0;
       if (b.absent_deduction > 0) rows.push(renderBreakdownRow(`${t('absent', 'Absent')} (${totalAbsent} ${t('days', 'day(s)')})`, b.absent_deduction));
       if (b.half_day_deduction > 0) rows.push(renderBreakdownRow(`${t('halfDay', 'Half day')} (${b.half_days})`, b.half_day_deduction));
       if (b.hr_penalty > 0) rows.push(renderBreakdownRow(t('hrPenalty', 'HR penalty'), b.hr_penalty));
@@ -681,7 +681,7 @@ export default function Payroll() {
           )}
           {(() => {
             const b = selectedBreakdown.payroll_breakdown || {};
-            const totalAbsent = (b.absent_days || 0) + (b.inferred_absent_days || 0);
+            const totalAbsent = b.absent_days || 0;
             // Only itemize rows that actually affected pay (non-zero).
             const items = [
               { label: `${t('lateDeduction', 'Late')} (${formatMinutes(b.late_minutes)} → ${formatMinutes(b.late_weighted_minutes)} ${t('weighted', 'weighted')})`, amount: b.late_deduction, positive: false },
