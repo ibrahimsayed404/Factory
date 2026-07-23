@@ -427,7 +427,9 @@ export default function Attendance() {
 
   // Summary table columns — date-filtered
   const summaryTableData = useMemo(() => {
+    const todayKey = today();
     const data = summary.map(s => {
+      const todayRecord = s.records.find(r => toDateKey(r.date) === todayKey);
       // Filter records by date range if applicable
       let filteredRecords = s.records;
       if (startDate && endDate) {
@@ -446,6 +448,7 @@ export default function Attendance() {
         id: s.emp.id,
         emp: s.emp,
         records: filteredRecords,
+        todayRecord,
         device_user_id: s.emp.device_user_id || '',
         empName: s.emp.name || '',
         presentCount,
@@ -485,6 +488,24 @@ export default function Attendance() {
         <span>{row.emp.name}</span>
       </div>
     )},
+    { key: 'todayPunches', label: t('todayCheckInOut', "Today (In / Out)"), render: (_, row) => {
+      const r = row.todayRecord;
+      if (!r || (!r.check_in && !r.check_out)) {
+        if (r?.status === 'absent') {
+          return <Badge variant="danger">absent</Badge>;
+        }
+        return <span style={{ color: 'var(--text-muted)' }}>—</span>;
+      }
+      const inStr = formatTime(r.check_in);
+      const outStr = formatTime(r.check_out);
+      return (
+        <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{inStr}</span>
+          <span style={{ color: 'var(--text-muted)' }}>–</span>
+          <span style={{ color: r.check_out ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: 500 }}>{outStr}</span>
+        </div>
+      );
+    }},
     { key: 'presentCount', label: t('present', 'Present'), render: v => (
       <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{v}</span>
     )},
