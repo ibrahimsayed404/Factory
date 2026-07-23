@@ -293,24 +293,24 @@ export default function Attendance() {
   const now = new Date();
   const [month, setMonth]  = useState(now.getMonth() + 1);
   const [year,  setYear]   = useState(now.getFullYear());
-  const [startDate, setStartDate] = useState(`${year}-${String(now.getMonth() + 1).padStart(2, '0')}-01`);
-  const [endDate, setEndDate] = useState(`${year}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(year, now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`);
+
+  // Default date range = current Sat–Thu week
+  const initWeek = getCurrentWeekRange();
+  const [startDate, setStartDate] = useState(initWeek.start);
+  const [endDate, setEndDate] = useState(initWeek.end);
+
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [empRecords, setEmpRecords]   = useState([]);
   const [empLoading, setEmpLoading]   = useState(false);
 
-  // Week / Month toggle for employee detail view (default: week)
-  const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
-
-  // Filter employee records based on viewMode
+  // Filter employee detail records by the global date range
   const filteredEmpRecords = useMemo(() => {
-    if (viewMode === 'month') return empRecords;
-    const { start, end } = getCurrentWeekRange();
+    if (!startDate || !endDate) return empRecords;
     return empRecords.filter(r => {
       const d = toDateKey(r.date);
-      return d >= start && d <= end;
+      return d >= startDate && d <= endDate;
     });
-  }, [empRecords, viewMode]);
+  }, [empRecords, startDate, endDate]);
 
   // Log modal
   const [showLog, setShowLog] = useState(false);
@@ -399,7 +399,6 @@ export default function Attendance() {
   // Load single employee detail
   const selectEmployee = async (emp) => {
     setSelectedEmp(emp);
-    setViewMode('week'); // default to week view
     setEmpLoading(true);
     try {
       const records = await employeeApi.attendance(emp.id, `?month=${month}&year=${year}`);
@@ -420,17 +419,10 @@ export default function Attendance() {
       setSaveError(e.message);
     } finally { setSaving(false); }
   };
-
-  // Aggregate metrics from summary
-  const totalPresent  = summary.reduce((a, s) => a + s.records.filter(r => r.status === 'present').length, 0);
-  const totalAbsent   = summary.reduce((a, s) => a + s.records.filter(r => r.status === 'absent').length, 0);
-  const totalLate     = summary.reduce((a, s) => a + s.records.filter(r => r.status === 'late').length, 0);
-  const totalHours    = summary.reduce((a, s) => a + s.records.reduce((b, r) => b + parseFloat(r.hours_worked || 0), 0), 0);
-
   // Search functionality
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Summary table columns
+  // Summary table columns — date-filtered
   const summaryTableData = useMemo(() => {
     const data = summary.map(s => {
       // Filter records by date range if applicable
@@ -468,6 +460,12 @@ export default function Attendance() {
       (row.device_user_id?.toString() || '').includes(term)
     );
   }, [summary, searchTerm, startDate, endDate]);
+
+  // Aggregate metrics from the date-filtered summary table data
+  const totalPresent  = summaryTableData.reduce((a, row) => a + row.presentCount, 0);
+  const totalAbsent   = summaryTableData.reduce((a, row) => a + row.absentCount, 0);
+  const totalLate     = summaryTableData.reduce((a, row) => a + row.lateCount, 0);
+  const totalHours    = summaryTableData.reduce((a, row) => a + row.totalHrs, 0);
 
   const summaryColumns = [
     { key: 'device_user_id', label: t('deviceNo', 'Device No'), render: v => (
@@ -546,36 +544,47 @@ export default function Attendance() {
         <MetricCard label="Total hours"   value={`${totalHours.toFixed(0)}h`} />
       </div>
 
-      {/* Date range filter */}
-      {!selectedEmp && (
-        <Card padding="12px 16px" style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Filter by date range:</span>
-            <input 
-              type="date" 
-              value={startDate} 
-              onChange={e => setStartDate(e.target.value)}
-              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
-            />
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>to</span>
-            <input 
-              type="date" 
-              value={endDate} 
-              onChange={e => setEndDate(e.target.value)}
-              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
-            />
-            <Btn 
-              size="sm" 
-              onClick={() => {
-                setStartDate(`${year}-${String(month).padStart(2, '0')}-01`);
-                setEndDate(`${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`);
-              }}
-            >
-              Reset to month
-            </Btn>
-          </div>
-        </Card>
-      )}
+      {/* Date range filter — always visible */}
+      <Card padding="12px 16px" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Filter by date range:</span>
+          <input 
+            type="date" 
+            value={startDate} 
+            onChange={e => setStartDate(e.target.value)}
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
+          />
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>to</span>
+          <input 
+            type="date" 
+            value={endDate} 
+            onChange={e => setEndDate(e.target.value)}
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
+          />
+          {/* Quick-filter: This Week */}
+          <Btn 
+            size="sm" 
+            variant={startDate === getCurrentWeekRange().start && endDate === getCurrentWeekRange().end ? 'primary' : undefined}
+            onClick={() => {
+              const wk = getCurrentWeekRange();
+              setStartDate(wk.start);
+              setEndDate(wk.end);
+            }}
+          >
+            This Week
+          </Btn>
+          {/* Quick-filter: Full Month */}
+          <Btn 
+            size="sm" 
+            onClick={() => {
+              setStartDate(`${year}-${String(month).padStart(2, '0')}-01`);
+              setEndDate(`${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`);
+            }}
+          >
+            Full Month
+          </Btn>
+        </div>
+      </Card>
 
       {/* Search bar for summary view */}
       {!selectedEmp && (
@@ -591,34 +600,9 @@ export default function Attendance() {
       {/* Employee detail view */}
       {selectedEmp ? (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <Btn onClick={() => setSelectedEmp(null)}>← Back</Btn>
-            <h2 style={{ fontSize: 16, fontWeight: 600, flex: 1 }}>{selectedEmp.name} — {monthName(month)} {year}</h2>
-            {/* Week / Month toggle */}
-            <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
-              <button
-                onClick={() => setViewMode('week')}
-                style={{
-                  padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  border: 'none', outline: 'none', transition: 'all 0.2s',
-                  background: viewMode === 'week' ? 'var(--accent)' : 'var(--bg-elevated)',
-                  color: viewMode === 'week' ? '#fff' : 'var(--text-secondary)',
-                }}
-              >
-                {(() => { const { start, end } = getCurrentWeekRange(); const s = parseDateParts(start); const e = parseDateParts(end); return `Week (${s.day}/${s.month} – ${e.day}/${e.month})`; })()}
-              </button>
-              <button
-                onClick={() => setViewMode('month')}
-                style={{
-                  padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  border: 'none', borderLeft: '1px solid var(--border)', outline: 'none', transition: 'all 0.2s',
-                  background: viewMode === 'month' ? 'var(--accent)' : 'var(--bg-elevated)',
-                  color: viewMode === 'month' ? '#fff' : 'var(--text-secondary)',
-                }}
-              >
-                Month Attendance
-              </button>
-            </div>
+            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{selectedEmp.name} — {monthName(month)} {year}</h2>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 20 }}>
@@ -628,7 +612,7 @@ export default function Attendance() {
                   <Table columns={detailColumns} data={filteredEmpRecords} />
                 ) : (
                   <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                    {viewMode === 'week' ? 'No attendance records for this week.' : 'No attendance records for this month.'}
+                    No attendance records for this period.
                   </div>
                 )
               )}
