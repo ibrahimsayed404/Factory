@@ -42,7 +42,7 @@ const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dat
   // midnight ISO strings and shift a day on negative-UTC-offset clients.
   let query = `
     SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end,
-      e.name AS employee_name, e.role, ${weekendSelect}
+      e.name AS employee_name, e.role, e.shift, e.shift_start, e.shift_end, ${weekendSelect}
       d.name AS department_name,
       COALESCE(att.late_minutes, 0)::int AS late_minutes,
       COALESCE(att.late_weighted_minutes, 0)::float AS late_weighted_minutes,

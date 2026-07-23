@@ -2,6 +2,7 @@ const payrollRepository = require('../repositories/payrollRepository');
 const accountingService = require('./accountingService');
 const { getAttendancePayrollPolicy } = require('../utils/policySettings');
 const ApiError = require('../utils/ApiError');
+const { SHIFT_SCHEDULES, toMinutes } = require('../utils/attendanceMetrics');
 
 const round2 = (n) => Number(Number(n || 0).toFixed(2));
 
@@ -221,12 +222,44 @@ const getWeeklyWorkDays = (weekendSet) => {
   return weekDays > 0 ? weekDays : 5;
 };
 
-const getRates = (baseSalary, weekendSet, policy, useWeeklySalary) => {
+/**
+ * Resolves an employee's daily shift duration in hours.
+ * Checks explicit properties (shift_hours, work_hours_per_day) first,
+ * then computes the duration between shift_start and shift_end (or SHIFT_SCHEDULES defaults).
+ * If genuinely missing or unresolvable, logs a warning and returns fallbackHours (default 8).
+ */
+const resolveShiftHours = (employee, fallbackHours = 8) => {
+  if (employee) {
+    if (Number.isFinite(Number(employee.shift_hours)) && Number(employee.shift_hours) > 0) {
+      return Number(employee.shift_hours);
+    }
+    if (Number.isFinite(Number(employee.work_hours_per_day)) && Number(employee.work_hours_per_day) > 0) {
+      return Number(employee.work_hours_per_day);
+    }
+    const schedule = SHIFT_SCHEDULES[employee.shift] || SHIFT_SCHEDULES.morning;
+    const startStr = employee.shift_start || schedule?.start;
+    const endStr = employee.shift_end || schedule?.end;
+    const startMin = toMinutes(startStr);
+    const endMin = toMinutes(endStr);
+    if (startMin !== null && endMin !== null) {
+      let end = endMin;
+      if (end <= startMin) end += 24 * 60; // handle overnight shift
+      const hours = (end - startMin) / 60;
+      if (hours > 0) return hours;
+    }
+  }
+
+  console.warn(`[Payroll] Missing or unresolvable shift duration for employee ID ${employee?.id || employee?.employee_id || 'unknown'} (${employee?.name || employee?.employee_name || 'unknown'}), falling back to ${fallbackHours} hours default.`);
+  return fallbackHours;
+};
+
+const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => {
   const dailyRate = useWeeklySalary
     ? baseSalary / getWeeklyWorkDays(weekendSet)
     : baseSalary / policy.workingDaysPerMonth;
-  const minuteRate = dailyRate / (policy.workHoursPerDay * 60);
-  return { dailyRate, minuteRate };
+  const shiftHours = resolveShiftHours(employee, policy.workHoursPerDay || 8);
+  const minuteRate = dailyRate / (shiftHours * 60);
+  return { dailyRate, minuteRate, shiftHours };
 };
 
 const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateTo, page, limit }) => {
@@ -256,7 +289,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
     const baseSalary = Number(row.base_salary || 0);
     const weekendSet = weekendSetFrom(row.weekend_days);
     const useWeeklySalary = Boolean(row.week_start);
-    const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary);
+    const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, row);
     // Prefer DB per-day weighted sum when present; never re-weight the weekly total.
     const lateWeighted = Number(row.late_weighted_minutes || 0);
     const earlyLeaveMinutes = earlyLeaveChargeMinutes(row.early_leave_minutes);
@@ -376,7 +409,7 @@ const calculatePayrollForEmployee = async (employee, options) => {
   const fullBaseSalary = Number(employee.salary || 0);
   const weekendSet = weekendSetFrom(employee.weekend_days);
   const useWeeklySalary = Boolean(weekStart);
-  const { dailyRate, minuteRate } = getRates(fullBaseSalary, weekendSet, policy, useWeeklySalary);
+  const { dailyRate, minuteRate } = getRates(fullBaseSalary, weekendSet, policy, useWeeklySalary, employee);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
     employee.id, weekStart, weekEnd, effectiveMonth, effectiveYear
@@ -765,4 +798,6 @@ module.exports = {
   calculateInferredAbsentDays,
   countEmployedWorkDays,
   buildApprovedLeaveDatesSet,
+  getRates,
+  resolveShiftHours,
 };
