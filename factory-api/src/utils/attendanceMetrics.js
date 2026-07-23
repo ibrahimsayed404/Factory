@@ -76,7 +76,13 @@ const calculateLateMinutesOnly = (employee, checkIn, options = {}) => {
   if (inMinRaw === null || shiftStart === null || shiftEnd === null) return 0;
 
   const inMin = normalizeShiftMinute(inMinRaw, shiftStart, shiftEnd, overnightShift);
-  return Math.max(0, inMin - shiftStart);
+  const rawLate = Math.max(0, inMin - shiftStart);
+
+  const lateGraceMinutes = Number.isFinite(Number(options.lateGraceMinutes))
+    ? Number(options.lateGraceMinutes)
+    : getLateGraceMinutes();
+
+  return rawLate <= Math.max(0, lateGraceMinutes) ? 0 : rawLate;
 };
 
 const calculateShiftMetrics = (employee, checkIn, checkOut, options = {}) => {
@@ -93,7 +99,11 @@ const calculateShiftMetrics = (employee, checkIn, checkOut, options = {}) => {
   let normalizedOut = normalizeShiftMinute(outMinRaw, shiftStart, shiftEnd, overnightShift);
   if (normalizedOut < normalizedIn) normalizedOut += 24 * 60;
 
-  const lateMinutes = Math.max(0, normalizedIn - shiftStart);
+  const rawLate = Math.max(0, normalizedIn - shiftStart);
+  const lateGraceMinutes = Number.isFinite(Number(options.lateGraceMinutes))
+    ? Number(options.lateGraceMinutes)
+    : getLateGraceMinutes();
+  const lateMinutes = rawLate <= Math.max(0, lateGraceMinutes) ? 0 : rawLate;
 
   const rawOvertime = Math.max(0, normalizedOut - normalizedShiftEnd);
   const overtimeGraceMinutes = Number.isFinite(Number(options.overtimeGraceMinutes))

@@ -147,8 +147,11 @@ const computeShiftMetrics = (employee, checkIn, checkOut) => {
 
   if (normalizedOut < normalizedIn) normalizedOut += 24 * 60;
 
+  const LATE_GRACE_MINUTES = 10;
+  const rawLate = Math.max(0, normalizedIn - shiftStart);
+
   return {
-    late_minutes: Math.max(0, normalizedIn - shiftStart),
+    late_minutes: rawLate <= LATE_GRACE_MINUTES ? 0 : rawLate,
     early_leave_minutes: Math.max(0, normalizedShiftEnd - normalizedOut),
     overtime_minutes: Math.max(0, normalizedOut - normalizedShiftEnd),
   };

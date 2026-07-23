@@ -17,16 +17,24 @@ describe('Attendance Time Parsing Unit Tests', () => {
     expect(calculateWorkedMinutes('22:00', '06:00')).toBe(480);
   });
 
-  test('calculateShiftMetrics returns raw late minutes (no grace subtracted)', () => {
+  test('calculateShiftMetrics applies 10-minute late grace period', () => {
     const employee = { shift: 'morning', shift_start: '09:00', shift_end: '17:00' };
     
-    // 5 mins late -> 5 late minutes (grace does NOT apply to late)
-    const m1 = calculateShiftMetrics(employee, '09:05', '17:00');
-    expect(m1.late_minutes).toBe(5);
+    // 5 mins late -> within 10-min grace -> 0 late minutes
+    const m1 = calculateShiftMetrics(employee, '09:05', '17:00', { lateGraceMinutes: 10 });
+    expect(m1.late_minutes).toBe(0);
 
-    // 15 mins late -> 15 late minutes (grace does NOT apply to late)
-    const m2 = calculateShiftMetrics(employee, '09:15', '17:00');
-    expect(m2.late_minutes).toBe(15);
+    // 10 mins late -> exactly at grace boundary -> 0 late minutes
+    const m1b = calculateShiftMetrics(employee, '09:10', '17:00', { lateGraceMinutes: 10 });
+    expect(m1b.late_minutes).toBe(0);
+
+    // 11 mins late -> exceeds grace -> full 11 late minutes
+    const m2 = calculateShiftMetrics(employee, '09:11', '17:00', { lateGraceMinutes: 10 });
+    expect(m2.late_minutes).toBe(11);
+
+    // 15 mins late -> exceeds grace -> full 15 late minutes
+    const m2b = calculateShiftMetrics(employee, '09:15', '17:00', { lateGraceMinutes: 10 });
+    expect(m2b.late_minutes).toBe(15);
 
     // On time -> 0 late minutes
     const m3 = calculateShiftMetrics(employee, '09:00', '17:00');
