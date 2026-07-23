@@ -17,6 +17,31 @@ const today = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
+
+/**
+ * Returns { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' } for the current
+ * Sat→Thu work-week that contains "today".
+ * Week starts Saturday (day 6) and ends Thursday (day 4).
+ */
+const getCurrentWeekRange = () => {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun … 6=Sat
+
+  // How many days since the most recent Saturday?
+  // Sat=0, Sun=1, Mon=2, Tue=3, Wed=4, Thu=5, Fri=6
+  const daysSinceSat = (day + 1) % 7; // shift so Sat=0
+
+  const saturday = new Date(now);
+  saturday.setDate(now.getDate() - daysSinceSat);
+
+  const thursday = new Date(saturday);
+  thursday.setDate(saturday.getDate() + 5); // Sat + 5 = Thu
+
+  const fmt = d =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  return { start: fmt(saturday), end: fmt(thursday) };
+};
 const monthName = m => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
 const weekDayName = i => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i];
 const SHIFT_SCHEDULES = {
@@ -274,6 +299,19 @@ export default function Attendance() {
   const [empRecords, setEmpRecords]   = useState([]);
   const [empLoading, setEmpLoading]   = useState(false);
 
+  // Week / Month toggle for employee detail view (default: week)
+  const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
+
+  // Filter employee records based on viewMode
+  const filteredEmpRecords = useMemo(() => {
+    if (viewMode === 'month') return empRecords;
+    const { start, end } = getCurrentWeekRange();
+    return empRecords.filter(r => {
+      const d = toDateKey(r.date);
+      return d >= start && d <= end;
+    });
+  }, [empRecords, viewMode]);
+
   // Log modal
   const [showLog, setShowLog] = useState(false);
   const [logForm, setLogForm] = useState({
@@ -361,6 +399,7 @@ export default function Attendance() {
   // Load single employee detail
   const selectEmployee = async (emp) => {
     setSelectedEmp(emp);
+    setViewMode('week'); // default to week view
     setEmpLoading(true);
     try {
       const records = await employeeApi.attendance(emp.id, `?month=${month}&year=${year}`);
@@ -552,19 +591,44 @@ export default function Attendance() {
       {/* Employee detail view */}
       {selectedEmp ? (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
             <Btn onClick={() => setSelectedEmp(null)}>← Back</Btn>
-            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{selectedEmp.name} — {monthName(month)} {year}</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 600, flex: 1 }}>{selectedEmp.name} — {monthName(month)} {year}</h2>
+            {/* Week / Month toggle */}
+            <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <button
+                onClick={() => setViewMode('week')}
+                style={{
+                  padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: 'none', outline: 'none', transition: 'all 0.2s',
+                  background: viewMode === 'week' ? 'var(--accent)' : 'var(--bg-elevated)',
+                  color: viewMode === 'week' ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                {(() => { const { start, end } = getCurrentWeekRange(); const s = parseDateParts(start); const e = parseDateParts(end); return `Week (${s.day}/${s.month} – ${e.day}/${e.month})`; })()}
+              </button>
+              <button
+                onClick={() => setViewMode('month')}
+                style={{
+                  padding: '7px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: 'none', borderLeft: '1px solid var(--border)', outline: 'none', transition: 'all 0.2s',
+                  background: viewMode === 'month' ? 'var(--accent)' : 'var(--bg-elevated)',
+                  color: viewMode === 'month' ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                Month Attendance
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 20 }}>
             <Card>
               {empLoading ? <Spinner /> : (
-                empRecords.length ? (
-                  <Table columns={detailColumns} data={empRecords} />
+                filteredEmpRecords.length ? (
+                  <Table columns={detailColumns} data={filteredEmpRecords} />
                 ) : (
                   <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                    No attendance records for this month.
+                    {viewMode === 'week' ? 'No attendance records for this week.' : 'No attendance records for this month.'}
                   </div>
                 )
               )}
