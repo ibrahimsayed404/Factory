@@ -252,7 +252,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
   });
 
   const policy = await getPayrollPolicy();
-  const enriched = rows.map((row) => {
+  const enriched = await Promise.all(rows.map(async (row) => {
     const baseSalary = Number(row.base_salary || 0);
     const weekendSet = weekendSetFrom(row.weekend_days);
     const useWeeklySalary = Boolean(row.week_start);
@@ -261,8 +261,33 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
     const lateWeighted = Number(row.late_weighted_minutes || 0);
     const earlyLeaveMinutes = earlyLeaveChargeMinutes(row.early_leave_minutes);
 
-    const absentDays = Number(row.absent_days);
-    const halfDays = Number(row.half_days);
+    const { periodStart, periodEnd } = getPayrollPeriodRange({
+      weekStart: row.week_start,
+      weekEnd: row.week_end,
+      effectiveMonth: row.month,
+      effectiveYear: row.year,
+    });
+
+    let inferredAbsentDays = 0;
+    if (periodStart && periodEnd) {
+      const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
+        row.employee_id, row.week_start, row.week_end, row.month, row.year
+      );
+      const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(row.employee_id, periodStart, periodEnd);
+      const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
+      inferredAbsentDays = calculateInferredAbsentDays(
+        attendanceRecords,
+        weekendSet,
+        periodStart,
+        periodEnd,
+        { hire_date: row.hire_date, termination_date: row.termination_date },
+        approvedLeaveDates
+      );
+    }
+
+    const absentDays = Number(row.absent_days || 0) + inferredAbsentDays;
+    const halfDays = Number(row.half_days || 0);
     // Per-component dollar amounts, so each line in the breakdown/PDF is
     // transparent and independently verifiable (rather than one lumped total).
     const lateDeductionAmount = lateWeighted * minuteRate;
@@ -326,7 +351,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
         weekend_overtime_minutes: weekendOvertimeMinutes,
         absent_days: absentDays,
         half_days: halfDays,
-        inferred_absent_days: Number(row.inferred_absent_days || 0),
+        inferred_absent_days: inferredAbsentDays,
         late_weighted_minutes: round2(lateWeighted),
         // Overtime shown as raw → weighted (raw × multiplier), parallel to late.
         regular_overtime_weighted_minutes: round2(regularOvertimeMinutes * policy.overtimeMultiplier),
@@ -341,7 +366,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
         weekly_payment_estimate: round2(weeklyPaymentEstimate),
       },
     };
-  });
+  }));
 
   return { data: enriched, total, page: pageNum, limit: pageSize };
 };
