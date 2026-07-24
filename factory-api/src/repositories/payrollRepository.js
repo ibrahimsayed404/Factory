@@ -176,13 +176,13 @@ const upsertPayroll = async (data) => {
     if (existing.rows.length > 0) {
       const result = await pool.query(
         `UPDATE payroll SET 
-          week_end = $1, month = $2, year = $3, bonus = $4, deductions = $5, net_salary = $6,
-          loan_deduction = $7, manual_bonus = $8, manual_deductions = $9,
-          auto_bonus = $10, auto_deductions = $11,
-          hr_bonus = $12, hr_penalty = $13, hr_overtime = $14
-         WHERE id = $15 RETURNING *`,
+          week_end = $1, month = $2, year = $3, base_salary = $4, bonus = $5, deductions = $6, net_salary = $7,
+          loan_deduction = $8, manual_bonus = $9, manual_deductions = $10,
+          auto_bonus = $11, auto_deductions = $12,
+          hr_bonus = $13, hr_penalty = $14, hr_overtime = $15
+         WHERE id = $16 RETURNING *`,
         [
-          weekEnd, effectiveMonth, effectiveYear, finalBonus, finalDeductions, net_salary,
+          weekEnd, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
           loan_deduction, manual_bonus, manual_deductions,
           auto_bonus, auto_deductions,
           hr_bonus, hr_penalty, hr_overtime,
@@ -217,13 +217,13 @@ const upsertPayroll = async (data) => {
   if (existing.rows.length > 0) {
     const result = await pool.query(
       `UPDATE payroll SET 
-        bonus=$1, deductions=$2, net_salary=$3,
-        loan_deduction = $4, manual_bonus = $5, manual_deductions = $6,
-        auto_bonus = $7, auto_deductions = $8,
-        hr_bonus = $9, hr_penalty = $10, hr_overtime = $11
-       WHERE id=$12 RETURNING *`,
+        base_salary=$1, bonus=$2, deductions=$3, net_salary=$4,
+        loan_deduction = $5, manual_bonus = $6, manual_deductions = $7,
+        auto_bonus = $8, auto_deductions = $9,
+        hr_bonus = $10, hr_penalty = $11, hr_overtime = $12
+       WHERE id=$13 RETURNING *`,
       [
-        finalBonus, finalDeductions, net_salary,
+        base_salary, finalBonus, finalDeductions, net_salary,
         loan_deduction, manual_bonus, manual_deductions,
         auto_bonus, auto_deductions,
         hr_bonus, hr_penalty, hr_overtime,
