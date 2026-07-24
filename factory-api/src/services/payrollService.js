@@ -286,7 +286,12 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
 
   const policy = await getPayrollPolicy();
   const enriched = await Promise.all(rows.map(async (row) => {
-    const baseSalary = Number(row.base_salary || 0);
+    const isPaid = row.status === 'paid';
+    // For pending records, prefer the live employee salary so that a salary
+    // update is reflected immediately without requiring a full regeneration.
+    // For paid records, the stored base_salary is authoritative (frozen at payment).
+    const liveSalary = Number(row.employee_salary || row.base_salary || 0);
+    const baseSalary = isPaid ? Number(row.base_salary || 0) : liveSalary;
     const weekendSet = weekendSetFrom(row.weekend_days);
     const useWeeklySalary = Boolean(row.week_start);
     const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, row);
@@ -351,7 +356,6 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
     // For PAID records the frozen stored figures are authoritative (they were
     // journaled to accounting). Show those, but flag any drift vs. a fresh
     // recompute so the admin can spot attendance edited after payment.
-    const isPaid = row.status === 'paid';
     const storedNet = round2(Number(row.net_salary || 0));
     const hasRecalcDrift = isPaid && Math.abs(recomputedNet - storedNet) >= 0.01;
     const displayBonus = isPaid ? round2(Number(row.bonus || 0)) : recomputedBonus;
@@ -363,6 +367,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
 
     return {
       ...row,
+      base_salary: baseSalary,
       bonus: displayBonus,
       deductions: displayDeductions,
       net_salary: displayNet,
