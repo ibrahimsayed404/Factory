@@ -94,15 +94,15 @@ const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dat
 
 const getEmployeeForPayroll = async (employeeId, supportsWeekendDays) => {
   const emp = supportsWeekendDays
-    ? await pool.query('SELECT id, salary, weekend_days, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId])
-    : await pool.query('SELECT id, salary, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId]);
+    ? await pool.query('SELECT id, salary, weekend_days, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId])
+    : await pool.query('SELECT id, salary, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId]);
   return emp.rows[0] || null;
 };
 
 const getActiveEmployeesForPayroll = async (supportsWeekendDays) => {
   const query = supportsWeekendDays
-    ? 'SELECT id, salary, weekend_days, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id'
-    : 'SELECT id, salary, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id';
+    ? 'SELECT id, salary, weekend_days, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id'
+    : 'SELECT id, salary, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id';
   const result = await pool.query(query);
   return result.rows;
 };

@@ -414,7 +414,6 @@ const calculatePayrollForEmployee = async (employee, options) => {
   const fullBaseSalary = Number(employee.salary || 0);
   const weekendSet = weekendSetFrom(employee.weekend_days);
   const useWeeklySalary = Boolean(weekStart);
-  const { dailyRate, minuteRate } = getRates(fullBaseSalary, weekendSet, policy, useWeeklySalary, employee);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
     employee.id, weekStart, weekEnd, effectiveMonth, effectiveYear
@@ -429,6 +428,10 @@ const calculatePayrollForEmployee = async (employee, options) => {
   const base_salary = (useWeeklySalary && total > 0 && employed < total)
     ? round2(fullBaseSalary * (employed / total))
     : fullBaseSalary;
+
+  // Compute rates from the prorated base_salary so that deductions and the
+  // salary they are subtracted from are on the same basis.
+  const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary, employee);
 
   const totals = attendanceRecords.reduce((acc, row) => ({
     late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
@@ -631,11 +634,103 @@ const generatePayroll = async (data) => {
 };
 
 const markPaid = async (id) => {
+  const record = await payrollRepository.getPayrollById(id);
+  if (!record) throw new ApiError(404, 'Record not found');
+  if (record.status === 'paid') throw new ApiError(400, 'Record is already paid');
+
+  // Recalculate net_salary from live attendance to detect stale amounts.
+  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
+  const employee = await payrollRepository.getEmployeeForPayroll(record.employee_id, supportsWeekendDays);
+  if (!employee) throw new ApiError(404, 'Employee not found');
+
+  const policy = await getPayrollPolicy();
+  const weekendSet = weekendSetFrom(employee.weekend_days);
+  const useWeeklySalary = Boolean(record.week_start);
+  const baseSalary = Number(record.base_salary || 0);
+  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, employee);
+
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: record.week_start,
+    weekEnd: record.week_end,
+    effectiveMonth: record.month,
+    effectiveYear: record.year,
+  });
+
+  const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
+    record.employee_id,
+    record.week_start ? periodStart : null,
+    record.week_start ? periodEnd : null,
+    record.month,
+    record.year
+  );
+
+  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(record.employee_id, periodStart, periodEnd);
+  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
+  const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
+  const earlyLeaveMinutes = earlyLeaveChargeMinutes(
+    attendanceRecords.reduce((sum, r) => sum + Number(r.early_leave_minutes || 0), 0)
+  );
+
+  const absentDaysExplicit = attendanceRecords.reduce(
+    (sum, r) => sum + Number(r.absent_days || 0), 0
+  );
+  const halfDays = attendanceRecords.reduce(
+    (sum, r) => sum + Number(r.half_days || 0), 0
+  );
+
+  const inferredAbsentDays = periodStart && periodEnd
+    ? calculateInferredAbsentDays(
+        attendanceRecords, weekendSet, periodStart, periodEnd,
+        { hire_date: employee.hire_date, termination_date: employee.termination_date },
+        approvedLeaveDates
+      )
+    : 0;
+
+  const absentDays = absentDaysExplicit + inferredAbsentDays;
+  const totalOvertimeMinutes = attendanceRecords.reduce(
+    (sum, r) => sum + Number(r.overtime_minutes || 0), 0
+  );
+  const weekendOvertimeMinutes = attendanceRecords.reduce(
+    (sum, r) => sum + (isWeekendAttendanceDate(r.date, weekendSet) ? Number(r.overtime_minutes || 0) : 0), 0
+  );
+  const regularOvertimeMinutes = Math.max(0, totalOvertimeMinutes - weekendOvertimeMinutes);
+
+  const autoDeductions = round2(
+    (lateWeighted + earlyLeaveMinutes) * minuteRate +
+    absentDays * dailyRate +
+    halfDays * (dailyRate / 2)
+  );
+  const autoBonus = round2(
+    regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier +
+    weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier
+  );
+
+  const hrBonus = Number(record.hr_bonus || 0);
+  const hrPenalty = Number(record.hr_penalty || 0);
+  const hrOvertime = Number(record.hr_overtime || 0);
+  const loanDeduction = Number(record.loan_deduction || 0);
+  const manualBonus = Number(record.manual_bonus || 0);
+  const manualDeductions = Number(record.manual_deductions || 0);
+
+  const recomputedBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
+  const recomputedDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
+  const recomputedNet = round2(baseSalary + recomputedBonus - recomputedDeductions);
+  const storedNet = round2(Number(record.net_salary || 0));
+
+  if (Math.abs(recomputedNet - storedNet) >= 0.01) {
+    throw new ApiError(
+      409,
+      `Payroll amount has changed since generation — please regenerate payroll before marking as paid (stored: ${storedNet}, recalculated: ${recomputedNet})`
+    );
+  }
+
   const result = await payrollRepository.updatePayrollPaid(id);
   if (!result) throw new ApiError(404, 'Record not found');
   await accountingService.postPayrollPayment(result);
   return result;
 };
+
 
 const updateManualAdjustments = async (id, data = {}) => {
   const record = await payrollRepository.getPayrollById(id);
@@ -668,7 +763,9 @@ const updateManualAdjustments = async (id, data = {}) => {
   });
   const weekStart = record.week_start ? periodStart : null;
   const weekEnd = record.week_start ? periodEnd : null;
-  const { dailyRate, minuteRate } = getRates(Number(employee.salary || record.base_salary || 0), weekendSet, policy, useWeeklySalary);
+  // Use the stored prorated base_salary (not the live employee.salary) so
+  // deduction rates match the base they are subtracted from.
+  const { dailyRate, minuteRate } = getRates(Number(record.base_salary || 0), weekendSet, policy, useWeeklySalary, employee);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
     record.employee_id,
