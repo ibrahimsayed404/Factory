@@ -434,7 +434,8 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
   });
 
   const policy = await getPayrollPolicy();
-  const enriched = await Promise.all(rows.map(async (row) => {
+  const enriched = [];
+  for (const row of rows) {
     const isPaid = row.status === 'paid';
     const computed = await computeLivePayrollFigures(row, null, policy);
 
@@ -450,7 +451,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
       ? displayNet
       : (displayNet / Math.max(1, policy.weeksPerMonth));
 
-    return {
+    enriched.push({
       ...row,
       base_salary: computed.baseSalary,
       bonus: displayBonus,
@@ -462,8 +463,8 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
         ...computed.breakdown,
         weekly_payment_estimate: round2(weeklyPaymentEstimate),
       },
-    };
-  }));
+    });
+  }
 
   return { data: enriched, total, page: pageNum, limit: pageSize };
 };
