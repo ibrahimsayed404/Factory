@@ -262,6 +262,155 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => 
   return { dailyRate, minuteRate, shiftHours };
 };
 
+/**
+ * SINGLE SOURCE OF TRUTH FOR PAYROLL CALCULATIONS
+ * 
+ * Computes live payroll figures and breakdown for a given payroll row,
+ * employee, and policy settings. Must not be duplicated elsewhere.
+ */
+const computeLivePayrollFigures = async (row, employee, policy) => {
+  const isPaid = row.status === 'paid';
+  // For pending records, prefer the live employee salary so that a salary
+  // update is reflected immediately without requiring a full regeneration.
+  // For paid records, the stored base_salary is authoritative (frozen at payment).
+  const liveSalary = Number(employee?.salary ?? row.employee_salary ?? row.base_salary ?? 0);
+  const baseSalary = isPaid ? Number(row.base_salary || 0) : liveSalary;
+
+  const weekendSet = weekendSetFrom(employee?.weekend_days ?? row.weekend_days);
+  const useWeeklySalary = Boolean(row.week_start);
+  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, employee || row);
+
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: row.week_start,
+    weekEnd: row.week_end,
+    effectiveMonth: row.month,
+    effectiveYear: row.year,
+  });
+
+  let attendanceRecords = [];
+  let approvedLeaveDates = new Set();
+
+  if (periodStart && periodEnd) {
+    attendanceRecords = await payrollRepository.getAttendanceForPayroll(
+      row.employee_id,
+      row.week_start ? periodStart : null,
+      row.week_start ? periodEnd : null,
+      row.month,
+      row.year
+    );
+    const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(row.employee_id, periodStart, periodEnd);
+    approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+  }
+
+  const lateWeighted = row.late_weighted_minutes !== undefined
+    ? Number(row.late_weighted_minutes || 0)
+    : sumWeightedLateMinutes(attendanceRecords);
+
+  const earlyLeaveMinutes = row.early_leave_minutes !== undefined
+    ? earlyLeaveChargeMinutes(row.early_leave_minutes)
+    : earlyLeaveChargeMinutes(attendanceRecords.reduce((sum, r) => sum + Number(r.early_leave_minutes || 0), 0));
+
+  const absentDaysExplicit = row.absent_days !== undefined
+    ? Number(row.absent_days || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.absent_days || 0), 0);
+
+  const halfDays = row.half_days !== undefined
+    ? Number(row.half_days || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.half_days || 0), 0);
+
+  const inferredAbsentDays = (periodStart && periodEnd)
+    ? calculateInferredAbsentDays(
+        attendanceRecords,
+        weekendSet,
+        periodStart,
+        periodEnd,
+        { hire_date: employee?.hire_date ?? row.hire_date, termination_date: employee?.termination_date ?? row.termination_date },
+        approvedLeaveDates
+      )
+    : 0;
+
+  const absentDays = absentDaysExplicit + inferredAbsentDays;
+
+  const lateDeductionAmount = lateWeighted * minuteRate;
+  const earlyLeaveDeductionAmount = earlyLeaveMinutes * minuteRate;
+  const absentDeductionAmount = absentDays * dailyRate;
+  const halfDayDeductionAmount = halfDays * (dailyRate / 2);
+  const autoDeductions = lateDeductionAmount + earlyLeaveDeductionAmount + absentDeductionAmount + halfDayDeductionAmount;
+
+  const totalOvertimeMinutes = row.overtime_minutes !== undefined
+    ? Number(row.overtime_minutes || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.overtime_minutes || 0), 0);
+
+  const weekendOvertimeMinutes = row.weekend_overtime_minutes !== undefined
+    ? Number(row.weekend_overtime_minutes || 0)
+    : attendanceRecords.reduce((sum, r) => sum + (isWeekendAttendanceDate(r.date, weekendSet) ? Number(r.overtime_minutes || 0) : 0), 0);
+
+  const regularOvertimeMinutes = Math.max(0, totalOvertimeMinutes - weekendOvertimeMinutes);
+  const regularOvertimeAmount = regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
+  const weekendOvertimeAmount = weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier;
+  const autoBonus = regularOvertimeAmount + weekendOvertimeAmount;
+
+  const hrBonus = Number(row.hr_bonus || 0);
+  const hrPenalty = Number(row.hr_penalty || 0);
+  const hrOvertime = Number(row.hr_overtime || 0);
+  const loanDeduction = Number(row.loan_deduction || 0);
+  const computedAutoBonus = round2(autoBonus);
+  const computedAutoDeductions = round2(autoDeductions);
+  const storedManualBonus = Number(row.manual_bonus || 0);
+  const storedManualDeductions = Number(row.manual_deductions || 0);
+
+  const recomputedBonus = round2(computedAutoBonus + storedManualBonus + hrBonus + hrOvertime);
+  const recomputedDeductions = round2(computedAutoDeductions + storedManualDeductions + hrPenalty + loanDeduction);
+  const recomputedNet = round2(baseSalary + recomputedBonus - recomputedDeductions);
+
+  const weeklyPaymentEstimate = row.week_start
+    ? recomputedNet
+    : (recomputedNet / Math.max(1, policy.weeksPerMonth));
+
+  const rawLateMinutes = row.late_minutes !== undefined
+    ? Number(row.late_minutes || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.late_minutes || 0), 0);
+
+  const breakdown = {
+    manual_bonus: round2(storedManualBonus),
+    manual_deductions: round2(storedManualDeductions),
+    auto_bonus: computedAutoBonus,
+    auto_deductions: computedAutoDeductions,
+    hr_bonus: hrBonus,
+    hr_penalty: hrPenalty,
+    hr_overtime_bonus: hrOvertime,
+    loan_deduction: loanDeduction,
+    late_minutes: rawLateMinutes,
+    early_leave_minutes: earlyLeaveMinutes,
+    overtime_minutes: totalOvertimeMinutes,
+    regular_overtime_minutes: regularOvertimeMinutes,
+    weekend_overtime_minutes: weekendOvertimeMinutes,
+    absent_days: absentDays,
+    half_days: halfDays,
+    inferred_absent_days: inferredAbsentDays,
+    late_weighted_minutes: round2(lateWeighted),
+    regular_overtime_weighted_minutes: round2(regularOvertimeMinutes * policy.overtimeMultiplier),
+    weekend_overtime_weighted_minutes: round2(weekendOvertimeMinutes * policy.vacationOvertimeMultiplier),
+    late_deduction: round2(lateDeductionAmount),
+    early_leave_deduction: round2(earlyLeaveDeductionAmount),
+    absent_deduction: round2(absentDeductionAmount),
+    half_day_deduction: round2(halfDayDeductionAmount),
+    regular_overtime_bonus: round2(regularOvertimeAmount),
+    weekend_overtime_bonus: round2(weekendOvertimeAmount),
+    weekly_payment_estimate: round2(weeklyPaymentEstimate),
+  };
+
+  return {
+    baseSalary,
+    autoBonus: computedAutoBonus,
+    autoDeductions: computedAutoDeductions,
+    recomputedBonus,
+    recomputedDeductions,
+    recomputedNet,
+    breakdown,
+  };
+};
+
 const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateTo, page, limit }) => {
   const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
   if (weekStartInput && !normalizedWeekStartDate) {
@@ -287,350 +436,36 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
   const policy = await getPayrollPolicy();
   const enriched = await Promise.all(rows.map(async (row) => {
     const isPaid = row.status === 'paid';
-    // For pending records, prefer the live employee salary so that a salary
-    // update is reflected immediately without requiring a full regeneration.
-    // For paid records, the stored base_salary is authoritative (frozen at payment).
-    const liveSalary = Number(row.employee_salary || row.base_salary || 0);
-    const baseSalary = isPaid ? Number(row.base_salary || 0) : liveSalary;
-    const weekendSet = weekendSetFrom(row.weekend_days);
-    const useWeeklySalary = Boolean(row.week_start);
-    const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, row);
-    // Prefer DB per-day weighted sum when present; never re-weight the weekly total.
-    const lateWeighted = Number(row.late_weighted_minutes || 0);
-    const earlyLeaveMinutes = earlyLeaveChargeMinutes(row.early_leave_minutes);
-
-    const { periodStart, periodEnd } = getPayrollPeriodRange({
-      weekStart: row.week_start,
-      weekEnd: row.week_end,
-      effectiveMonth: row.month,
-      effectiveYear: row.year,
-    });
-
-    let inferredAbsentDays = 0;
-    if (periodStart && periodEnd) {
-      const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
-        row.employee_id, row.week_start, row.week_end, row.month, row.year
-      );
-      const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(row.employee_id, periodStart, periodEnd);
-      const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
-
-      inferredAbsentDays = calculateInferredAbsentDays(
-        attendanceRecords,
-        weekendSet,
-        periodStart,
-        periodEnd,
-        { hire_date: row.hire_date, termination_date: row.termination_date },
-        approvedLeaveDates
-      );
-    }
-
-    const absentDays = Number(row.absent_days || 0) + inferredAbsentDays;
-    const halfDays = Number(row.half_days || 0);
-    // Per-component dollar amounts, so each line in the breakdown/PDF is
-    // transparent and independently verifiable (rather than one lumped total).
-    const lateDeductionAmount = lateWeighted * minuteRate;
-    const earlyLeaveDeductionAmount = earlyLeaveMinutes * minuteRate;
-    const absentDeductionAmount = absentDays * dailyRate;
-    const halfDayDeductionAmount = halfDays * (dailyRate / 2);
-    const autoDeductions = lateDeductionAmount + earlyLeaveDeductionAmount + absentDeductionAmount + halfDayDeductionAmount;
-    const weekendOvertimeMinutes = Number(row.weekend_overtime_minutes || 0);
-    const regularOvertimeMinutes = Math.max(0, Number(row.overtime_minutes || 0) - weekendOvertimeMinutes);
-    const regularOvertimeAmount = regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
-    const weekendOvertimeAmount = weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier;
-    const autoBonus = regularOvertimeAmount + weekendOvertimeAmount;
-
-    const hrBonus = Number(row.hr_bonus || 0);
-    const hrPenalty = Number(row.hr_penalty || 0);
-    const hrOvertime = Number(row.hr_overtime || 0);
-    const loanDeduction = Number(row.loan_deduction || 0);
-    const computedAutoBonus = round2(autoBonus);
-    const computedAutoDeductions = round2(autoDeductions);
-    const storedManualBonus = Number(row.manual_bonus || 0);
-    const storedManualDeductions = Number(row.manual_deductions || 0);
-    // Always recompute auto_* from attendance so late-day weighting stays correct even
-    // when older payroll rows were saved with weekly-total weighting.
-    const recomputedBonus = round2(computedAutoBonus + storedManualBonus + hrBonus + hrOvertime);
-    const recomputedDeductions = round2(computedAutoDeductions + storedManualDeductions + hrPenalty + loanDeduction);
-    const recomputedNet = round2(baseSalary + recomputedBonus - recomputedDeductions);
+    const computed = await computeLivePayrollFigures(row, null, policy);
 
     // For PAID records the frozen stored figures are authoritative (they were
     // journaled to accounting). Show those, but flag any drift vs. a fresh
     // recompute so the admin can spot attendance edited after payment.
     const storedNet = round2(Number(row.net_salary || 0));
-    const hasRecalcDrift = isPaid && Math.abs(recomputedNet - storedNet) >= 0.01;
-    const displayBonus = isPaid ? round2(Number(row.bonus || 0)) : recomputedBonus;
-    const displayDeductions = isPaid ? round2(Number(row.deductions || 0)) : recomputedDeductions;
-    const displayNet = isPaid ? storedNet : recomputedNet;
+    const hasRecalcDrift = isPaid && Math.abs(computed.recomputedNet - storedNet) >= 0.01;
+    const displayBonus = isPaid ? round2(Number(row.bonus || 0)) : computed.recomputedBonus;
+    const displayDeductions = isPaid ? round2(Number(row.deductions || 0)) : computed.recomputedDeductions;
+    const displayNet = isPaid ? storedNet : computed.recomputedNet;
     const weeklyPaymentEstimate = row.week_start
       ? displayNet
       : (displayNet / Math.max(1, policy.weeksPerMonth));
 
     return {
       ...row,
-      base_salary: baseSalary,
+      base_salary: computed.baseSalary,
       bonus: displayBonus,
       deductions: displayDeductions,
       net_salary: displayNet,
-      recomputed_net_salary: recomputedNet,
+      recomputed_net_salary: computed.recomputedNet,
       has_recalc_drift: hasRecalcDrift,
       payroll_breakdown: {
-        manual_bonus: round2(storedManualBonus),
-        manual_deductions: round2(storedManualDeductions),
-        auto_bonus: computedAutoBonus,
-        auto_deductions: computedAutoDeductions,
-        hr_bonus: hrBonus,
-        hr_penalty: hrPenalty,
-        hr_overtime_bonus: hrOvertime,
-        loan_deduction: loanDeduction,
-        late_minutes: Number(row.late_minutes),
-        early_leave_minutes: earlyLeaveMinutes,
-        overtime_minutes: Number(row.overtime_minutes),
-        regular_overtime_minutes: regularOvertimeMinutes,
-        weekend_overtime_minutes: weekendOvertimeMinutes,
-        absent_days: absentDays,
-        half_days: halfDays,
-        inferred_absent_days: inferredAbsentDays,
-        late_weighted_minutes: round2(lateWeighted),
-        // Overtime shown as raw → weighted (raw × multiplier), parallel to late.
-        regular_overtime_weighted_minutes: round2(regularOvertimeMinutes * policy.overtimeMultiplier),
-        weekend_overtime_weighted_minutes: round2(weekendOvertimeMinutes * policy.vacationOvertimeMultiplier),
-        // Per-component dollar amounts (for a transparent, verifiable breakdown).
-        late_deduction: round2(lateDeductionAmount),
-        early_leave_deduction: round2(earlyLeaveDeductionAmount),
-        absent_deduction: round2(absentDeductionAmount),
-        half_day_deduction: round2(halfDayDeductionAmount),
-        regular_overtime_bonus: round2(regularOvertimeAmount),
-        weekend_overtime_bonus: round2(weekendOvertimeAmount),
+        ...computed.breakdown,
         weekly_payment_estimate: round2(weeklyPaymentEstimate),
       },
     };
   }));
 
   return { data: enriched, total, page: pageNum, limit: pageSize };
-};
-
-const calculatePayrollForEmployee = async (employee, options) => {
-  const { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy } = options;
-  const fullBaseSalary = Number(employee.salary || 0);
-  const weekendSet = weekendSetFrom(employee.weekend_days);
-  const useWeeklySalary = Boolean(weekStart);
-
-  const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
-    employee.id, weekStart, weekEnd, effectiveMonth, effectiveYear
-  );
-
-  const { periodStart, periodEnd } = getPayrollPeriodRange({ weekStart, weekEnd, effectiveMonth, effectiveYear });
-  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(employee.id, periodStart, periodEnd);
-  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
-
-  // Prorate base salary for partial employment (hire/termination mid-period).
-  const { employed, total } = countEmployedWorkDays(periodStart, periodEnd, weekendSet, employee);
-  const base_salary = (useWeeklySalary && total > 0 && employed < total)
-    ? round2(fullBaseSalary * (employed / total))
-    : fullBaseSalary;
-
-  // Compute rates from the prorated base_salary so that deductions and the
-  // salary they are subtracted from are on the same basis.
-  const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary, employee);
-
-  const totals = attendanceRecords.reduce((acc, row) => ({
-    late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
-    early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
-    overtime_minutes: acc.overtime_minutes + Number(row.overtime_minutes || 0),
-    weekend_overtime_minutes: acc.weekend_overtime_minutes + (isWeekendAttendanceDate(row.date, weekendSet) ? Number(row.overtime_minutes || 0) : 0),
-    absent_days: acc.absent_days + Number(row.absent_days || 0),
-    half_days: acc.half_days + Number(row.half_days || 0),
-  }), {
-    late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0,
-    weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
-  });
-
-  const inferredAbsentDays = calculateInferredAbsentDays(
-    attendanceRecords,
-    weekendSet,
-    periodStart,
-    periodEnd,
-    employee,
-    approvedLeaveDates
-  );
-
-  const overtimeMinutes = totals.overtime_minutes;
-  const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
-  const regularOvertimeMinutes = Math.max(0, overtimeMinutes - weekendOvertimeMinutes);
-  const absentDays = totals.absent_days + inferredAbsentDays;
-  const halfDays = totals.half_days;
-  const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
-  const earlyLeaveMinutes = earlyLeaveChargeMinutes(totals.early_leave_minutes);
-
-  const autoDeductions =
-    ((lateWeighted + earlyLeaveMinutes) * minuteRate) +
-    (absentDays * dailyRate) +
-    (halfDays * (dailyRate / 2));
-  const autoBonus =
-    (regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier) +
-    (weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier);
-
-  let hrBonus = 0;
-  let hrPenalty = 0;
-  let hrOvertime = 0;
-  let loanDeduction = 0;
-  // Loan payments that still need to be applied to hr_loans for this payroll
-  // record (i.e. not yet recorded in the payroll_loan_deductions ledger).
-  let loanPaymentsToApply = [];
-
-  if (useWeeklySalary) {
-    const hrData = await payrollRepository.getHrDataForWeeklyPayroll(employee.id, weekStart, weekEnd);
-    const activeLoans = hrData.loans;
-    // Prorate the monthly installment across the weeks in a month so a full
-    // installment is not deducted every single week.
-    const weeksPerMonth = Math.max(1, Number(policy.weeksPerMonth || 4));
-
-    // Reconcile against what has already been deducted for this exact payroll
-    // record so regeneration never double-charges a loan.
-    const existingPayrollId = await payrollRepository.getPayrollIdByWeek(employee.id, weekStart);
-    const existingLedger = existingPayrollId
-      ? await payrollRepository.getLoanDeductionsForPayroll(existingPayrollId)
-      : [];
-    const ledgerByLoan = new Map(existingLedger.map((r) => [Number(r.loan_id), Number(r.amount)]));
-
-    const activeLoanIds = new Set();
-    for (const loan of activeLoans) {
-      activeLoanIds.add(loan.id);
-      if (ledgerByLoan.has(loan.id)) {
-        // Already deducted for this record — keep the same amount, do not re-apply.
-        loanDeduction += ledgerByLoan.get(loan.id);
-      } else {
-        const installment = round2(Number(loan.monthly_installment || 0));
-        const amount = round2(Math.min(installment, Number(loan.remaining_amount || 0)));
-        if (amount > 0) {
-          loanDeduction += amount;
-          loanPaymentsToApply.push({ id: loan.id, amount });
-        }
-      }
-    }
-    // Ledger entries for loans already closed by this record's earlier run still
-    // count toward this record's loan_deduction.
-    for (const [loanId, amount] of ledgerByLoan) {
-      if (!activeLoanIds.has(loanId)) loanDeduction += amount;
-    }
-    loanDeduction = round2(loanDeduction);
-
-    hrData.transactions.forEach((t) => {
-      if (t.transaction_type === 'bonus') hrBonus += Number(t.total_amount);
-      if (t.transaction_type === 'penalty') hrPenalty += Number(t.total_amount);
-      if (t.transaction_type === 'overtime') hrOvertime += Number(t.total_amount);
-    });
-  }
-
-  const finalBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
-  const finalDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
-  const net_salary = round2(base_salary + finalBonus - finalDeductions);
-
-  const savedRecord = await payrollRepository.upsertPayroll({
-    employee_id: employee.id,
-    effectiveMonth,
-    effectiveYear,
-    weekStart,
-    weekEnd,
-    base_salary,
-    finalBonus,
-    finalDeductions,
-    net_salary,
-    loan_deduction: loanDeduction,
-    manual_bonus: manualBonus,
-    manual_deductions: manualDeductions,
-    auto_bonus: autoBonus,
-    auto_deductions: autoDeductions,
-    hr_bonus: hrBonus,
-    hr_penalty: hrPenalty,
-    hr_overtime: hrOvertime,
-  });
-
-  // Apply loan payments idempotently: the ledger uniqueness constraint on
-  // (payroll_id, loan_id) guarantees a loan is only ever debited once per record.
-  if (useWeeklySalary && loanPaymentsToApply.length) {
-    await payrollRepository.applyLoanDeductions(savedRecord.id, loanPaymentsToApply);
-  }
-
-  // Post/reconcile the accounting accrual (adjusts the ledger if net_salary changed
-  // on regeneration instead of silently keeping the stale amount).
-  await accountingService.reconcilePayrollAccrual(savedRecord);
-
-  return {
-    ...savedRecord,
-    base_salary: Number(savedRecord.base_salary || 0),
-    bonus: Number(savedRecord.bonus || 0),
-    deductions: Number(savedRecord.deductions || 0),
-    net_salary: Number(savedRecord.net_salary || 0),
-    payroll_breakdown: {
-      manual_bonus: round2(manualBonus),
-      manual_deductions: round2(manualDeductions),
-      hr_bonus: round2(hrBonus),
-      hr_penalty: round2(hrPenalty),
-      hr_overtime_bonus: round2(hrOvertime),
-      loan_deduction: round2(loanDeduction),
-      auto_bonus: round2(autoBonus),
-      auto_deductions: round2(autoDeductions),
-      late_minutes: Number(totals.late_minutes),
-      late_weighted_minutes: round2(lateWeighted),
-      early_leave_minutes: earlyLeaveMinutes,
-      overtime_minutes: Number(totals.overtime_minutes),
-      regular_overtime_minutes: regularOvertimeMinutes,
-      weekend_overtime_minutes: weekendOvertimeMinutes,
-      absent_days: absentDays,
-      inferred_absent_days: inferredAbsentDays,
-      half_days: halfDays,
-      weekly_payment_estimate: round2(useWeeklySalary ? net_salary : (net_salary / Math.max(1, policy.weeksPerMonth))),
-    },
-  };
-};
-
-const generatePayroll = async (data) => {
-  const { employee_id, week_start: weekStartInput, bonus = 0, deductions = 0 } = data;
-  // Manual bonus/deductions are clamped non-negative (a negative here would
-  // silently invert into the opposite adjustment).
-  const manualBonus = Math.max(0, Number(bonus || 0));
-  const manualDeductions = Math.max(0, Number(deductions || 0));
-
-  const weekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
-  if (weekStartInput && !weekStartDate) {
-    throw new ApiError(400, 'Invalid week_start date format');
-  }
-
-  const effectiveWeekStartDate = weekStartDate ? toSaturdayUtc(weekStartDate) : currentWeekSaturdayUtc();
-  const weekStart = toIsoDate(effectiveWeekStartDate);
-  const weekEndDate = new Date(effectiveWeekStartDate);
-  weekEndDate.setUTCDate(weekEndDate.getUTCDate() + WEEK_LENGTH_DAYS);
-  const weekEnd = toIsoDate(weekEndDate);
-  const effectiveMonth = effectiveWeekStartDate.getUTCMonth() + 1;
-  const effectiveYear = effectiveWeekStartDate.getUTCFullYear();
-
-  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
-  const policy = await getPayrollPolicy();
-
-  const commonOptions = { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy };
-
-  if (employee_id) {
-    const employee = await payrollRepository.getEmployeeForPayroll(employee_id, supportsWeekendDays);
-    if (!employee) throw new ApiError(404, 'Employee not found');
-    return calculatePayrollForEmployee(employee, commonOptions);
-  }
-
-  // Bulk generation for all active employees: never fail the whole batch because
-  // one employee errored — collect per-employee outcomes so the caller can see
-  // exactly which succeeded and which failed.
-  const employees = await payrollRepository.getActiveEmployeesForPayroll(supportsWeekendDays);
-  const generated = [];
-  const failed = [];
-  for (const employee of employees) {
-    if (!employee) continue;
-    try {
-      generated.push(await calculatePayrollForEmployee(employee, commonOptions));
-    } catch (err) {
-      failed.push({ employee_id: employee.id, error: err?.message || 'Unknown error' });
-    }
-  }
-  return { generated, failed, week_start: weekStart };
 };
 
 const markPaid = async (id) => {
@@ -644,84 +479,13 @@ const markPaid = async (id) => {
   if (!employee) throw new ApiError(404, 'Employee not found');
 
   const policy = await getPayrollPolicy();
-  const weekendSet = weekendSetFrom(employee.weekend_days);
-  const useWeeklySalary = Boolean(record.week_start);
-  const baseSalary = Number(record.base_salary || 0);
-  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, employee);
-
-  const { periodStart, periodEnd } = getPayrollPeriodRange({
-    weekStart: record.week_start,
-    weekEnd: record.week_end,
-    effectiveMonth: record.month,
-    effectiveYear: record.year,
-  });
-
-  const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
-    record.employee_id,
-    record.week_start ? periodStart : null,
-    record.week_start ? periodEnd : null,
-    record.month,
-    record.year
-  );
-
-  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(record.employee_id, periodStart, periodEnd);
-  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
-
-  const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
-  const earlyLeaveMinutes = earlyLeaveChargeMinutes(
-    attendanceRecords.reduce((sum, r) => sum + Number(r.early_leave_minutes || 0), 0)
-  );
-
-  const absentDaysExplicit = attendanceRecords.reduce(
-    (sum, r) => sum + Number(r.absent_days || 0), 0
-  );
-  const halfDays = attendanceRecords.reduce(
-    (sum, r) => sum + Number(r.half_days || 0), 0
-  );
-
-  const inferredAbsentDays = periodStart && periodEnd
-    ? calculateInferredAbsentDays(
-        attendanceRecords, weekendSet, periodStart, periodEnd,
-        { hire_date: employee.hire_date, termination_date: employee.termination_date },
-        approvedLeaveDates
-      )
-    : 0;
-
-  const absentDays = absentDaysExplicit + inferredAbsentDays;
-  const totalOvertimeMinutes = attendanceRecords.reduce(
-    (sum, r) => sum + Number(r.overtime_minutes || 0), 0
-  );
-  const weekendOvertimeMinutes = attendanceRecords.reduce(
-    (sum, r) => sum + (isWeekendAttendanceDate(r.date, weekendSet) ? Number(r.overtime_minutes || 0) : 0), 0
-  );
-  const regularOvertimeMinutes = Math.max(0, totalOvertimeMinutes - weekendOvertimeMinutes);
-
-  const autoDeductions = round2(
-    (lateWeighted + earlyLeaveMinutes) * minuteRate +
-    absentDays * dailyRate +
-    halfDays * (dailyRate / 2)
-  );
-  const autoBonus = round2(
-    regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier +
-    weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier
-  );
-
-  const hrBonus = Number(record.hr_bonus || 0);
-  const hrPenalty = Number(record.hr_penalty || 0);
-  const hrOvertime = Number(record.hr_overtime || 0);
-  const loanDeduction = Number(record.loan_deduction || 0);
-  const manualBonus = Number(record.manual_bonus || 0);
-  const manualDeductions = Number(record.manual_deductions || 0);
-
-  const recomputedBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
-  const recomputedDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
-  const recomputedNet = round2(baseSalary + recomputedBonus - recomputedDeductions);
+  const computed = await computeLivePayrollFigures(record, employee, policy);
   const storedNet = round2(Number(record.net_salary || 0));
 
-  if (Math.abs(recomputedNet - storedNet) >= 0.01) {
+  if (Math.abs(computed.recomputedNet - storedNet) >= 0.01) {
     throw new ApiError(
       409,
-      `Payroll amount has changed since generation — please regenerate payroll before marking as paid (stored: ${storedNet}, recalculated: ${recomputedNet})`
+      `Payroll amount has changed since generation — please regenerate payroll before marking as paid (stored: ${storedNet}, recalculated: ${computed.recomputedNet})`
     );
   }
 
