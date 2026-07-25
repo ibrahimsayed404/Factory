@@ -1,8 +1,10 @@
 const express = require('express');
 const inventoryController = require('../controllers/inventoryController');
 const { authenticate, authorize } = require('../middleware/auth');
-const validate = require('../middleware/validation');
+const { handleValidation } = require('../middleware/validation');
 const { body, query } = require('express-validator');
+
+const validate = (validations) => [...validations, handleValidation];
 
 const router = express.Router();
 

@@ -111,8 +111,17 @@ const doFetch = async (method, path, body) => {
   const token = localStorage.getItem('token');
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  // Sensitive-action endpoints that require admin password re-confirmation via
+  // header + query param. This must NEVER include auth routes (/auth/login,
+  // /auth/register) — those send password exclusively in the JSON body.
+  const CONFIRM_PASSWORD_PATHS = ['/sales/', '/production-orders/'];
+  const needsConfirmPassword =
+    body && typeof body === 'object' && body.password &&
+    method === 'DELETE' &&
+    CONFIRM_PASSWORD_PATHS.some((p) => path.includes(p));
+
   let finalPath = path;
-  if (body && typeof body === 'object' && body.password) {
+  if (needsConfirmPassword) {
     headers['X-Confirm-Password'] = body.password;
     if (!finalPath.includes('password=')) {
       const sep = finalPath.includes('?') ? '&' : '?';
