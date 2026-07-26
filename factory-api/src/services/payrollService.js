@@ -324,7 +324,14 @@ const computeLivePayrollFigures = async (row, employee, policy) => {
 
   const absentDaysExplicit = row.absent_days !== undefined
     ? Number(row.absent_days || 0)
-    : attendanceRecords.reduce((sum, r) => sum + Number(r.absent_days || 0), 0);
+    : attendanceRecords.reduce((sum, r) => {
+        const dStr = toIsoDateString(r.date);
+        const hIso = toIsoDateString(employee?.hire_date ?? row.hire_date);
+        const tIso = toIsoDateString(employee?.termination_date ?? row.termination_date);
+        if (hIso && dStr < hIso) return sum;
+        if (tIso && dStr > tIso) return sum;
+        return sum + Number(r.absent_days || 0);
+      }, 0);
 
   const halfDays = row.half_days !== undefined
     ? Number(row.half_days || 0)
@@ -341,7 +348,11 @@ const computeLivePayrollFigures = async (row, employee, policy) => {
       )
     : 0;
 
-  const absentDays = absentDaysExplicit + inferredAbsentDays;
+  const { employed: employedDaysLimit } = (periodStart && periodEnd)
+    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, { hire_date: employee?.hire_date ?? row.hire_date, termination_date: employee?.termination_date ?? row.termination_date })
+    : { employed: 6 };
+
+  const absentDays = Math.min(employedDaysLimit, absentDaysExplicit + inferredAbsentDays);
 
   const lateDeductionAmount = lateWeighted * minuteRate;
   const earlyLeaveDeductionAmount = earlyLeaveMinutes * minuteRate;
@@ -505,14 +516,20 @@ const calculatePayrollForEmployee = async (employee, options) => {
   // salary they are subtracted from are on the same basis.
   const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary, employee);
 
-  const totals = attendanceRecords.reduce((acc, row) => ({
-    late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
-    early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
-    overtime_minutes: acc.overtime_minutes + Number(row.overtime_minutes || 0),
-    weekend_overtime_minutes: acc.weekend_overtime_minutes + (isWeekendAttendanceDate(row.date, weekendSet) ? Number(row.overtime_minutes || 0) : 0),
-    absent_days: acc.absent_days + Number(row.absent_days || 0),
-    half_days: acc.half_days + Number(row.half_days || 0),
-  }), {
+  const totals = attendanceRecords.reduce((acc, row) => {
+    const dStr = toIsoDateString(row.date);
+    const hIso = toIsoDateString(employee.hire_date);
+    const tIso = toIsoDateString(employee.termination_date);
+    const isOutside = (hIso && dStr < hIso) || (tIso && dStr > tIso);
+    return {
+      late_minutes: acc.late_minutes + (isOutside ? 0 : Number(row.late_minutes || 0)),
+      early_leave_minutes: acc.early_leave_minutes + (isOutside ? 0 : Number(row.early_leave_minutes || 0)),
+      overtime_minutes: acc.overtime_minutes + (isOutside ? 0 : Number(row.overtime_minutes || 0)),
+      weekend_overtime_minutes: acc.weekend_overtime_minutes + (!isOutside && isWeekendAttendanceDate(row.date, weekendSet) ? Number(row.overtime_minutes || 0) : 0),
+      absent_days: acc.absent_days + (isOutside ? 0 : Number(row.absent_days || 0)),
+      half_days: acc.half_days + (isOutside ? 0 : Number(row.half_days || 0)),
+    };
+  }, {
     late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0,
     weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
   });
@@ -526,10 +543,12 @@ const calculatePayrollForEmployee = async (employee, options) => {
     approvedLeaveDates
   );
 
+  const { employed: employedWorkDays } = countEmployedWorkDays(weekStart, weekEnd, weekendSet, employee);
+
   const overtimeMinutes = totals.overtime_minutes;
   const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
   const regularOvertimeMinutes = Math.max(0, overtimeMinutes - weekendOvertimeMinutes);
-  const absentDays = totals.absent_days + inferredAbsentDays;
+  const absentDays = Math.min(employedWorkDays, totals.absent_days + inferredAbsentDays);
   const halfDays = totals.half_days;
   const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
   const earlyLeaveMinutes = earlyLeaveChargeMinutes(totals.early_leave_minutes);
