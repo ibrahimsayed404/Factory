@@ -1,4 +1,8 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// Parse PostgreSQL DATE columns (OID 1082) as raw 'YYYY-MM-DD' strings,
+// preventing node-postgres from casting them to local Date objects.
+types.setTypeParser(1082, (val) => val);
 
 const sslMode = (process.env.PGSSLMODE || process.env.DB_SSL || '').toLowerCase();
 const useSsl = ['require', 'true', '1'].includes(sslMode) || process.env.NODE_ENV === 'production';

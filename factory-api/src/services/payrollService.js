@@ -67,9 +67,9 @@ const toIsoDateString = (value) => {
   if (!value) return null;
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(value.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value));
@@ -270,15 +270,10 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => 
  */
 const computeLivePayrollFigures = async (row, employee, policy) => {
   const isPaid = row.status === 'paid';
-  // For pending records, prefer the live employee salary so that a salary
-  // update is reflected immediately without requiring a full regeneration.
-  // For paid records, the stored base_salary is authoritative (frozen at payment).
-  const liveSalary = Number(employee?.salary ?? row.employee_salary ?? row.base_salary ?? 0);
-  const baseSalary = isPaid ? Number(row.base_salary || 0) : liveSalary;
+  const fullBaseSalary = Number(employee?.salary ?? row.employee_salary ?? row.base_salary ?? 0);
 
   const weekendSet = weekendSetFrom(employee?.weekend_days ?? row.weekend_days);
   const useWeeklySalary = Boolean(row.week_start);
-  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, employee || row);
 
   const { periodStart, periodEnd } = getPayrollPeriodRange({
     weekStart: row.week_start,
@@ -286,6 +281,23 @@ const computeLivePayrollFigures = async (row, employee, policy) => {
     effectiveMonth: row.month,
     effectiveYear: row.year,
   });
+
+  const empObj = {
+    hire_date: employee?.hire_date ?? row.hire_date,
+    termination_date: employee?.termination_date ?? row.termination_date,
+  };
+
+  let baseSalary = fullBaseSalary;
+  if (!isPaid && useWeeklySalary && periodStart && periodEnd) {
+    const { employed, total } = countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj);
+    if (total > 0 && employed < total) {
+      baseSalary = round2(fullBaseSalary * (employed / total));
+    }
+  } else if (isPaid) {
+    baseSalary = Number(row.base_salary || 0);
+  }
+
+  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, employee || row);
 
   let attendanceRecords = [];
   let approvedLeaveDates = new Set();
@@ -891,4 +903,5 @@ module.exports = {
   buildApprovedLeaveDatesSet,
   getRates,
   resolveShiftHours,
+  computeLivePayrollFigures,
 };
