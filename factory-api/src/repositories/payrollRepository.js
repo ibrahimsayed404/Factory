@@ -22,7 +22,7 @@ const getPayrollRecordsCount = async ({ weekStart, month, year, status, dateFrom
     SELECT COUNT(*)
     FROM payroll p
     JOIN employees e ON p.employee_id = e.id
-    WHERE COALESCE(e.status, 'active') = 'active'
+    WHERE 1=1
   `;
   const countParams = [];
   if (weekStart) { countParams.push(weekStart); countQuery += ` AND p.week_start = $${countParams.length}`; }
@@ -76,7 +76,7 @@ const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dat
           (p.week_start IS NULL AND EXTRACT(MONTH FROM a.date) = p.month AND EXTRACT(YEAR FROM a.date) = p.year)
         )
     ) att ON true
-    WHERE COALESCE(e.status, 'active') = 'active'
+    WHERE 1=1
   `;
   const params = [];
   if (weekStart) { params.push(weekStart); query += ` AND p.week_start = $${params.length}`; }
@@ -433,6 +433,27 @@ const deletePayrollRecord = async (id) => {
   await pool.query('DELETE FROM payroll WHERE id = $1', [id]);
 };
 
+const isDatePayrollPaid = async (date, employeeId = null, dbClient = pool) => {
+  if (!date) return false;
+  let query = `
+    SELECT 1 FROM payroll
+    WHERE status = 'paid'
+      AND (
+        (week_start IS NOT NULL AND $1::date >= week_start AND $1::date <= COALESCE(week_end, (week_start::date + INTERVAL '6 days')::date))
+        OR
+        (week_start IS NULL AND EXTRACT(MONTH FROM $1::date) = month AND EXTRACT(YEAR FROM $1::date) = year)
+      )
+  `;
+  const params = [date];
+  if (employeeId) {
+    params.push(employeeId);
+    query += ` AND employee_id = $${params.length}`;
+  }
+  query += ' LIMIT 1';
+  const result = await dbClient.query(query, params);
+  return Boolean(result.rows.length > 0);
+};
+
 module.exports = {
   hasWeekendDaysColumn,
   getPayrollRecordsCount,
@@ -453,4 +474,5 @@ module.exports = {
   updateManualAdjustments,
   getPayrollRecordsForWeek,
   deletePayrollRecord,
+  isDatePayrollPaid,
 };

@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const employeeRepository = require('../repositories/employeeRepository');
+const payrollRepository = require('../repositories/payrollRepository');
 const ApiError = require('../utils/ApiError');
 const {
   calculateHoursWorked,
@@ -66,6 +67,11 @@ const removeEmployee = async (id) => {
 const logAttendance = async (id, data) => {
   const { date, check_in, check_out, hours_worked, status, notes, late_minutes, early_leave_minutes, overtime_minutes } = data;
   
+  const isPaid = await payrollRepository.isDatePayrollPaid(date, id);
+  if (isPaid) {
+    throw new ApiError(400, 'Cannot modify attendance for a date in an already paid payroll period');
+  }
+
   const employeeRecord = await employeeRepository.getEmployeeShiftDetails(id);
   if (!employeeRecord) throw new ApiError(404, 'Employee not found');
 
