@@ -488,9 +488,6 @@ export default function Payroll() {
   }, [records, filters.employee, filters.status]);
 
   const groupedPayroll = useMemo(() => groupPayrollByWeek(filteredRecords || []), [filteredRecords]);
-  console.log('DEBUG groupedPayroll:', groupedPayroll.map(g => ({ weekStart: g.weekStart, count: g.employeeCount, total: g.totalNet })));
-  console.log('DEBUG filteredRecords count:', filteredRecords?.length);
-  console.log('DEBUG filteredRecords week-2026-07-25 sum:', (filteredRecords || []).filter(r => r.week_start === '2026-07-25').reduce((s, r) => s + Number(r.net_salary || 0), 0));
   const selectedWeek = useMemo(
     () => groupedPayroll.find((group) => group.weekStart === selectedWeekStart) || null,
     [groupedPayroll, selectedWeekStart]

@@ -16,7 +16,7 @@ export const groupPayrollByWeek = (rows = []) => {
       weekLabel: weekStart === 'monthly' ? 'Monthly' : weekStart,
       records,
       employeeCount: records.length,
-      totalNet: records.reduce((sum, row) => sum + Number(row.net_salary || 0), 0),
+      totalNet: Number(records.reduce((sum, row) => sum + Number(row.net_salary || 0), 0).toFixed(2)),
       paidCount: records.filter((row) => row.status === 'paid').length,
     }))
     .sort((a, b) => {
