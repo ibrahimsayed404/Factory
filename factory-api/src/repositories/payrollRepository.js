@@ -70,6 +70,8 @@ const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dat
         SUM(CASE WHEN a.status='half-day' THEN 1 ELSE 0 END)::int AS half_days
       FROM attendance a
       WHERE a.employee_id = p.employee_id
+        AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+        AND (e.termination_date IS NULL OR a.date <= e.termination_date)
         AND (
           (p.week_start IS NOT NULL AND a.date >= p.week_start AND a.date <= COALESCE(p.week_end, (p.week_start::date + INTERVAL '6 days')::date))
           OR
