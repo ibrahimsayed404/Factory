@@ -167,6 +167,54 @@ const getAttendanceForPayroll = async (employeeId, weekStart, weekEnd, effective
   return result.rows;
 };
 
+const getAttendanceBatchForPayroll = async (employeeIds, minDate, maxDate) => {
+  if (!employeeIds || employeeIds.length === 0 || !minDate || !maxDate) return new Map();
+  const result = await pool.query(
+    `SELECT
+       a.employee_id,
+       a.date::text AS date,
+       COALESCE(a.late_minutes, 0)::int AS late_minutes,
+       COALESCE(a.early_leave_minutes, 0)::int AS early_leave_minutes,
+       COALESCE(a.overtime_minutes, 0)::int AS overtime_minutes,
+       CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
+       CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
+     FROM attendance a
+     JOIN employees e ON a.employee_id = e.id
+     WHERE a.employee_id = ANY($1::int[])
+       AND a.date >= $2::date
+       AND a.date <= $3::date
+       AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+       AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+     ORDER BY a.date ASC`,
+    [employeeIds, minDate, maxDate]
+  );
+  const map = new Map();
+  for (const r of result.rows) {
+    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
+    map.get(r.employee_id).push(r);
+  }
+  return map;
+};
+
+const getApprovedLeavesBatchForPayroll = async (employeeIds, minDate, maxDate) => {
+  if (!employeeIds || employeeIds.length === 0 || !minDate || !maxDate) return new Map();
+  const result = await pool.query(
+    `SELECT employee_id, leave_type, start_date::text AS start_date, end_date::text AS end_date
+     FROM hr_leave_requests
+     WHERE employee_id = ANY($1::int[])
+       AND status = 'approved'
+       AND end_date >= $2::date
+       AND start_date <= $3::date`,
+    [employeeIds, minDate, maxDate]
+  );
+  const map = new Map();
+  for (const r of result.rows) {
+    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
+    map.get(r.employee_id).push(r);
+  }
+  return map;
+};
+
 const upsertPayroll = async (data) => {
   const {
     employee_id, effectiveMonth, effectiveYear, weekStart, weekEnd, base_salary,
@@ -412,12 +460,15 @@ const reverseLoanDeductionsAndDeleteRecords = async (payrollIds) => {
 
 const getHrDataForWeeklyPayroll = async (employeeId, weekStart, weekEnd) => {
   const transactions = await pool.query(
-    `SELECT transaction_type, SUM(amount) as total_amount
-     FROM hr_transactions 
-     WHERE employee_id = $1 
-       AND transaction_date >= $2
-       AND transaction_date <= $3
-     GROUP BY transaction_type`,
+    `SELECT t.transaction_type, SUM(t.amount) as total_amount
+     FROM hr_transactions t
+     JOIN employees e ON t.employee_id = e.id
+     WHERE t.employee_id = $1 
+       AND t.transaction_date >= $2
+       AND t.transaction_date <= $3
+       AND (e.hire_date IS NULL OR t.transaction_date >= e.hire_date)
+       AND (e.termination_date IS NULL OR t.transaction_date <= e.termination_date)
+     GROUP BY t.transaction_type`,
     [employeeId, weekStart, weekEnd]
   );
   
@@ -469,7 +520,9 @@ module.exports = {
   getEmployeeForPayroll,
   getActiveEmployeesForPayroll,
   getApprovedLeavesForPayroll,
+  getApprovedLeavesBatchForPayroll,
   getAttendanceForPayroll,
+  getAttendanceBatchForPayroll,
   getActiveLoansForPayroll,
   getPayrollIdByWeek,
   getLoanDeductionsForPayroll,

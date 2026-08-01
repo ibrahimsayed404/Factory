@@ -39,7 +39,7 @@ router.post('/orders/:id/order', authenticate, isManagerOrAdmin, purchasingContr
 // =======================
 // GOODS RECEIPT
 // =======================
-router.post('/orders/:id/receive', authenticate, purchasingController.receiveGoods);
+router.post('/orders/:id/receive', authenticate, isManagerOrAdmin, purchasingController.receiveGoods);
 
 // =======================
 // PAYMENTS

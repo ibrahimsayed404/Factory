@@ -268,7 +268,7 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => 
  * Computes live payroll figures and breakdown for a given payroll row,
  * employee, and policy settings. Must not be duplicated elsewhere.
  */
-const computeLivePayrollFigures = async (row, employee, policy) => {
+const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttendance = null, preFetchedLeaves = null) => {
   const isPaid = row.status === 'paid';
   const fullBaseSalary = Number(employee?.salary ?? row.employee_salary ?? row.base_salary ?? 0);
 
@@ -303,14 +303,25 @@ const computeLivePayrollFigures = async (row, employee, policy) => {
   let approvedLeaveDates = new Set();
 
   if (periodStart && periodEnd) {
-    attendanceRecords = await payrollRepository.getAttendanceForPayroll(
-      row.employee_id,
-      row.week_start ? periodStart : null,
-      row.week_start ? periodEnd : null,
-      row.month,
-      row.year
-    );
-    const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(row.employee_id, periodStart, periodEnd);
+    attendanceRecords = preFetchedAttendance !== null
+      ? preFetchedAttendance.filter((r) => {
+          const dStr = toIsoDateString(r.date);
+          return dStr >= periodStart && dStr <= periodEnd;
+        })
+      : await payrollRepository.getAttendanceForPayroll(
+          row.employee_id,
+          row.week_start ? periodStart : null,
+          row.week_start ? periodEnd : null,
+          row.month,
+          row.year
+        );
+    const leaveRows = preFetchedLeaves !== null
+      ? preFetchedLeaves.filter((r) => {
+          const sStr = toIsoDateString(r.start_date);
+          const eStr = toIsoDateString(r.end_date);
+          return eStr >= periodStart && sStr <= periodEnd;
+        })
+      : await payrollRepository.getApprovedLeavesForPayroll(row.employee_id, periodStart, periodEnd);
     approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
   }
 
@@ -434,7 +445,7 @@ const computeLivePayrollFigures = async (row, employee, policy) => {
   };
 };
 
-const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateTo, page, limit }) => {
+const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateTo, page, limit, useBatching = true }) => {
   const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
   if (weekStartInput && !normalizedWeekStartDate) {
     throw new ApiError(400, 'Invalid week_start date format');
@@ -458,9 +469,36 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
 
   const policy = await getPayrollPolicy();
   const enriched = [];
+
+  // Batch pre-fetch attendance and approved leaves for all employees in this page to prevent N+1 per-row queries
+  const employeeIds = [...new Set(rows.map(r => r.employee_id).filter(Boolean))];
+  const { minDate, maxDate } = rows.reduce((acc, r) => {
+    const { periodStart, periodEnd } = getPayrollPeriodRange({
+      weekStart: r.week_start,
+      weekEnd: r.week_end,
+      effectiveMonth: r.month,
+      effectiveYear: r.year,
+    });
+    if (periodStart && (!acc.minDate || periodStart < acc.minDate)) acc.minDate = periodStart;
+    if (periodEnd && (!acc.maxDate || periodEnd > acc.maxDate)) acc.maxDate = periodEnd;
+    return acc;
+  }, { minDate: null, maxDate: null });
+
+  let attendanceBatchMap = new Map();
+  let leavesBatchMap = new Map();
+
+  if (useBatching && employeeIds.length > 0 && minDate && maxDate) {
+    [attendanceBatchMap, leavesBatchMap] = await Promise.all([
+      payrollRepository.getAttendanceBatchForPayroll(employeeIds, minDate, maxDate),
+      payrollRepository.getApprovedLeavesBatchForPayroll(employeeIds, minDate, maxDate),
+    ]);
+  }
+
   for (const row of rows) {
     const isPaid = row.status === 'paid';
-    const computed = await computeLivePayrollFigures(row, null, policy);
+    const empAtt = useBatching ? (attendanceBatchMap.get(row.employee_id) || []) : null;
+    const empLeaves = useBatching ? (leavesBatchMap.get(row.employee_id) || []) : null;
+    const computed = await computeLivePayrollFigures(row, null, policy, empAtt, empLeaves);
 
     // For PAID records the frozen stored figures are authoritative (they were
     // journaled to accounting). Show those, but flag any drift vs. a fresh
