@@ -127,17 +127,20 @@ const getAttendanceForPayroll = async (employeeId, weekStart, weekEnd, effective
   if (weekStart) {
     const result = await pool.query(
       `SELECT
-         date::text AS date,
-         COALESCE(late_minutes, 0)::int AS late_minutes,
-         COALESCE(early_leave_minutes, 0)::int AS early_leave_minutes,
-         COALESCE(overtime_minutes, 0)::int AS overtime_minutes,
-         CASE WHEN status='absent' THEN 1 ELSE 0 END AS absent_days,
-         CASE WHEN status='half-day' THEN 1 ELSE 0 END AS half_days
-       FROM attendance
-       WHERE employee_id = $1
-         AND date >= $2::date
-         AND date <= $3::date
-       ORDER BY date ASC`,
+         a.date::text AS date,
+         COALESCE(a.late_minutes, 0)::int AS late_minutes,
+         COALESCE(a.early_leave_minutes, 0)::int AS early_leave_minutes,
+         COALESCE(a.overtime_minutes, 0)::int AS overtime_minutes,
+         CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
+         CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
+       FROM attendance a
+       JOIN employees e ON a.employee_id = e.id
+       WHERE a.employee_id = $1
+         AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+         AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+         AND a.date >= $2::date
+         AND a.date <= $3::date
+       ORDER BY a.date ASC`,
       [employeeId, weekStart, weekEnd]
     );
     return result.rows;
@@ -145,17 +148,20 @@ const getAttendanceForPayroll = async (employeeId, weekStart, weekEnd, effective
   
   const result = await pool.query(
     `SELECT
-       date::text AS date,
-       COALESCE(late_minutes, 0)::int AS late_minutes,
-       COALESCE(early_leave_minutes, 0)::int AS early_leave_minutes,
-       COALESCE(overtime_minutes, 0)::int AS overtime_minutes,
-       CASE WHEN status='absent' THEN 1 ELSE 0 END AS absent_days,
-       CASE WHEN status='half-day' THEN 1 ELSE 0 END AS half_days
-     FROM attendance
-     WHERE employee_id = $1
-       AND EXTRACT(MONTH FROM date) = $2
-       AND EXTRACT(YEAR FROM date) = $3
-     ORDER BY date ASC`,
+       a.date::text AS date,
+       COALESCE(a.late_minutes, 0)::int AS late_minutes,
+       COALESCE(a.early_leave_minutes, 0)::int AS early_leave_minutes,
+       COALESCE(a.overtime_minutes, 0)::int AS overtime_minutes,
+       CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
+       CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
+     FROM attendance a
+     JOIN employees e ON a.employee_id = e.id
+     WHERE a.employee_id = $1
+       AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+       AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+       AND EXTRACT(MONTH FROM a.date) = $2
+       AND EXTRACT(YEAR FROM a.date) = $3
+     ORDER BY a.date ASC`,
     [employeeId, effectiveMonth, effectiveYear]
   );
   return result.rows;
