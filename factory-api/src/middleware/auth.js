@@ -13,8 +13,7 @@ const authenticate = (req, res, next) => {
   }
 
   try {
-    const secret = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
     next();
   } catch {
