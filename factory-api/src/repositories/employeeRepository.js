@@ -126,7 +126,13 @@ const updateEmployee = async (id, data) => {
 };
 
 const deleteEmployee = async (id, client = pool) => {
-  const result = await client.query('DELETE FROM employees WHERE id=$1 RETURNING id', [id]);
+  const result = await client.query(
+    `UPDATE employees 
+     SET status = 'inactive', termination_date = COALESCE(termination_date, CURRENT_DATE) 
+     WHERE id = $1 
+     RETURNING id, name, status, termination_date`,
+    [id]
+  );
   return result.rows[0] || null;
 };
 

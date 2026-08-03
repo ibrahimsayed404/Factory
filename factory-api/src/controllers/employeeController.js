@@ -1,4 +1,5 @@
 const employeeService = require('../services/employeeService');
+const auditService = require('../services/auditService');
 
 const getAll = async (req, res, next) => {
   try {
@@ -30,8 +31,9 @@ const update = async (req, res, next) => {
 
 const remove = async (req, res, next) => {
   try {
-    await employeeService.removeEmployee(req.params.id);
-    res.json({ message: 'Deleted successfully' });
+    const reqContext = auditService.extractReqContext(req);
+    await employeeService.removeEmployee(req.params.id, req.user?.id, reqContext);
+    res.json({ message: 'Employee deactivated successfully' });
   } catch (err) { next(err); }
 };
 

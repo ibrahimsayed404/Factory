@@ -157,7 +157,7 @@ export default function Employees() {
 
   const [deletingId, setDeletingId] = useState(null);
   const handleDelete = async (id) => {
-    if (!window.confirm('Remove this employee?')) return;
+    if (!window.confirm('Deactivate this employee? Their historical payroll and attendance data will be preserved.')) return;
     setDeletingId(id);
     try {
       await employeeApi.delete(id);

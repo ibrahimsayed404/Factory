@@ -31,7 +31,7 @@ ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS hr_leave_requests (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   leave_type VARCHAR(50) NOT NULL, -- 'vacation', 'sick', 'unpaid', 'maternity'
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS hr_leave_requests (
 
 CREATE TABLE IF NOT EXISTS hr_transactions (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   transaction_type VARCHAR(50) NOT NULL, -- 'bonus', 'penalty', 'overtime'
   amount NUMERIC(10,2) NOT NULL,
   transaction_date DATE NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS hr_transactions (
 
 CREATE TABLE IF NOT EXISTS hr_loans (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   principal_amount NUMERIC(10,2) NOT NULL,
   remaining_amount NUMERIC(10,2) NOT NULL,
   monthly_installment NUMERIC(10,2) NOT NULL,

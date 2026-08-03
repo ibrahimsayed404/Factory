@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS employees (
 
 CREATE TABLE IF NOT EXISTS hr_leave_requests (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   leave_type VARCHAR(50) NOT NULL,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS hr_leave_requests (
 
 CREATE TABLE IF NOT EXISTS hr_transactions (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   transaction_type VARCHAR(50) NOT NULL,
   amount NUMERIC(10,2) NOT NULL,
   transaction_date DATE NOT NULL,
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS hr_transactions (
 
 CREATE TABLE IF NOT EXISTS hr_loans (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   principal_amount NUMERIC(10,2) NOT NULL,
   remaining_amount NUMERIC(10,2) NOT NULL,
   monthly_installment NUMERIC(10,2) NOT NULL,
@@ -255,7 +255,7 @@ CREATE TABLE IF NOT EXISTS hr_loans (
 
 CREATE TABLE IF NOT EXISTS hr_salary_history (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   previous_salary NUMERIC(10,2),
   new_salary NUMERIC(10,2) NOT NULL,
   effective_date DATE NOT NULL,
@@ -265,7 +265,7 @@ CREATE TABLE IF NOT EXISTS hr_salary_history (
 
 CREATE TABLE IF NOT EXISTS hr_employee_documents (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   document_type VARCHAR(100),
   file_path VARCHAR(255) NOT NULL,
   uploaded_at TIMESTAMP DEFAULT NOW()
@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS hr_employee_documents (
 
 CREATE TABLE IF NOT EXISTS hr_performance_reviews (
   id SERIAL PRIMARY KEY,
-  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
   reviewer_id INT REFERENCES employees(id) ON DELETE SET NULL,
   review_date DATE NOT NULL,
   rating INT CHECK (rating >= 1 AND rating <= 5),
@@ -298,7 +298,7 @@ CREATE TABLE IF NOT EXISTS attendance_punch_events (
 
 CREATE TABLE IF NOT EXISTS attendance (
   id SERIAL PRIMARY KEY,
-  employee_id INT REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT REFERENCES employees(id) ON DELETE RESTRICT,
   date DATE NOT NULL,
   check_in TIME,
   check_out TIME,
@@ -313,7 +313,8 @@ CREATE TABLE IF NOT EXISTS attendance (
 
 CREATE TABLE IF NOT EXISTS payroll (
   id SERIAL PRIMARY KEY,
-  employee_id INT REFERENCES employees(id) ON DELETE CASCADE,
+  employee_id INT REFERENCES employees(id) ON DELETE RESTRICT,
+  employee_name VARCHAR(150),
   month INT NOT NULL,
   year INT NOT NULL,
   week_start DATE,

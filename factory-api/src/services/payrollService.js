@@ -657,6 +657,7 @@ const calculatePayrollForEmployee = async (employee, options) => {
 
   const savedRecord = await payrollRepository.upsertPayroll({
     employee_id: employee.id,
+    employee_name: employee.name,
     effectiveMonth,
     effectiveYear,
     weekStart,

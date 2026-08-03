@@ -1,6 +1,7 @@
 const pool = require('../db/pool');
 const employeeRepository = require('../repositories/employeeRepository');
 const payrollRepository = require('../repositories/payrollRepository');
+const auditService = require('./auditService');
 const ApiError = require('../utils/ApiError');
 const {
   calculateHoursWorked,
@@ -48,14 +49,29 @@ const updateEmployee = async (id, data) => {
   return employee;
 };
 
-const removeEmployee = async (id) => {
+const removeEmployee = async (id, userId = null, reqContext = null) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const deleted = await employeeRepository.deleteEmployee(id, client);
-    if (!deleted) throw new ApiError(404, 'Employee not found');
+    const existing = await employeeRepository.getEmployeeById(id);
+    if (!existing) throw new ApiError(404, 'Employee not found');
+
+    // Soft-deactivate employee status and record termination date
+    const deactivated = await employeeRepository.deleteEmployee(id, client);
+    if (!deactivated) throw new ApiError(404, 'Employee not found');
+
+    await auditService.log(
+      userId,
+      'EMPLOYEE_DEACTIVATED',
+      'employees',
+      id,
+      { name: existing.name, previous_status: existing.status, new_status: 'inactive' },
+      reqContext,
+      client
+    );
+
     await client.query('COMMIT');
-    return deleted;
+    return deactivated;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
