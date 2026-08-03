@@ -20,7 +20,7 @@ router.post('/shifts', authorize('admin', 'hr'), hrController.createShift);
 
 // Leaves
 router.get('/leaves', hrController.getLeaves);
-router.post('/leaves', hrController.createLeave);
+router.post('/leaves', authorize('admin', 'hr'), hrController.createLeave);
 router.put('/leaves/:id/status', authorize('admin', 'hr'), hrController.updateLeaveStatus);
 
 // Transactions
