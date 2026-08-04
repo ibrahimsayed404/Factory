@@ -46,8 +46,9 @@ const getEmployees = async ({ status, departmentId, limit, offset }) => {
   return { data: dataResult.rows, total };
 };
 
-const getEmployeeById = async (id) => {
-  const result = await pool.query(
+const getEmployeeById = async (id, client = null) => {
+  const executor = client || pool;
+  const result = await executor.query(
     `SELECT e.*, d.name AS department_name FROM employees e
      LEFT JOIN departments d ON e.department_id = d.id WHERE e.id = $1`,
     [id]
@@ -78,8 +79,8 @@ const createEmployee = async (data) => {
   return result.rows[0];
 };
 
-const updateEmployee = async (id, data) => {
-  const existing = await getEmployeeById(id);
+const updateEmployee = async (id, data, client = null) => {
+  const existing = await getEmployeeById(id, client);
   if (!existing) return null;
 
   const resolvedName = data.name !== undefined ? data.name : existing.name;
@@ -128,13 +129,22 @@ const updateEmployee = async (id, data) => {
 const deleteEmployee = async (id, client = pool) => {
   const result = await client.query(
     `UPDATE employees 
-     SET status = 'inactive', termination_date = COALESCE(termination_date, CURRENT_DATE) 
+     SET status = 'terminated', termination_date = COALESCE(termination_date, CURRENT_DATE) 
      WHERE id = $1 
      RETURNING id, name, status, termination_date`,
     [id]
   );
   return result.rows[0] || null;
 };
+
+const hardDeleteEmployee = async (id, client = pool) => {
+  const result = await client.query(
+    `DELETE FROM employees WHERE id = $1 RETURNING id, name`,
+    [id]
+  );
+  return result.rows[0] || null;
+};
+
 
 const getEmployeeShiftDetails = async (id) => {
   const supportsWeekendDays = await hasWeekendDaysColumn();
@@ -224,6 +234,7 @@ module.exports = {
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  hardDeleteEmployee,
   getEmployeeShiftDetails,
   getAttendanceRecord,
   updateAttendanceRecord,

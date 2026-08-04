@@ -53,19 +53,19 @@ const removeEmployee = async (id, userId = null, reqContext = null) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = await employeeRepository.getEmployeeById(id);
+    const existing = await employeeRepository.getEmployeeById(id, client);
     if (!existing) throw new ApiError(404, 'Employee not found');
 
-    // Soft-deactivate employee status and record termination date
+    // Soft-deactivate employee status to 'terminated' and record termination date
     const deactivated = await employeeRepository.deleteEmployee(id, client);
     if (!deactivated) throw new ApiError(404, 'Employee not found');
 
     await auditService.log(
       userId,
-      'EMPLOYEE_DEACTIVATED',
+      'EMPLOYEE_TERMINATED',
       'employees',
       id,
-      { name: existing.name, previous_status: existing.status, new_status: 'inactive' },
+      { name: existing.name, previous_status: existing.status, new_status: 'terminated' },
       reqContext,
       client
     );
@@ -74,6 +74,41 @@ const removeEmployee = async (id, userId = null, reqContext = null) => {
     return deactivated;
   } catch (err) {
     await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+const hardDeleteEmployee = async (id, userId = null, reqContext = null) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await employeeRepository.getEmployeeById(id, client);
+    if (!existing) throw new ApiError(404, 'Employee not found');
+
+    // Attempt hard-delete. Safe database-level ON DELETE RESTRICT constraint will fail
+    // if employee has any payroll or attendance history.
+    const deleted = await employeeRepository.hardDeleteEmployee(id, client);
+    if (!deleted) throw new ApiError(404, 'Employee not found');
+
+    await auditService.log(
+      userId,
+      'EMPLOYEE_HARD_DELETED',
+      'employees',
+      id,
+      { name: existing.name },
+      reqContext,
+      client
+    );
+
+    await client.query('COMMIT');
+    return deleted;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.code === '23503') {
+      throw new ApiError(400, 'Cannot hard-delete employee with existing payroll or attendance history. Use soft-delete (termination) instead.');
+    }
     throw err;
   } finally {
     client.release();
@@ -176,6 +211,7 @@ module.exports = {
   addEmployee,
   updateEmployee,
   removeEmployee,
+  hardDeleteEmployee,
   logAttendance,
   getAttendance,
   listDepartments,
