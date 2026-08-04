@@ -264,8 +264,10 @@ export const employeeApi = {
     if (Array.isArray(r)) return r;
     return [];
   }),
-  // Returns the data array directly; defaults to limit=1000 to fetch all records
-  list:          (params = '?limit=1000') => api.get(`/employees${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
+  list:          (params = '?limit=1000', includeTerminated = false) => api.get(`/employees${params}`).then(r => {
+    const data = Array.isArray(r?.data) ? r.data : [];
+    return includeTerminated ? data : data.filter(e => e.status !== 'terminated');
+  }),
   get:           (id)      => api.get(`/employees/${id}`),
   create:        (body)    => api.post('/employees', body),
   update:        (id, body)=> api.put(`/employees/${id}`, body),

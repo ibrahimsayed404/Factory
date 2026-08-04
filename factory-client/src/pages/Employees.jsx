@@ -95,10 +95,9 @@ export default function Employees() {
   const filteredEmployees = useMemo(() => {
     if (!employees) return [];
     const list = Array.isArray(employees) ? employees : (employees?.data || []);
-    const activeRoster = list.filter(emp => emp.status !== 'terminated');
     const term = searchTerm.toLowerCase().trim();
-    if (!term) return activeRoster;
-    return activeRoster.filter(emp => 
+    if (!term) return list;
+    return list.filter(emp => 
       (emp.name?.toLowerCase() || '').includes(term) ||
       (emp.department_name?.toLowerCase() || '').includes(term) ||
       (emp.role?.toLowerCase() || '').includes(term) ||
