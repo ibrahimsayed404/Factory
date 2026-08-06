@@ -80,6 +80,7 @@ const WeekendChips = ({ value }) => {
 const emptyForm = {
   name: '', phone: '', department_id: '', role: '', shift: 'morning',
   shift_start: '08:00', shift_end: '17:00', device_user_id: '', weekend_days: '5', salary: '', hire_date: '', status: 'active',
+  reason: '',
 };
 
 export default function Employees() {
@@ -114,6 +115,7 @@ export default function Employees() {
       shift_start: emp.shift_start ? String(emp.shift_start).slice(0, 5) : (SHIFT_DEFAULTS[emp.shift]?.start || ''),
       shift_end: emp.shift_end ? String(emp.shift_end).slice(0, 5) : (SHIFT_DEFAULTS[emp.shift]?.end || ''),
       weekend_days: emp.weekend_days || '5',
+      reason: '',
     });
     setEditing(emp.id);
     setShowModal(true);
@@ -142,6 +144,7 @@ export default function Employees() {
       ...form,
       salary: form.salary === '' ? null : Number(form.salary),
       device_user_id: form.device_user_id === '' ? null : Number(form.device_user_id),
+      reason: form.reason ? form.reason.trim() : undefined,
     };
     try {
       if (editing) await employeeApi.update(editing, cleanForm);
@@ -307,6 +310,14 @@ export default function Employees() {
               <option value="inactive">Inactive</option>
             </Select>
             <Input label="Salary ($)" type="number" value={form.salary} onChange={f('salary')} />
+            {editing && (
+              <Input
+                label="Reason for salary change (optional)"
+                placeholder="e.g. Annual Raise, Promotion"
+                value={form.reason || ''}
+                onChange={f('reason')}
+              />
+            )}
             <Input label="Hire date" type="date" value={form.hire_date} onChange={f('hire_date')} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
