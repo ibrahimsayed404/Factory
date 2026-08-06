@@ -87,6 +87,20 @@ const payrollCreate = [
   handleValidation,
 ];
 
+const payrollUpdateManual = [
+  param('id').isInt({ min: 1 }).withMessage('id must be a positive integer'),
+  body('bonus').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('bonus must be a non-negative number'),
+  body('deductions').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('deductions must be a non-negative number'),
+  body('manual_bonus').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('manual_bonus must be a non-negative number'),
+  body('manual_deductions').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('manual_deductions must be a non-negative number'),
+  handleValidation,
+];
+
+const payrollDeleteWeek = [
+  param('weekStart').isISO8601().withMessage('weekStart must be YYYY-MM-DD format'),
+  handleValidation,
+];
+
 const customerCreate = [
   body('name').trim().isLength({ min: 2, max: 150 }).withMessage('name is required'),
   body('email').optional({ checkFalsy: true }).isEmail().withMessage('email must be valid').normalizeEmail(),
@@ -255,6 +269,8 @@ module.exports = {
   employeeUpsert,
   attendanceUpsert,
   payrollCreate,
+  payrollUpdateManual,
+  payrollDeleteWeek,
   customerCreate,
   customerPaymentCreate,
   salesExpenseCreate,

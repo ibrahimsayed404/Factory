@@ -159,7 +159,7 @@ const getAttendanceForPayroll = async (employeeId, weekStart, weekEnd, effective
          CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
          CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
        FROM attendance a
-       JOIN employees e ON a.employee_id = e.id
+       LEFT JOIN employees e ON a.employee_id = e.id
        WHERE a.employee_id = $1
          AND (e.hire_date IS NULL OR a.date >= e.hire_date)
          AND (e.termination_date IS NULL OR a.date <= e.termination_date)
@@ -180,7 +180,7 @@ const getAttendanceForPayroll = async (employeeId, weekStart, weekEnd, effective
        CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
        CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
      FROM attendance a
-     JOIN employees e ON a.employee_id = e.id
+     LEFT JOIN employees e ON a.employee_id = e.id
      WHERE a.employee_id = $1
        AND (e.hire_date IS NULL OR a.date >= e.hire_date)
        AND (e.termination_date IS NULL OR a.date <= e.termination_date)
@@ -204,7 +204,7 @@ const getAttendanceBatchForPayroll = async (employeeIds, minDate, maxDate) => {
        CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
        CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
      FROM attendance a
-     JOIN employees e ON a.employee_id = e.id
+     LEFT JOIN employees e ON a.employee_id = e.id
      WHERE a.employee_id = ANY($1::int[])
        AND a.date >= $2::date
        AND a.date <= $3::date
@@ -556,7 +556,7 @@ const getHrDataForWeeklyPayroll = async (employeeId, weekStart, weekEnd) => {
   const transactions = await pool.query(
     `SELECT t.transaction_type, SUM(t.amount) as total_amount
      FROM hr_transactions t
-     JOIN employees e ON t.employee_id = e.id
+     LEFT JOIN employees e ON t.employee_id = e.id
      WHERE t.employee_id = $1 
        AND t.transaction_date >= $2
        AND t.transaction_date <= $3
