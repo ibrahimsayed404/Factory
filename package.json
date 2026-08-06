@@ -4,6 +4,7 @@
   "private": true,
   "workspaces": [
     "factory-client",
-    "factory-api"
+    "factory-api",
+    "api"
   ]
 }
