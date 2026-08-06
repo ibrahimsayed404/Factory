@@ -2,6 +2,7 @@ require('dotenv').config();
 const app = require('./app');
 const pool = require('./db/pool');
 const { startAutoPayrollScheduler } = require('./services/autoPayrollScheduler');
+const { startAutoAttendanceScheduler } = require('./services/autoAttendanceScheduler');
 
 const PORT = process.env.PORT || 5000;
 
@@ -22,6 +23,7 @@ const ensureSalesSchema = async () => {
     app.listen(PORT, () => {
       console.log(`Factory API running on http://localhost:${PORT}`);
       startAutoPayrollScheduler();
+      startAutoAttendanceScheduler();
     });
   } catch (err) {
     console.error('Failed to initialize database compatibility columns:', err.message);

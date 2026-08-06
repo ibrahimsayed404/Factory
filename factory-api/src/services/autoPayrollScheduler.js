@@ -1,5 +1,6 @@
 const pool = require('../db/pool');
 const payrollService = require('./payrollService');
+const payrollIntegrityCheckService = require('./payrollIntegrityCheckService');
 
 const AUTO_PAYROLL_SETTING_KEY = 'payroll_last_auto_week_start';
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -16,12 +17,6 @@ const getCurrentSaturdayIso = () => {
 
 const isSaturdayUtc = () => new Date().getUTCDay() === 6;
 
-
-
-// Atomically claim a week before running. Returns true only for the caller that
-// wins the claim; concurrent/duplicate invocations (e.g. the hourly interval and
-// an admin-triggered run overlapping) get false and skip, closing the race where
-// the "already ran" flag was previously written only AFTER the whole loop.
 const claimAutoWeek = async (weekStart) => {
   const result = await pool.query(
     `INSERT INTO app_settings (key, value, updated_at)
@@ -38,7 +33,6 @@ const runAutoPayrollForCurrentWeek = async () => {
   if (!isSaturdayUtc()) return;
 
   const weekStart = getCurrentSaturdayIso();
-  // Claim the week up front. If another run already claimed it, skip.
   const claimed = await claimAutoWeek(weekStart);
   if (!claimed) return;
 
@@ -60,20 +54,36 @@ const runAutoPayrollForCurrentWeek = async () => {
   console.log(`[auto-payroll] Weekly payroll generated for week starting ${weekStart}.`);
 };
 
+const runIntegrityHealthCheck = async () => {
+  try {
+    const report = await payrollIntegrityCheckService.runPayrollIntegrityCheck();
+    if (report.newAlertsCount > 0) {
+      console.warn(`[payroll-integrity-check] ⚠️ WARNING: Detected ${report.newAlertsCount} new payroll drift alerts across ${report.auditedWeeks} weeks!`);
+    } else {
+      console.log(`[payroll-integrity-check] ✅ Health check clean: ${report.totalAudited} records audited across ${report.auditedWeeks} weeks, 0 new alerts.`);
+    }
+  } catch (err) {
+    console.error('[payroll-integrity-check] Reconciliation failed:', err?.message || err);
+  }
+};
+
 const startAutoPayrollScheduler = () => {
   // Run once at startup, then check hourly.
   runAutoPayrollForCurrentWeek().catch((error) => {
     console.error('[auto-payroll] Initial run failed:', error?.message || error);
   });
+  runIntegrityHealthCheck();
 
   setInterval(() => {
     runAutoPayrollForCurrentWeek().catch((error) => {
       console.error('[auto-payroll] Scheduled run failed:', error?.message || error);
     });
+    runIntegrityHealthCheck();
   }, ONE_HOUR_MS);
 };
 
 module.exports = {
   startAutoPayrollScheduler,
   runAutoPayrollForCurrentWeek,
+  runIntegrityHealthCheck,
 };

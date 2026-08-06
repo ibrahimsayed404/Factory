@@ -32,6 +32,80 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Trigger function to snapshot old rows into audit_logs BEFORE DELETE
+CREATE OR REPLACE FUNCTION log_before_delete_to_audit_logs()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO audit_logs (
+    user_id,
+    action,
+    entity_name,
+    entity_id,
+    details,
+    created_at
+  ) VALUES (
+    NULL,
+    'DIRECT_SQL_DELETE',
+    TG_TABLE_NAME,
+    OLD.id::text,
+    to_jsonb(OLD),
+    NOW()
+  );
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_audit_before_delete_employees ON employees;
+CREATE TRIGGER trg_audit_before_delete_employees
+BEFORE DELETE ON employees
+FOR EACH ROW
+EXECUTE FUNCTION log_before_delete_to_audit_logs();
+
+DROP TRIGGER IF EXISTS trg_audit_before_delete_payroll ON payroll;
+CREATE TRIGGER trg_audit_before_delete_payroll
+BEFORE DELETE ON payroll
+FOR EACH ROW
+EXECUTE FUNCTION log_before_delete_to_audit_logs();
+
+DROP TRIGGER IF EXISTS trg_audit_before_delete_attendance ON attendance;
+CREATE TRIGGER trg_audit_before_delete_attendance
+BEFORE DELETE ON attendance
+FOR EACH ROW
+EXECUTE FUNCTION log_before_delete_to_audit_logs();
+
+-- Trigger function to log BEFORE UPDATE modifications on attendance table
+CREATE OR REPLACE FUNCTION log_before_update_attendance_to_audit_logs()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO audit_logs (
+    user_id,
+    action,
+    entity_name,
+    entity_id,
+    details,
+    created_at
+  ) VALUES (
+    NULL,
+    'ATTENDANCE_MODIFIED',
+    'attendance',
+    OLD.id::text,
+    jsonb_build_object(
+      'old', to_jsonb(OLD),
+      'new', to_jsonb(NEW),
+      'updated_at', NOW()
+    ),
+    NOW()
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_audit_before_update_attendance ON attendance;
+CREATE TRIGGER trg_audit_before_update_attendance
+BEFORE UPDATE ON attendance
+FOR EACH ROW
+EXECUTE FUNCTION log_before_update_attendance_to_audit_logs();
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key VARCHAR(120) PRIMARY KEY,
   value TEXT NOT NULL,

@@ -33,7 +33,15 @@ const remove = async (req, res, next) => {
   try {
     const reqContext = auditService.extractReqContext(req);
     await employeeService.removeEmployee(req.params.id, req.user?.id, reqContext);
-    res.json({ message: 'Employee deactivated successfully' });
+    res.json({ message: 'Employee terminated successfully' });
+  } catch (err) { next(err); }
+};
+
+const hardRemove = async (req, res, next) => {
+  try {
+    const reqContext = auditService.extractReqContext(req);
+    await employeeService.hardDeleteEmployee(req.params.id, req.user?.id, reqContext);
+    res.json({ message: 'Employee hard-deleted successfully' });
   } catch (err) { next(err); }
 };
 
@@ -63,4 +71,4 @@ const getDepartments = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAll, getOne, create, update, remove, logAttendance, getAttendance, getDepartments };
+module.exports = { getAll, getOne, create, update, remove, hardRemove, logAttendance, getAttendance, getDepartments };
