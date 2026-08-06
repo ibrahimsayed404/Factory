@@ -111,13 +111,23 @@ const updateEmployee = async (id, data, client = null) => {
 
   const supportsWeekendDays = await hasWeekendDaysColumn();
   
+  const dbClient = client || pool;
+
+  if (data.salary !== undefined && Number(data.salary) !== Number(existing.salary)) {
+    await dbClient.query(
+      `INSERT INTO hr_salary_history (employee_id, previous_salary, new_salary, effective_date, reason)
+       VALUES ($1, $2, $3, CURRENT_DATE, $4)`,
+      [id, existing.salary || 0, data.salary, data.reason || 'Salary updated via employee profile']
+    );
+  }
+
   const result = supportsWeekendDays
-    ? await pool.query(
+    ? await dbClient.query(
       `UPDATE employees SET name=$1, email=$2, phone=$3, department_id=$4, role=$5,
        shift=$6, shift_start=$7, shift_end=$8, weekend_days=$9, salary=$10, hire_date=$11, status=$12, termination_date=$13, device_user_id=$14 WHERE id=$15 RETURNING *`,
       [resolvedName, resolvedEmail, resolvedPhone, resolvedDept, resolvedRole, resolvedShift, resolvedShiftStart || null, resolvedShiftEnd || null, resolvedWeekendDays || null, resolvedSalary, resolvedHireDate, resolvedStatus, resolvedTerminationDate, resolvedDeviceUserId || null, id]
     )
-    : await pool.query(
+    : await dbClient.query(
       `UPDATE employees SET name=$1, email=$2, phone=$3, department_id=$4, role=$5,
        shift=$6, shift_start=$7, shift_end=$8, salary=$9, hire_date=$10, status=$11, termination_date=$12, device_user_id=$13 WHERE id=$14 RETURNING *`,
       [resolvedName, resolvedEmail, resolvedPhone, resolvedDept, resolvedRole, resolvedShift, resolvedShiftStart || null, resolvedShiftEnd || null, resolvedSalary, resolvedHireDate, resolvedStatus, resolvedTerminationDate, resolvedDeviceUserId || null, id]
@@ -129,9 +139,9 @@ const updateEmployee = async (id, data, client = null) => {
 const deleteEmployee = async (id, client = pool) => {
   const result = await client.query(
     `UPDATE employees 
-     SET status = 'terminated', termination_date = COALESCE(termination_date, CURRENT_DATE) 
+     SET status = 'terminated', termination_date = COALESCE(termination_date, CURRENT_DATE), device_user_id = NULL 
      WHERE id = $1 
-     RETURNING id, name, status, termination_date`,
+     RETURNING id, name, status, termination_date, device_user_id`,
     [id]
   );
   return result.rows[0] || null;

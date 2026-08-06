@@ -68,7 +68,29 @@ const employeeUpsert = [
   body('weekend_days').optional({ checkFalsy: true }).matches(/^[0-6](,[0-6])*$/).withMessage('weekend_days must be comma-separated day indexes (0-6)'),
   body('device_user_id').optional({ checkFalsy: true }).isLength({ max: 100 }).withMessage('device_user_id is too long'),
   body('salary').optional({ checkFalsy: true }).isFloat({ min: 0 }).withMessage('salary must be >= 0'),
-  body('status').optional({ checkFalsy: true }).isIn(['active', 'inactive']).withMessage('invalid status'),
+  body('status').optional({ checkFalsy: true }).isIn(['active', 'inactive', 'terminated']).withMessage('invalid status'),
+  body('hire_date')
+    .optional({ checkFalsy: true, nullable: true })
+    .isISO8601()
+    .withMessage('hire_date must be YYYY-MM-DD format')
+    .custom((hireDateVal) => {
+      const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Cairo' });
+      if (hireDateVal > todayStr) {
+        throw new Error('hire_date cannot be in the future');
+      }
+      return true;
+    }),
+  body('termination_date')
+    .optional({ checkFalsy: true, nullable: true })
+    .isISO8601()
+    .withMessage('termination_date must be YYYY-MM-DD format')
+    .custom((termDateVal, { req }) => {
+      const hireDateVal = req.body?.hire_date;
+      if (hireDateVal && termDateVal && termDateVal < hireDateVal) {
+        throw new Error('termination_date cannot be before hire_date');
+      }
+      return true;
+    }),
   handleValidation,
 ];
 
