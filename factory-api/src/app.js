@@ -94,7 +94,7 @@ app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
 app.use('/api', routes);
-app.use((req, res) => res.status(404).json({ error: req.t('errors.route_not_found', 'Route not found') }));
+app.use((req, res) => res.status(404).json({ error: typeof req?.t === 'function' ? req.t('errors.route_not_found', 'Route not found') : 'Route not found' }));
 app.use(errorHandler);
 
 module.exports = app;

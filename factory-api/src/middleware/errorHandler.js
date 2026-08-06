@@ -1,19 +1,18 @@
 const { translateKnownErrorMessage } = require('../utils/i18n');
 
 const errorHandler = (err, req, res, _next) => { // eslint-disable-line no-unused-vars
-  // Use a logger here in production (e.g., winston or pino)
   if (process.env.NODE_ENV !== 'test') {
-    console.error(err.stack);
+    console.error(err.stack || err);
   }
   const status = err.status || 500;
-  const fallbackError = req.t('errors.internal', 'Internal server error');
-  const response = {
-    error: translateKnownErrorMessage(req.lang, err.message || fallbackError),
-  };
+  const fallbackError = typeof req?.t === 'function' ? req.t('errors.internal', 'Internal server error') : 'Internal server error';
+  const rawMessage = err.message || fallbackError;
+  const errorMsg = req?.lang ? translateKnownErrorMessage(req.lang, rawMessage) : rawMessage;
+  const response = { error: errorMsg };
+
   if (err.details !== undefined) {
     response.details = err.details;
   }
-  // Only show stack in development
   if (process.env.NODE_ENV === 'development' && err.stack) {
     response.stack = err.stack;
   }
