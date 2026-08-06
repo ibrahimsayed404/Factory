@@ -12,7 +12,7 @@
       "src": "api/index.js",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["../factory-api/**", "factory-api/**"]
+        "includeFiles": ["factory-api/src/**", "factory-api/package.json"]
       }
     }
   ],
