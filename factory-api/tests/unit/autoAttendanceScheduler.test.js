@@ -174,8 +174,8 @@ describe('autoAttendanceScheduler Unit Tests', () => {
 
       const insertQueryStr = pool.query.mock.calls[1][0];
       const insertCallArgs = pool.query.mock.calls[1][1];
-      expect(insertCallArgs[0]).toBe(20);
-      expect(insertCallArgs[1]).toBe('2026-08-06');
+      expect(insertCallArgs[0]).toBe('2026-08-06');
+      expect(insertCallArgs[1]).toEqual([20]);
       expect(insertQueryStr).toContain("'absent'");
       expect(insertQueryStr).toContain('Auto-marked absent at 12:00 PM');
     });

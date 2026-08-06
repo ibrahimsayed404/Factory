@@ -153,33 +153,33 @@ const runAutoAbsence12PM = async (overrideDate = null) => {
     [dateStr]
   );
 
+  const validEmpIds = candidates.rows
+    .filter((emp) => {
+      const empDetails = {
+        shift: emp.shift,
+        shift_start: emp.shift_start || emp.shift_start_time,
+        shift_end: emp.shift_end || emp.shift_end_time,
+        weekend_days: emp.weekend_days,
+      };
+      return !isWeekendDate(empDetails, dateStr);
+    })
+    .map((emp) => emp.id);
+
   let insertedCount = 0;
 
-  for (const emp of candidates.rows) {
-    const empDetails = {
-      shift: emp.shift,
-      shift_start: emp.shift_start || emp.shift_start_time,
-      shift_end: emp.shift_end || emp.shift_end_time,
-      weekend_days: emp.weekend_days,
-    };
-
-    if (isWeekendDate(empDetails, dateStr)) {
-      continue;
-    }
-
+  if (validEmpIds.length > 0) {
     const result = await pool.query(
       `INSERT INTO attendance (
          employee_id, date, check_in, check_out, hours_worked,
          late_minutes, early_leave_minutes, overtime_minutes, status, notes
        )
-       VALUES ($1, $2::date, NULL, NULL, 0, 0, 0, 0, 'absent', 'Auto-marked absent at 12:00 PM')
+       SELECT 
+         emp_id, $1::date, NULL, NULL, 0, 0, 0, 0, 'absent', 'Auto-marked absent at 12:00 PM'
+       FROM UNNEST($2::int[]) AS emp_id
        ON CONFLICT (employee_id, date) DO NOTHING`,
-      [emp.id, dateStr]
+      [dateStr, validEmpIds]
     );
-
-    if (result.rowCount > 0) {
-      insertedCount += 1;
-    }
+    insertedCount = result.rowCount || 0;
   }
 
   if (insertedCount > 0) {
