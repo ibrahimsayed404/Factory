@@ -21,13 +21,14 @@ function hashToken(token) {
 }
 
 function generateAccessToken(user) {
-  return jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '15m' });
+  const secret = process.env.JWT_SECRET || 'factory-jwt-secret-key-2026';
+  return jwt.sign({ id: user.id, role: user.role }, secret, { expiresIn: process.env.JWT_EXPIRES_IN || '15m' });
 }
 
 // SECURITY: Use a separate secret for refresh tokens (JWT_REFRESH_SECRET).
 // If one secret leaks, the other token type remains uncompromised.
 async function generateRefreshToken(user) {
-  const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'factory-jwt-secret-key-2026';
   const token = jwt.sign(
     { id: user.id, type: 'refresh', jti: crypto.randomBytes(16).toString('hex') },
     refreshSecret,
