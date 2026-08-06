@@ -50,12 +50,16 @@ if (isVercel) {
   app.set('trust proxy', true);
 }
 
-if (process.env.NODE_ENV !== 'test') {
-  swaggerUi = require('swagger-ui-express');
-  swaggerJSDoc = require('swagger-jsdoc');
-  const swaggerSpec = swaggerJSDoc(swaggerOptions);
-  // Serve Swagger UI at /api/docs
-  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+if (process.env.NODE_ENV !== 'test' && !isVercel) {
+  try {
+    swaggerUi = require('swagger-ui-express');
+    swaggerJSDoc = require('swagger-jsdoc');
+    const swaggerSpec = swaggerJSDoc(swaggerOptions);
+    // Serve Swagger UI at /api/docs
+    app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  } catch (err) {
+    console.error('Failed to initialize Swagger UI:', err.message);
+  }
 }
 
 
