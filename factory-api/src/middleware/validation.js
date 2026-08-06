@@ -72,8 +72,46 @@ const employeeUpsert = [
   handleValidation,
 ];
 
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return null;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+};
+
 const attendanceUpsert = [
-  body('date').isISO8601().withMessage('date must be ISO format (YYYY-MM-DD)'),
+  body('date')
+    .isISO8601()
+    .withMessage('date must be ISO format (YYYY-MM-DD)')
+    .custom((dateVal) => {
+      const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Cairo' });
+      if (dateVal > todayStr) {
+        throw new Error('attendance date cannot be in the future');
+      }
+      return true;
+    }),
+  body('check_in')
+    .optional({ nullable: true, checkFalsy: true })
+    .matches(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/)
+    .withMessage('check_in must be HH:MM or HH:MM:SS format'),
+  body('check_out')
+    .optional({ nullable: true, checkFalsy: true })
+    .matches(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/)
+    .withMessage('check_out must be HH:MM or HH:MM:SS format')
+    .custom((checkOutVal, { req }) => {
+      const checkInVal = req.body?.check_in;
+      if (checkInVal && checkOutVal) {
+        const inMinutes = parseTimeToMinutes(checkInVal);
+        const outMinutes = parseTimeToMinutes(checkOutVal);
+        if (inMinutes !== null && outMinutes !== null && outMinutes < inMinutes) {
+          throw new Error('check_out time cannot be before check_in time');
+        }
+      }
+      return true;
+    }),
   body('status').optional({ checkFalsy: true }).isIn(['present', 'absent', 'late', 'half-day']).withMessage('invalid attendance status'),
   body('hours_worked').optional({ nullable: true, checkFalsy: true }).isFloat({ min: 0, max: 24 }).withMessage('hours_worked must be between 0 and 24'),
   handleValidation,

@@ -12,6 +12,6 @@ router.post('/employees', authenticate, authorizeAdmin, v.employeeUpsert, employ
 router.put('/employees/:id', authenticate, authorizeAdmin, v.idParam, v.employeeUpsert, employees.update);
 router.delete('/employees/:id', authenticate, authorizeAdmin, v.idParam, employees.remove);
 router.post('/employees/:id/attendance', authenticate, authorizeAdmin, v.idParam, v.attendanceUpsert, employees.logAttendance);
-router.get('/employees/:id/attendance', authenticate, employees.getAttendance);
+router.get('/employees/:id/attendance', authenticate, authorizeAdmin, v.idParam, employees.getAttendance);
 
 module.exports = router;

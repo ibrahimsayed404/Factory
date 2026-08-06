@@ -198,26 +198,29 @@ const createAttendanceRecord = async (employeeId, date, data) => {
 const getAttendanceHistory = async (employeeId, month, year) => {
   let query = `
     SELECT
-      id,
-      employee_id,
-      date::text AS date,
-      TO_CHAR(check_in, 'HH24:MI') AS check_in,
-      TO_CHAR(check_out, 'HH24:MI') AS check_out,
-      hours_worked,
-      late_minutes,
-      early_leave_minutes,
-      overtime_minutes,
-      status,
-      notes
-    FROM attendance
-    WHERE employee_id = $1
+      a.id,
+      a.employee_id,
+      a.date::text AS date,
+      TO_CHAR(a.check_in, 'HH24:MI') AS check_in,
+      TO_CHAR(a.check_out, 'HH24:MI') AS check_out,
+      a.hours_worked,
+      a.late_minutes,
+      a.early_leave_minutes,
+      a.overtime_minutes,
+      a.status,
+      a.notes
+    FROM attendance a
+    LEFT JOIN employees e ON a.employee_id = e.id
+    WHERE a.employee_id = $1
+      AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+      AND (e.termination_date IS NULL OR a.date <= e.termination_date)
   `;
   const params = [employeeId];
   if (month && year) {
-    query += ` AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3`;
+    query += ` AND EXTRACT(MONTH FROM a.date) = $2 AND EXTRACT(YEAR FROM a.date) = $3`;
     params.push(month, year);
   }
-  query += ' ORDER BY date DESC';
+  query += ' ORDER BY a.date DESC';
   
   const result = await pool.query(query, params);
   return result.rows;
