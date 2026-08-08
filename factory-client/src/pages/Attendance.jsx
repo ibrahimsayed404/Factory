@@ -199,7 +199,16 @@ const augmentWithInferredAbsences = (records, weekendDays) => {
   const start = new Date(Date.UTC(startParts.year, startParts.month - 1, startParts.day));
   const end = new Date(Date.UTC(endParts.year, endParts.month - 1, endParts.day));
 
-  const byDate = new Map(normalized.map((r) => [r.date, r]));
+  const byDate = new Map(
+    normalized
+      .filter((r) => {
+        if (!r) return false;
+        const hasStatus = r.status !== null && r.status !== undefined && String(r.status).trim() !== '';
+        const hasPunches = Boolean(r.check_in || r.check_out || (r.hours_worked !== null && r.hours_worked !== undefined && Number(r.hours_worked) > 0));
+        return hasStatus || hasPunches;
+      })
+      .map((r) => [r.date, r])
+  );
   const merged = [];
 
   for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {

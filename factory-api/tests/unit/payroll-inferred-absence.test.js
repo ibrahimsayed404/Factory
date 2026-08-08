@@ -91,4 +91,16 @@ describe('Inferred Absence Calculation Unit Tests', () => {
     const inferred = calculateInferredAbsentDays(records, fridayWeekend, '2026-03-14', '2026-03-19', {});
     expect(inferred).toBe(0);
   });
+
+  test('9. Orphaned null-status record with no punches -> NOT treated as handled, counted as inferred absent', () => {
+    // Period: Sat 2026-03-14 to Thu 2026-03-19 (6 workdays)
+    // One orphaned row on 2026-03-16 with status: null, check_in: null, check_out: null
+    // All 6 days (including 2026-03-16) must be counted as inferred absent.
+    const records = [
+      { date: '2026-03-16', status: null, check_in: null, check_out: null, hours_worked: null }
+    ];
+    const inferred = calculateInferredAbsentDays(records, fridayWeekend, '2026-03-14', '2026-03-19', {});
+    expect(inferred).toBe(6);
+  });
 });
+

@@ -138,7 +138,15 @@ const calculateInferredAbsentDays = (records = [], weekendSet, periodStart, peri
   const terminationIso = toIsoDateString(employee?.termination_date);
 
   const recordedDates = new Set(
-    records.map((r) => toIsoDateString(r.date)).filter(Boolean)
+    records
+      .filter((r) => {
+        if (!r) return false;
+        const hasStatus = r.status !== null && r.status !== undefined && String(r.status).trim() !== '';
+        const hasPunches = Boolean(r.check_in || r.check_out || (r.hours_worked !== null && r.hours_worked !== undefined && Number(r.hours_worked) > 0));
+        return hasStatus || hasPunches;
+      })
+      .map((r) => toIsoDateString(r.date))
+      .filter(Boolean)
   );
 
   let inferred = 0;
