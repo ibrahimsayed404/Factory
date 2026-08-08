@@ -203,5 +203,20 @@ describe('autoAttendanceScheduler Unit Tests', () => {
       expect(insertedCount).toBe(0);
       expect(pool.query).toHaveBeenCalledTimes(1); // Only candidates query, no INSERT call
     });
+
+    test('4. skipGuard=true bypasses the noon guard and proceeds even before 12:00 PM', async () => {
+      // 11:30 AM — without skipGuard this returns 0 immediately (guard fires).
+      // With skipGuard=true (used by the Vercel Cron endpoint) it must hit the DB.
+      const mockDate1130AM = new Date('2026-08-06T11:30:00+03:00');
+
+      // No candidates — empty result — but the SELECT must still be called.
+      pool.query.mockResolvedValueOnce({ rows: [] });
+
+      const insertedCount = await runAutoAbsence12PM(mockDate1130AM, { skipGuard: true });
+
+      // Guard was bypassed: candidates SELECT fired even before noon.
+      expect(pool.query).toHaveBeenCalledTimes(1);
+      expect(insertedCount).toBe(0); // No candidates → 0 inserted
+    });
   });
 });

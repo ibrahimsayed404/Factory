@@ -1,5 +1,9 @@
 const employeeService = require('../services/employeeService');
 const auditService = require('../services/auditService');
+const {
+  runAutoAbsence12PM,
+  runAutoCheckoutShiftBased,
+} = require('../services/autoAttendanceScheduler');
 
 const getAll = async (req, res, next) => {
   try {
@@ -71,4 +75,23 @@ const getDepartments = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAll, getOne, create, update, remove, hardRemove, logAttendance, getAttendance, getDepartments };
+// Vercel Cron target — marks unpunched active employees absent for today.
+// Uses skipGuard=true so minor clock drift on the cron infrastructure never
+// causes the 12:00 PM guard to silently return 0.
+const triggerAutoAbsence = async (req, res, next) => {
+  try {
+    const marked = await runAutoAbsence12PM(null, { skipGuard: true });
+    res.json({ success: true, marked_absent: marked });
+  } catch (err) { next(err); }
+};
+
+// Vercel Cron target — auto-closes open check-ins that are past their
+// per-shift 1-hour grace window.
+const triggerAutoCheckout = async (req, res, next) => {
+  try {
+    const closed = await runAutoCheckoutShiftBased();
+    res.json({ success: true, checked_out: closed });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAll, getOne, create, update, remove, hardRemove, logAttendance, getAttendance, getDepartments, triggerAutoAbsence, triggerAutoCheckout };

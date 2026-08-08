@@ -38,6 +38,14 @@
     {
       "path": "/api/payroll/auto-run",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/attendance/auto-absence",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/attendance/auto-checkout",
+      "schedule": "0 17 * * *"
     }
   ]
 }

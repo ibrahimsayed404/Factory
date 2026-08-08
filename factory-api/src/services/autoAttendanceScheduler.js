@@ -122,11 +122,14 @@ const runAutoCheckoutShiftBased = async (overrideDate = null) => {
   return updatedCount;
 };
 
-const runAutoAbsence12PM = async (overrideDate = null) => {
+const runAutoAbsence12PM = async (overrideDate = null, { skipGuard = false } = {}) => {
   const { dateStr, currentMinutes } = getCairoDateAndMinutes(overrideDate);
 
-  // Trigger at or after 12:00 PM (720 minutes from midnight)
-  if (currentMinutes < 720) {
+  // Trigger at or after 12:00 PM (720 minutes from midnight).
+  // skipGuard=true lets the Vercel Cron endpoint bypass the check — the cron
+  // itself is scheduled to fire at exactly 12:00 Cairo (09:00 UTC), so the
+  // check is redundant there and could fail on minor clock drift.
+  if (!skipGuard && currentMinutes < 720) {
     return 0;
   }
 
@@ -191,12 +194,12 @@ const runAutoAbsence12PM = async (overrideDate = null) => {
 
 let isRunning = false;
 
-const runAutoAttendanceJobs = async (overrideDate = null) => {
+const runAutoAttendanceJobs = async (overrideDate = null, { skipGuard = false } = {}) => {
   if (isRunning) return;
   isRunning = true;
   try {
     await runAutoCheckoutShiftBased(overrideDate);
-    await runAutoAbsence12PM(overrideDate);
+    await runAutoAbsence12PM(overrideDate, { skipGuard });
   } catch (error) {
     console.error('[auto-attendance] Execution error:', error?.message || error);
   } finally {
