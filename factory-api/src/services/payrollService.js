@@ -273,9 +273,14 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => 
  */
 const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttendance = null, preFetchedLeaves = null) => {
   const isPaid = row.status === 'paid';
-  const fullBaseSalary = Number(employee?.salary ?? row.employee_salary ?? row.base_salary ?? 0);
+  // Prefer the snapshot salary frozen at generation time. Fall back to the
+  // stored base_salary (which is the same value for non-prorated records), then
+  // to live employee salary only for legacy rows that predate the snapshot.
+  const fullBaseSalary = Number(row.snapshot_salary ?? row.base_salary ?? employee?.salary ?? row.employee_salary ?? 0);
 
-  const weekendSet = weekendSetFrom(employee?.weekend_days ?? row.weekend_days);
+  // Prefer snapshot values for shift/weekend/dates; fall back to live employee
+  // data only when snapshots are absent (legacy pre-migration records).
+  const weekendSet = weekendSetFrom(row.snapshot_weekend_days ?? employee?.weekend_days ?? row.weekend_days);
   const useWeeklySalary = Boolean(row.week_start);
 
   const { periodStart, periodEnd } = getPayrollPeriodRange({
@@ -286,8 +291,17 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
   });
 
   const empObj = {
-    hire_date: employee?.hire_date ?? row.hire_date,
-    termination_date: employee?.termination_date ?? row.termination_date,
+    hire_date: row.snapshot_hire_date ?? employee?.hire_date ?? row.hire_date,
+    termination_date: row.snapshot_termination_date ?? employee?.termination_date ?? row.termination_date,
+  };
+
+  // Build a synthetic employee-like object for resolveShiftHours, preferring
+  // snapshot values so that rate calculations use the generation-time shift.
+  const shiftSource = {
+    shift: row.snapshot_shift ?? employee?.shift ?? row.shift,
+    shift_start: row.snapshot_shift_start ?? employee?.shift_start ?? row.shift_start,
+    shift_end: row.snapshot_shift_end ?? employee?.shift_end ?? row.shift_end,
+    id: row.employee_id,
   };
 
   let baseSalary = fullBaseSalary;
@@ -300,7 +314,7 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
     baseSalary = Number(row.base_salary || 0);
   }
 
-  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, employee || row);
+  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, shiftSource);
 
   let attendanceRecords = [];
   let approvedLeaveDates = new Set();
@@ -340,8 +354,8 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
     ? Number(row.absent_days || 0)
     : attendanceRecords.reduce((sum, r) => {
         const dStr = toIsoDateString(r.date);
-        const hIso = toIsoDateString(employee?.hire_date ?? row.hire_date);
-        const tIso = toIsoDateString(employee?.termination_date ?? row.termination_date);
+        const hIso = toIsoDateString(empObj.hire_date);
+        const tIso = toIsoDateString(empObj.termination_date);
         if (hIso && dStr < hIso) return sum;
         if (tIso && dStr > tIso) return sum;
         return sum + Number(r.absent_days || 0);
@@ -357,13 +371,13 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
         weekendSet,
         periodStart,
         periodEnd,
-        { hire_date: employee?.hire_date ?? row.hire_date, termination_date: employee?.termination_date ?? row.termination_date },
+        empObj,
         approvedLeaveDates
       )
     : 0;
 
   const { employed: employedDaysLimit } = (periodStart && periodEnd)
-    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, { hire_date: employee?.hire_date ?? row.hire_date, termination_date: employee?.termination_date ?? row.termination_date })
+    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj)
     : { employed: 6 };
 
   const absentDays = Math.min(employedDaysLimit, absentDaysExplicit + inferredAbsentDays);
@@ -677,6 +691,15 @@ const calculatePayrollForEmployee = async (employee, options) => {
     hr_bonus: hrBonus,
     hr_penalty: hrPenalty,
     hr_overtime: hrOvertime,
+    // Snapshot employee data at generation time so that subsequent reads
+    // use these frozen values instead of live-joining the employee table.
+    snapshot_salary: fullBaseSalary,
+    snapshot_shift: employee.shift || null,
+    snapshot_shift_start: employee.shift_start || null,
+    snapshot_shift_end: employee.shift_end || null,
+    snapshot_weekend_days: employee.weekend_days || '5',
+    snapshot_hire_date: employee.hire_date || null,
+    snapshot_termination_date: employee.termination_date || null,
   });
 
   // Apply loan payments idempotently: the ledger uniqueness constraint on
@@ -771,13 +794,11 @@ const markPaid = async (id) => {
   if (!record) throw new ApiError(404, 'Record not found');
   if (record.status === 'paid') throw new ApiError(400, 'Record is already paid');
 
-  // Recalculate net_salary from live attendance to detect stale amounts.
-  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
-  const employee = await payrollRepository.getEmployeeForPayroll(record.employee_id, supportsWeekendDays);
-  if (!employee) throw new ApiError(404, 'Employee not found');
-
+  // Recalculate net_salary from attendance to detect stale amounts.
+  // Use snapshot values from the record (not live employee data) so the
+  // drift check compares against the same salary used at generation time.
   const policy = await getPayrollPolicy();
-  const computed = await computeLivePayrollFigures(record, employee, policy);
+  const computed = await computeLivePayrollFigures(record, null, policy);
   const storedNet = round2(Number(record.net_salary || 0));
 
   if (Math.abs(computed.recomputedNet - storedNet) >= 0.01) {
@@ -812,8 +833,22 @@ const updateManualAdjustments = async (id, data = {}) => {
   if (!employee) throw new ApiError(404, 'Employee not found');
 
   const policy = await getPayrollPolicy();
-  const weekendSet = weekendSetFrom(employee.weekend_days);
+  // Prefer snapshot values from the payroll record; fall back to live
+  // employee data only for legacy records that predate the snapshot migration.
+  const weekendSet = weekendSetFrom(record.snapshot_weekend_days ?? employee.weekend_days);
   const useWeeklySalary = Boolean(record.week_start);
+
+  // Build a shift-source object preferring snapshot values for rate calculation.
+  const shiftSource = {
+    shift: record.snapshot_shift ?? employee.shift,
+    shift_start: record.snapshot_shift_start ?? employee.shift_start,
+    shift_end: record.snapshot_shift_end ?? employee.shift_end,
+    id: record.employee_id,
+  };
+  const empObj = {
+    hire_date: record.snapshot_hire_date ?? employee.hire_date,
+    termination_date: record.snapshot_termination_date ?? employee.termination_date,
+  };
 
   // Use the canonical period range (timezone-safe, correct Sat→Fri length) for
   // both the attendance query and the inferred-absence/leave window.
@@ -827,7 +862,7 @@ const updateManualAdjustments = async (id, data = {}) => {
   const weekEnd = record.week_start ? periodEnd : null;
   // Use the stored prorated base_salary (not the live employee.salary) so
   // deduction rates match the base they are subtracted from.
-  const { dailyRate, minuteRate } = getRates(Number(record.base_salary || 0), weekendSet, policy, useWeeklySalary, employee);
+  const { dailyRate, minuteRate } = getRates(Number(record.base_salary || 0), weekendSet, policy, useWeeklySalary, shiftSource);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
     record.employee_id,
@@ -857,7 +892,7 @@ const updateManualAdjustments = async (id, data = {}) => {
     weekendSet,
     periodStart,
     periodEnd,
-    employee,
+    empObj,
     approvedLeaveDates
   );
   const weekendOvertimeMinutes = totals.weekend_overtime_minutes;

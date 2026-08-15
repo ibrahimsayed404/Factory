@@ -1,0 +1,3 @@
+.vercel
+backups/
+*.json.bak

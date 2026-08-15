@@ -21,3 +21,4 @@ nssm-2.24/
 
 .vercel
 .env*
+backups/

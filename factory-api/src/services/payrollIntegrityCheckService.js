@@ -48,8 +48,9 @@ const runPayrollIntegrityCheck = async (client = pool) => {
 
     for (const row of rowsRes.rows) {
       totalAudited += 1;
-      const employee = await payrollRepository.getEmployeeForPayroll(row.employee_id, supportsWeekendDays);
-      const computed = await computeLivePayrollFigures(row, employee, policy);
+      // Use snapshot values from the payroll row (not live employee data)
+      // so the drift check uses the same salary/shift frozen at generation.
+      const computed = await computeLivePayrollFigures(row, null, policy);
 
       const storedNet = round2(row.net_salary);
       const recomputedNet = round2(computed.recomputedNet);

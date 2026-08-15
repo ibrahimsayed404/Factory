@@ -405,6 +405,13 @@ CREATE TABLE IF NOT EXISTS payroll (
   hr_bonus NUMERIC(10,2) DEFAULT 0,
   hr_penalty NUMERIC(10,2) DEFAULT 0,
   hr_overtime NUMERIC(10,2) DEFAULT 0,
+  snapshot_salary NUMERIC(10,2),
+  snapshot_shift VARCHAR(30),
+  snapshot_shift_start TIME,
+  snapshot_shift_end TIME,
+  snapshot_weekend_days VARCHAR(20),
+  snapshot_hire_date DATE,
+  snapshot_termination_date DATE,
   paid_at TIMESTAMP,
   status VARCHAR(30) DEFAULT 'pending', -- pending, paid
   UNIQUE(employee_id, week_start)
