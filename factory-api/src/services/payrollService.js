@@ -273,10 +273,11 @@ const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => 
  */
 const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttendance = null, preFetchedLeaves = null) => {
   const isPaid = row.status === 'paid';
-  // Prefer the snapshot salary frozen at generation time. Fall back to the
-  // stored base_salary (which is the same value for non-prorated records), then
-  // to live employee salary only for legacy rows that predate the snapshot.
-  const fullBaseSalary = Number(row.snapshot_salary ?? row.base_salary ?? employee?.salary ?? row.employee_salary ?? 0);
+  // For paid records the stored base_salary is authoritative.
+  // For pending records, prefer the snapshot_salary frozen at generation time.
+  const fullBaseSalary = isPaid
+    ? Number(row.base_salary ?? row.snapshot_salary ?? employee?.salary ?? row.employee_salary ?? 0)
+    : Number(row.snapshot_salary ?? row.base_salary ?? employee?.salary ?? row.employee_salary ?? 0);
 
   // Prefer snapshot values for shift/weekend/dates; fall back to live employee
   // data only when snapshots are absent (legacy pre-migration records).
@@ -304,15 +305,11 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
     id: row.employee_id,
   };
 
-  let baseSalary = fullBaseSalary;
-  if (!isPaid && useWeeklySalary && periodStart && periodEnd) {
-    const { employed, total } = countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj);
-    if (total > 0 && employed < total) {
-      baseSalary = round2(fullBaseSalary * (employed / total));
-    }
-  } else if (isPaid) {
-    baseSalary = Number(row.base_salary || 0);
-  }
+  // For existing payroll rows (both pending and paid), row.snapshot_salary and
+  // row.base_salary already store the correct generation-time base salary (prorated
+  // if hired/terminated mid-period). Do NOT re-apply countEmployedWorkDays proration,
+  // which would multiply the already-prorated base salary a second time.
+  const baseSalary = fullBaseSalary;
 
   const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, shiftSource);
 
@@ -693,7 +690,7 @@ const calculatePayrollForEmployee = async (employee, options) => {
     hr_overtime: hrOvertime,
     // Snapshot employee data at generation time so that subsequent reads
     // use these frozen values instead of live-joining the employee table.
-    snapshot_salary: fullBaseSalary,
+    snapshot_salary: base_salary,
     snapshot_shift: employee.shift || null,
     snapshot_shift_start: employee.shift_start || null,
     snapshot_shift_end: employee.shift_end || null,
