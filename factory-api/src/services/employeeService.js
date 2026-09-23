@@ -189,6 +189,24 @@ const logAttendance = async (id, data) => {
     overtime_minutes: resolvedOvertimeMinutes
   };
 
+  // Period Locking Guard: Prevent modifying attendance for a period whose payroll is already paid
+  const paidPayrollRes = await pool.query(
+    `SELECT id, week_start, week_end, month 
+     FROM payroll 
+     WHERE employee_id = $1 
+       AND status = 'paid' 
+       AND (
+         (week_start IS NOT NULL AND week_end IS NOT NULL AND $2::date >= week_start AND $2::date <= week_end)
+         OR (week_start IS NULL AND month IS NOT NULL AND year IS NOT NULL AND EXTRACT(MONTH FROM $2::date) = month AND EXTRACT(YEAR FROM $2::date) = year)
+       )
+     LIMIT 1`,
+    [id, date]
+  );
+  if (paidPayrollRes.rows.length > 0) {
+    const periodLabel = paidPayrollRes.rows[0].week_start ? `week ${paidPayrollRes.rows[0].week_start}` : `month ${paidPayrollRes.rows[0].month}`;
+    throw new ApiError(400, `Cannot modify attendance for date ${date}: payroll for ${periodLabel} is already paid and finalized`);
+  }
+
   const existing = await employeeRepository.getAttendanceRecord(id, date);
   if (existing) {
     return { record: await employeeRepository.updateAttendanceRecord(id, date, attendanceData), isUpdate: true };

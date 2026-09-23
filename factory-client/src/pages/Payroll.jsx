@@ -536,8 +536,8 @@ export default function Payroll() {
     { key: 'bonus', label: t('bonus', 'Bonus'), render: v => v > 0 ? <span style={{ color: 'var(--accent)' }}>+{formatCurrency(v)}</span> : '—' },
     { key: 'deductions', label: t('deductions', 'Deductions'), render: v => v > 0 ? <span style={{ color: 'var(--danger)' }}>-{formatCurrency(v)}</span> : '—' },
     { key: 'net_salary', label: t('netSalary', 'Net salary'), render: (v, row) => (
-      <strong title={row.has_recalc_drift ? t('recalcDriftHint', 'Recalculated total differs from the paid amount') : undefined}>
-        {formatCurrency(v)}{row.has_recalc_drift ? ' ⚠️' : ''}
+      <strong title={row.status !== 'paid' && row.has_recalc_drift ? t('recalcDriftHint', 'Recalculated total differs from the paid amount') : undefined}>
+        {formatCurrency(v)}{row.status !== 'paid' && row.has_recalc_drift ? ' ⚠️' : ''}
       </strong>
     ) },
     { key: 'weekly_payment_estimate', label: t('weeklyPay', 'Weekly Pay'), render: (_, row) => formatCurrency(row.payroll_breakdown?.weekly_payment_estimate || 0) },
@@ -606,7 +606,9 @@ export default function Payroll() {
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{group.employeeCount} employee{group.employeeCount === 1 ? '' : 's'} · {formatCurrency(group.totalNet)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Badge variant="default">{group.paidCount}/{group.employeeCount} paid</Badge>
+                  <Badge variant={group.paidCount === group.employeeCount && group.employeeCount > 0 ? 'success' : 'default'}>
+                    {group.paidCount === group.employeeCount && group.employeeCount > 0 ? '🔒 ' : ''}{group.paidCount}/{group.employeeCount} {t('paid', 'paid')}
+                  </Badge>
                   <Btn size="sm" variant="primary" onClick={() => setSelectedWeekStart(group.weekStart)}>{t('open', 'Open')}</Btn>
                   {group.weekStart !== 'monthly' && group.paidCount < group.employeeCount && (
                     <Btn size="sm" variant="success" onClick={() => handlePayWeek(group.weekStart)} disabled={saving}>
@@ -702,7 +704,7 @@ export default function Payroll() {
 
       {selectedBreakdown && (
         <Modal title={`${t('payrollBreakdown', 'Payroll breakdown')} — ${selectedBreakdown.employee_name}`} onClose={() => setSelectedBreakdown(null)} width={520}>
-          {selectedBreakdown.has_recalc_drift && (
+          {selectedBreakdown.status !== 'paid' && selectedBreakdown.has_recalc_drift && (
             <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--warning-soft, #fef9c3)', color: 'var(--warning-strong, #a16207)', fontSize: 12 }}>
               ⚠️ {t('recalcDriftHint', 'Recalculated total differs from the paid amount')}: {formatCurrency(selectedBreakdown.recomputed_net_salary)} vs {formatCurrency(selectedBreakdown.net_salary)}
             </div>

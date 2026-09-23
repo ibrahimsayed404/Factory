@@ -305,10 +305,14 @@ const upsertPayroll = async (data) => {
 
   if (weekStart) {
     const existing = await pool.query(
-      'SELECT id FROM payroll WHERE employee_id = $1 AND week_start = $2',
+      'SELECT id, status FROM payroll WHERE employee_id = $1 AND week_start = $2',
       [employee_id, weekStart]
     );
     if (existing.rows.length > 0) {
+      if (existing.rows[0].status === 'paid') {
+        const lockedRecord = await pool.query('SELECT * FROM payroll WHERE id = $1', [existing.rows[0].id]);
+        return lockedRecord.rows[0];
+      }
       if (supportsSnapshots) {
         const result = supportsEmployeeName
           ? await pool.query(
@@ -474,10 +478,14 @@ const upsertPayroll = async (data) => {
   }
   
   const existing = await pool.query(
-    'SELECT id FROM payroll WHERE employee_id = $1 AND month = $2 AND year = $3 AND week_start IS NULL',
+    'SELECT id, status FROM payroll WHERE employee_id = $1 AND month = $2 AND year = $3 AND week_start IS NULL',
     [employee_id, effectiveMonth, effectiveYear]
   );
   if (existing.rows.length > 0) {
+    if (existing.rows[0].status === 'paid') {
+      const lockedRecord = await pool.query('SELECT * FROM payroll WHERE id = $1', [existing.rows[0].id]);
+      return lockedRecord.rows[0];
+    }
     if (supportsSnapshots) {
       const result = supportsEmployeeName
         ? await pool.query(

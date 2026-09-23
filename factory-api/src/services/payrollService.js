@@ -410,7 +410,7 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
 
   const recomputedBonus = round2(computedAutoBonus + storedManualBonus + hrBonus + hrOvertime);
   const recomputedDeductions = round2(computedAutoDeductions + storedManualDeductions + hrPenalty + loanDeduction);
-  const recomputedNet = round2(baseSalary + recomputedBonus - recomputedDeductions);
+  const recomputedNet = Math.max(0, round2(baseSalary + recomputedBonus - recomputedDeductions));
 
   const weeklyPaymentEstimate = row.week_start
     ? recomputedNet
@@ -519,7 +519,7 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
     // We always display the stored net salary, bonus, and deductions, while flagging
     // hasRecalcDrift if live recalculation differs from stored amounts.
     const storedNet = round2(Number(row.net_salary || 0));
-    const hasRecalcDrift = Math.abs(computed.recomputedNet - storedNet) >= 0.01;
+    const hasRecalcDrift = !isPaid && Math.abs(computed.recomputedNet - storedNet) >= 0.01;
     const displayBonus = round2(Number(row.bonus || 0));
     const displayDeductions = round2(Number(row.deductions || 0));
     const displayNet = storedNet;
@@ -668,7 +668,7 @@ const calculatePayrollForEmployee = async (employee, options) => {
 
   const finalBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
   const finalDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
-  const net_salary = round2(base_salary + finalBonus - finalDeductions);
+  const net_salary = Math.max(0, round2(base_salary + finalBonus - finalDeductions));
 
   const savedRecord = await payrollRepository.upsertPayroll({
     employee_id: employee.id,
@@ -761,10 +761,25 @@ const generatePayroll = async (data) => {
 
   const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
   const policy = await getPayrollPolicy();
+  const useWeeklySalary = Boolean(weekStart);
 
   const commonOptions = { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy };
 
+  if (useWeeklySalary && weekStart) {
+    const existingRecords = await payrollRepository.getPayrollRecordsForWeek(weekStart);
+    if (existingRecords.length > 0 && existingRecords.every(r => r.status === 'paid')) {
+      throw new ApiError(400, `Cannot regenerate payroll: all records for week ${weekStart} are already marked as paid and locked.`);
+    }
+  }
+
   if (employee_id) {
+    if (useWeeklySalary && weekStart) {
+      const existingRecords = await payrollRepository.getPayrollRecordsForWeek(weekStart);
+      const target = existingRecords.find(r => r.employee_id === Number(employee_id));
+      if (target && target.status === 'paid') {
+        throw new ApiError(400, 'Cannot recalculate payroll for an employee whose record is already marked as paid.');
+      }
+    }
     const employee = await payrollRepository.getEmployeeForPayroll(employee_id, supportsWeekendDays);
     if (!employee) throw new ApiError(404, 'Employee not found');
     return calculatePayrollForEmployee(employee, commonOptions);
@@ -905,7 +920,7 @@ const updateManualAdjustments = async (id, data = {}) => {
 
   const finalBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
   const finalDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
-  const netSalary = round2(baseSalary + finalBonus - finalDeductions);
+  const netSalary = Math.max(0, round2(baseSalary + finalBonus - finalDeductions));
 
   const saved = await payrollRepository.updateManualAdjustments(id, {
     manualBonus: round2(manualBonus),
