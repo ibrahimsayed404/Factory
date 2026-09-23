@@ -1,3 +1,4 @@
+const pool = require('../db/pool');
 const payrollRepository = require('../repositories/payrollRepository');
 const accountingService = require('./accountingService');
 const { getAttendancePayrollPolicy } = require('../utils/policySettings');
@@ -514,14 +515,14 @@ const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateT
     const empLeaves = useBatching ? (leavesBatchMap.get(row.employee_id) || []) : null;
     const computed = await computeLivePayrollFigures(row, null, policy, empAtt, empLeaves);
 
-    // For PAID records the frozen stored figures are authoritative (they were
-    // journaled to accounting). Show those, but flag any drift vs. a fresh
-    // recompute so the admin can spot attendance edited after payment.
+    // Stored figures represent the authoritative generated payroll amounts.
+    // We always display the stored net salary, bonus, and deductions, while flagging
+    // hasRecalcDrift if live recalculation differs from stored amounts.
     const storedNet = round2(Number(row.net_salary || 0));
-    const hasRecalcDrift = isPaid && Math.abs(computed.recomputedNet - storedNet) >= 0.01;
-    const displayBonus = isPaid ? round2(Number(row.bonus || 0)) : computed.recomputedBonus;
-    const displayDeductions = isPaid ? round2(Number(row.deductions || 0)) : computed.recomputedDeductions;
-    const displayNet = isPaid ? storedNet : computed.recomputedNet;
+    const hasRecalcDrift = Math.abs(computed.recomputedNet - storedNet) >= 0.01;
+    const displayBonus = round2(Number(row.bonus || 0));
+    const displayDeductions = round2(Number(row.deductions || 0));
+    const displayNet = storedNet;
     const weeklyPaymentEstimate = row.week_start
       ? displayNet
       : (displayNet / Math.max(1, policy.weeksPerMonth));
@@ -769,10 +770,12 @@ const generatePayroll = async (data) => {
     return calculatePayrollForEmployee(employee, commonOptions);
   }
 
-  // Bulk generation for all active employees: never fail the whole batch because
-  // one employee errored — collect per-employee outcomes so the caller can see
-  // exactly which succeeded and which failed.
-  const employees = await payrollRepository.getActiveEmployeesForPayroll(supportsWeekendDays);
+  // Bulk generation: for weekly payroll, select all active employees, employees terminated during/after
+  // this week, or any employee with attendance in this week so that no worked days are dropped.
+  const employees = (useWeeklySalary && weekStart && weekEnd)
+    ? await payrollRepository.getEmployeesForPayrollWeek({ weekStart, weekEnd, supportsWeekendDays })
+    : await payrollRepository.getActiveEmployeesForPayroll(supportsWeekendDays);
+
   const generated = [];
   const failed = [];
   for (const employee of employees) {
@@ -790,20 +793,6 @@ const markPaid = async (id) => {
   const record = await payrollRepository.getPayrollById(id);
   if (!record) throw new ApiError(404, 'Record not found');
   if (record.status === 'paid') throw new ApiError(400, 'Record is already paid');
-
-  // Recalculate net_salary from attendance to detect stale amounts.
-  // Use snapshot values from the record (not live employee data) so the
-  // drift check compares against the same salary used at generation time.
-  const policy = await getPayrollPolicy();
-  const computed = await computeLivePayrollFigures(record, null, policy);
-  const storedNet = round2(Number(record.net_salary || 0));
-
-  if (Math.abs(computed.recomputedNet - storedNet) >= 0.01) {
-    throw new ApiError(
-      409,
-      `Payroll amount has changed since generation — please regenerate payroll before marking as paid (stored: ${storedNet}, recalculated: ${computed.recomputedNet})`
-    );
-  }
 
   const result = await payrollRepository.updatePayrollPaid(id);
   if (!result) throw new ApiError(404, 'Record not found');
@@ -985,10 +974,56 @@ const deletePayrollWeek = async (weekStartInput) => {
   return { success: true, message: 'Payroll week deleted successfully', deleted: records.length };
 };
 
+const markWeekPaid = async (weekStartInput) => {
+  const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
+  if (!normalizedWeekStartDate) throw new ApiError(400, 'Invalid week_start date format');
+  const weekStart = toIsoDate(toSaturdayUtc(normalizedWeekStartDate));
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pendingRows = await payrollRepository.getPendingPayrollRecordsForWeek(weekStart, client);
+    if (pendingRows.length === 0) {
+      await client.query('COMMIT');
+      return { success: true, message: 'No pending records to pay for this week', paid_count: 0 };
+    }
+
+    const updatedRes = await client.query(
+      `UPDATE payroll p
+       SET status = 'paid',
+           paid_at = NOW(),
+           employee_name = COALESCE(p.employee_name, e.name)
+       FROM employees e
+       WHERE p.employee_id = e.id
+         AND p.week_start = $1::date
+         AND p.status = 'pending'
+       RETURNING p.*`,
+      [weekStart]
+    );
+
+    for (const row of updatedRes.rows) {
+      await accountingService.postPayrollPayment(row, client);
+    }
+
+    await client.query('COMMIT');
+    return {
+      success: true,
+      message: `Successfully marked ${updatedRes.rows.length} records as paid for week ${weekStart}`,
+      paid_count: updatedRes.rows.length,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   getPayroll,
   generatePayroll,
   markPaid,
+  markWeekPaid,
   updateManualAdjustments,
   deletePayrollWeek,
   calculateInferredAbsentDays,

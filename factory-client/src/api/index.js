@@ -289,6 +289,7 @@ export const payrollApi = {
   create: (body)        => api.post('/payroll', body),
   updateManual: (id, body) => api.put(`/payroll/${id}/manual`, body),
   pay:    (id)          => api.put(`/payroll/${id}/pay`),
+  payWeek: (weekStart)  => api.put(`/payroll/week/${weekStart}/pay`),
   deleteWeek: (weekStart) => api.delete(`/payroll/week/${weekStart}`),
 };
 

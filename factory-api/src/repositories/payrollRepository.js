@@ -150,6 +150,33 @@ const getActiveEmployeesForPayroll = async (supportsWeekendDays) => {
   return result.rows;
 };
 
+/**
+ * Retrieves all employees eligible for a specific payroll week:
+ * 1. Hired on or before weekEnd (or hire_date IS NULL)
+ * 2. Not terminated before weekStart (termination_date IS NULL OR termination_date >= weekStart)
+ * 3. And either currently active, terminated during/after this week, or having attendance in this week.
+ */
+const getEmployeesForPayrollWeek = async ({ weekStart, weekEnd, supportsWeekendDays }) => {
+  const weekendCol = supportsWeekendDays ? 'e.weekend_days, ' : '';
+  const query = `
+    SELECT e.id, e.name, e.salary, ${weekendCol} e.shift, e.shift_start, e.shift_end, e.hire_date, e.termination_date, e.status
+    FROM employees e
+    WHERE (e.hire_date IS NULL OR e.hire_date <= $2::date)
+      AND (e.termination_date IS NULL OR e.termination_date >= $1::date)
+      AND (
+        COALESCE(e.status, 'active') = 'active'
+        OR e.termination_date >= $1::date
+        OR EXISTS (
+          SELECT 1 FROM attendance a
+          WHERE a.employee_id = e.id AND a.date >= $1::date AND a.date <= $2::date
+        )
+      )
+    ORDER BY e.id
+  `;
+  const result = await pool.query(query, [weekStart, weekEnd]);
+  return result.rows;
+};
+
 const getApprovedLeavesForPayroll = async (employeeId, startDate, endDate) => {
   if (!employeeId || !startDate || !endDate) return [];
   const result = await pool.query(
@@ -796,6 +823,19 @@ const getPayrollRecordsForWeek = async (weekStart) => {
   return result.rows;
 };
 
+const getPendingPayrollRecordsForWeek = async (weekStart, client = pool) => {
+  const result = await client.query(
+    `SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end,
+            COALESCE(p.employee_name, e.name) AS name
+     FROM payroll p
+     LEFT JOIN employees e ON p.employee_id = e.id
+     WHERE p.week_start = $1::date AND p.status = 'pending'
+     ORDER BY p.id ASC`,
+    [weekStart]
+  );
+  return result.rows;
+};
+
 const deletePayrollRecord = async (id) => {
   await pool.query('DELETE FROM payroll WHERE id = $1', [id]);
 };
@@ -827,6 +867,7 @@ module.exports = {
   getPayrollRecords,
   getEmployeeForPayroll,
   getActiveEmployeesForPayroll,
+  getEmployeesForPayrollWeek,
   getApprovedLeavesForPayroll,
   getApprovedLeavesBatchForPayroll,
   getAttendanceForPayroll,
@@ -842,6 +883,7 @@ module.exports = {
   getPayrollById,
   updateManualAdjustments,
   getPayrollRecordsForWeek,
+  getPendingPayrollRecordsForWeek,
   deletePayrollRecord,
   isDatePayrollPaid,
 };

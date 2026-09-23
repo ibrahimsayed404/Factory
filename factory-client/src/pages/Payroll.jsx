@@ -200,6 +200,21 @@ export default function Payroll() {
     }
   };
 
+  const handlePayWeek = async (weekStart) => {
+    if (!globalThis.window.confirm(t('confirmPayEntireWeek', 'هل أنت متأكد من اعتماد وصرف رواتب هذا الأسبوع بالكامل؟ سيتم إغلاق الأسبوع وترحيل المصروفات للتقارير واللوحة الرئيسية.'))) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      const normalizedWeekStart = getLocalDateString(weekStart);
+      await payrollApi.payWeek(normalizedWeekStart);
+      await refetch({ silent: true });
+    } catch (e) {
+      setActionError(e.message || t('payrollPayWeekFailed', 'Failed to mark week as paid.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openAdjustModal = (row) => {
     setAdjustTarget(row);
     const bd = row.payroll_breakdown || {};
@@ -593,6 +608,11 @@ export default function Payroll() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Badge variant="default">{group.paidCount}/{group.employeeCount} paid</Badge>
                   <Btn size="sm" variant="primary" onClick={() => setSelectedWeekStart(group.weekStart)}>{t('open', 'Open')}</Btn>
+                  {group.weekStart !== 'monthly' && group.paidCount < group.employeeCount && (
+                    <Btn size="sm" variant="success" onClick={() => handlePayWeek(group.weekStart)} disabled={saving}>
+                      💰 {t('payWeek', 'اعتماد وصرف')}
+                    </Btn>
+                  )}
                   {group.weekStart !== 'monthly' && group.paidCount === 0 && (
                     <Btn size="sm" variant="danger" onClick={() => handleDeleteWeek(group.weekStart)}>{t('delete', 'Delete')}</Btn>
                   )}
@@ -619,7 +639,12 @@ export default function Payroll() {
               <div style={{ fontSize: 16, fontWeight: 700 }}>{formatWeekInterval(selectedWeek.weekStart === 'monthly' ? null : selectedWeek.weekStart, selectedWeek.weekEnd, t)}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selectedWeek.employeeCount} employee{selectedWeek.employeeCount === 1 ? '' : 's'} payrolls</div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {selectedWeek.weekStart !== 'monthly' && selectedWeek.paidCount < selectedWeek.employeeCount && (
+                <Btn variant="success" onClick={() => handlePayWeek(selectedWeek.weekStart)} loading={saving}>
+                  💰 {t('payEntireWeek', 'اعتماد وصرف الأسبوع بالكامل')}
+                </Btn>
+              )}
               <Btn onClick={handleExportPDF}>{t('exportPDF', 'Export PDF')}</Btn>
               <Btn onClick={() => setSelectedWeekStart(null)}>{t('back', 'Back to weeks')}</Btn>
             </div>

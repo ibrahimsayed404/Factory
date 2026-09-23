@@ -31,6 +31,13 @@ const markPaid = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const markWeekPaid = async (req, res, next) => {
+  try {
+    const result = await payrollService.markWeekPaid(req.params.weekStart);
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
 const updateManual = async (req, res, next) => {
   try {
     const result = await payrollService.updateManualAdjustments(req.params.id, req.body);
@@ -52,4 +59,4 @@ const autoRun = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAll, create, markPaid, updateManual, deleteWeek, autoRun };
+module.exports = { getAll, create, markPaid, markWeekPaid, updateManual, deleteWeek, autoRun };
