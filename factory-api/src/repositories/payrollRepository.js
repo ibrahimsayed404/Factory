@@ -61,6 +61,7 @@ const getPayrollRecordsCount = async ({ weekStart, month, year, status, dateFrom
   if (month) { countParams.push(month); countQuery += ` AND p.month = $${countParams.length}`; }
   if (year) { countParams.push(year); countQuery += ` AND p.year = $${countParams.length}`; }
   if (status) { countParams.push(status); countQuery += ` AND p.status = $${countParams.length}`; }
+  else { countQuery += ` AND p.status != 'void'`; }
   if (dateFrom) { countParams.push(dateFrom); countQuery += ` AND p.week_start >= $${countParams.length}::date`; }
   if (dateTo) { countParams.push(dateTo); countQuery += ` AND p.week_start <= $${countParams.length}::date`; }
   const countResult = await pool.query(countQuery, countParams);
@@ -126,6 +127,7 @@ const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dat
   if (month) { params.push(month); query += ` AND p.month = $${params.length}`; }
   if (year) { params.push(year); query += ` AND p.year = $${params.length}`; }
   if (status) { params.push(status); query += ` AND p.status = $${params.length}`; }
+  else { query += ` AND p.status != 'void'`; }
   if (dateFrom) { params.push(dateFrom); query += ` AND p.week_start >= $${params.length}::date`; }
   if (dateTo) { params.push(dateTo); query += ` AND p.week_start <= $${params.length}::date`; }
 

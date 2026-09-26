@@ -469,14 +469,16 @@ const hrOverview = async (req, res, next) => {
           COALESCE(SUM(deductions),0)::float AS total_deductions,
           SUM(CASE WHEN status='paid' THEN 1 ELSE 0 END)::int AS paid_count
         FROM payroll
-        WHERE (
-          week_start IS NOT NULL
-          AND week_start <= $2::date
-          AND COALESCE(week_end, week_start) >= $1::date
-        ) OR (
-          week_start IS NULL
-          AND make_date(year, month, 1) <= $2::date
-          AND (make_date(year, month, 1) + interval '1 month' - interval '1 day') >= $1::date
+        WHERE status != 'void' AND (
+          (
+            week_start IS NOT NULL
+            AND week_start <= $2::date
+            AND COALESCE(week_end, week_start) >= $1::date
+          ) OR (
+            week_start IS NULL
+            AND make_date(year, month, 1) <= $2::date
+            AND (make_date(year, month, 1) + interval '1 month' - interval '1 day') >= $1::date
+          )
         )
       `, [startDate, endDate]),
 
@@ -505,14 +507,16 @@ const hrOverview = async (req, res, next) => {
           COALESCE(SUM(CASE WHEN status='paid' THEN net_salary ELSE 0 END),0)::float AS paid_payout,
           COALESCE(SUM(CASE WHEN status='pending' THEN net_salary ELSE 0 END),0)::float AS pending_payout
         FROM payroll
-        WHERE (
-          week_start IS NOT NULL
-          AND week_start <= $2::date
-          AND COALESCE(week_end, week_start) >= $1::date
-        ) OR (
-          week_start IS NULL
-          AND make_date(year, month, 1) <= $2::date
-          AND (make_date(year, month, 1) + interval '1 month' - interval '1 day') >= $1::date
+        WHERE status != 'void' AND (
+          (
+            week_start IS NOT NULL
+            AND week_start <= $2::date
+            AND COALESCE(week_end, week_start) >= $1::date
+          ) OR (
+            week_start IS NULL
+            AND make_date(year, month, 1) <= $2::date
+            AND (make_date(year, month, 1) + interval '1 month' - interval '1 day') >= $1::date
+          )
         )
         GROUP BY 1, 2, 3
         ORDER BY 2
