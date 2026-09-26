@@ -1,5 +1,6 @@
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
+const path = require('node:path');
 const pool = require('../db/pool');
 const salesRepository = require('../repositories/salesRepository');
 const auditService = require('./auditService');
@@ -278,6 +279,158 @@ const addCustomerPayment = async (userId, customerId, file, data, reqContext = n
     if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
       try { fs.unlinkSync(uploadedFilePath); } catch (unlinkErr) { console.warn('Failed to remove uploaded evidence:', unlinkErr.message); }
     }
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+const updateCustomerPayment = async (userId, customerId, paymentId, file, data, reqContext = null) => {
+  const client = await pool.connect();
+  const uploadedFilePath = file ? file.path : null;
+  try {
+    await client.query('BEGIN');
+
+    const customer = await salesRepository.getCustomerById(customerId, client);
+    if (!customer) throw new ApiError(404, 'Customer not found');
+
+    const existingPayment = await salesRepository.getCustomerPaymentById(client, customerId, paymentId);
+    if (!existingPayment) throw new ApiError(404, 'Payment not found');
+
+    if (file) {
+      await storageService.uploadToCloud(file, 'payment-evidence');
+    }
+    const evidenceUrl = file ? `/api/uploads/payment-evidence/${file.filename}` : existingPayment.evidence_url;
+    const evidenceName = file ? file.originalname : existingPayment.evidence_name;
+    const evidenceMime = file ? file.mimetype : existingPayment.evidence_mime;
+
+    // Rollback previous invoice allocations for this payment
+    const oldAllocations = await salesRepository.getPaymentAllocations(client, paymentId);
+    for (const alloc of oldAllocations) {
+      await salesRepository.decrementInvoicePaid(client, alloc.invoice_id, Number(alloc.amount || 0));
+    }
+    await salesRepository.deletePaymentAllocations(client, paymentId);
+
+    const newAmount = data.amount !== undefined && data.amount !== null && data.amount !== ''
+      ? Number(data.amount)
+      : Number(existingPayment.amount);
+
+    if (newAmount <= 0) {
+      throw new ApiError(400, 'Amount must be greater than 0');
+    }
+
+    const updatedPayment = await salesRepository.updateCustomerPayment(client, paymentId, {
+      payment_date: data.payment_date || existingPayment.payment_date,
+      amount: newAmount,
+      payment_method: data.payment_method !== undefined ? data.payment_method : existingPayment.payment_method,
+      reference_number: data.reference_number !== undefined ? data.reference_number : existingPayment.reference_number,
+      notes: data.notes !== undefined ? data.notes : existingPayment.notes,
+      evidenceUrl,
+      evidenceName,
+      evidenceMime,
+    });
+
+    // Re-apply allocations to open invoices
+    let remaining = Number(updatedPayment.amount || 0);
+    const targetInvoiceId = data.invoice_id !== undefined ? data.invoice_id : existingPayment.invoice_id;
+    const invoices = await salesRepository.getOpenInvoicesForCustomer(client, customerId, targetInvoiceId);
+    for (const invoice of invoices) {
+      if (remaining <= 0) break;
+      const outstanding = Number(invoice.total_amount || 0) - Number(invoice.paid_amount || 0) - Number(invoice.credited_amount || 0);
+      const applied = Math.min(outstanding, remaining);
+      if (applied <= 0) continue;
+      await salesRepository.insertPaymentAllocation(client, updatedPayment.id, invoice.id, applied);
+      await salesRepository.incrementInvoicePaid(client, invoice.id, applied);
+      remaining -= applied;
+    }
+
+    await recalculateCustomerOrderBalances(client, customerId);
+    await accountingService.deleteCustomerPaymentEntry(updatedPayment.id, client);
+    await accountingService.postCustomerPayment(updatedPayment, client);
+    await auditService.log(userId, 'UPDATE', 'customer_payments', updatedPayment.id, {
+      old: {
+        amount: existingPayment.amount,
+        payment_date: existingPayment.payment_date,
+        notes: existingPayment.notes,
+        payment_method: existingPayment.payment_method,
+      },
+      new: {
+        amount: updatedPayment.amount,
+        payment_date: updatedPayment.payment_date,
+        notes: updatedPayment.notes,
+        payment_method: updatedPayment.payment_method,
+      },
+    }, reqContext, client);
+
+    await client.query('COMMIT');
+
+    if (file && existingPayment.evidence_url && existingPayment.evidence_url !== evidenceUrl && existingPayment.evidence_url.startsWith('/api/uploads/payment-evidence/')) {
+      const oldFilename = path.basename(existingPayment.evidence_url);
+      const oldPath = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence', oldFilename);
+      if (fs.existsSync(oldPath)) {
+        try { fs.unlinkSync(oldPath); } catch (e) { console.warn('Failed to remove old evidence file:', e.message); }
+      }
+    }
+
+    return updatedPayment;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) {
+      try { fs.unlinkSync(uploadedFilePath); } catch (unlinkErr) { console.warn('Failed to remove uploaded evidence:', unlinkErr.message); }
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+const deleteCustomerPayment = async (userId, customerId, paymentId, reqContext = null) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const customer = await salesRepository.getCustomerById(customerId, client);
+    if (!customer) throw new ApiError(404, 'Customer not found');
+
+    const existingPayment = await salesRepository.getCustomerPaymentById(client, customerId, paymentId);
+    if (!existingPayment) throw new ApiError(404, 'Payment not found');
+
+    // Rollback previous invoice allocations
+    const oldAllocations = await salesRepository.getPaymentAllocations(client, paymentId);
+    for (const alloc of oldAllocations) {
+      await salesRepository.decrementInvoicePaid(client, alloc.invoice_id, Number(alloc.amount || 0));
+    }
+    await salesRepository.deletePaymentAllocations(client, paymentId);
+
+    // Delete customer payment record
+    await salesRepository.deleteCustomerPayment(client, paymentId);
+
+    // Recalculate customer order balances
+    await recalculateCustomerOrderBalances(client, customerId);
+
+    // Clean up accounting journal entries
+    await accountingService.deleteCustomerPaymentEntry(paymentId, client);
+
+    // Audit log
+    await auditService.log(userId, 'DELETE', 'customer_payments', paymentId, {
+      amount: existingPayment.amount,
+      payment_date: existingPayment.payment_date,
+      notes: existingPayment.notes,
+    }, reqContext, client);
+
+    await client.query('COMMIT');
+
+    if (existingPayment.evidence_url && existingPayment.evidence_url.startsWith('/api/uploads/payment-evidence/')) {
+      const filename = path.basename(existingPayment.evidence_url);
+      const filePath = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence', filename);
+      if (fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch (e) { console.warn('Failed to remove evidence file:', e.message); }
+      }
+    }
+
+    return { success: true, message: 'Payment deleted successfully' };
+  } catch (err) {
+    await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
@@ -814,6 +967,8 @@ module.exports = {
   addCustomer,
   getCustomerLedger,
   addCustomerPayment,
+  updateCustomerPayment,
+  deleteCustomerPayment,
   listSalesOrders,
   getSalesOrder,
   createSalesOrder,

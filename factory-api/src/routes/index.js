@@ -17,6 +17,8 @@ const manufacturingRoutes = require('./manufacturing.routes');
 const qcRoutes = require('./qc.routes');
 const hrRoutes = require('./hr.routes');
 const accountingRoutes = require('./accounting.routes');
+const printShopRoutes = require('./printShop.routes');
+const productionCycleRoutes = require('./productionCycle.routes');
 
 router.use('/', authRoutes);
 router.use('/', dashboardRoutes);
@@ -25,6 +27,8 @@ router.use('/', salesRoutes);
 router.use('/', productRoutes);
 router.use('/', productionRoutes);
 router.use('/', productionTrackingRoutes);
+router.use('/', printShopRoutes);
+router.use('/', productionCycleRoutes);
 router.use('/', payrollRoutes);
 router.use('/', qcRoutes);
 router.use('/', reportsRoutes);

@@ -7,6 +7,12 @@ import {
 import { reportsApi } from '../api';
 import { useFetch } from '../hooks/useFetch';
 import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../components/ui';
+import {
+  buildSalesReportHtml,
+  buildProductionReportHtml,
+  buildHrReportHtml,
+  buildPrintShopsReportHtml,
+} from '../utils/reportTemplateGenerator';
 
 let reportExportModules;
 const loadReportExportModules = async () => {
@@ -22,57 +28,92 @@ const loadReportExportModules = async () => {
 };
 
 /* ── Export helpers ─────────────────────────────────── */
-const exportPDF = async (filename, title, sections) => {
-  const [{ jsPDF, autoTable }, { downloadPdfBlob }] = await Promise.all([
+const exportPDF = async (filename, title, sections, action = 'print', htmlContent = null) => {
+  // If rich self-explanatory HTML content is provided, prioritize native high-definition browser rendering
+  // This gives the user full Arabic Cairo/Segoe UI fonts, color badges, KPI cards, and "Save as PDF" option
+  if (htmlContent) {
+    const { printHtmlDocument } = await import('../utils/printDocument');
+    const ok = printHtmlDocument(htmlContent, { title: filename.replace(/\.pdf$/i, '') || title });
+    if (ok) return;
+  }
+
+  const [{ jsPDF, autoTable }, { downloadPdfBlob, printPdfBlob }] = await Promise.all([
     loadReportExportModules(),
     import('../utils/printDocument'),
   ]);
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
+  // Landscape A4 orientation: 297mm width x 210mm height gives ample room for 8+ columns without text-wrapping
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth(); // 297mm
+  const H = doc.internal.pageSize.getHeight(); // 210mm
 
-  doc.setFillColor(15, 17, 23);
+  // Dark Corporate Header Banner
+  doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, W, 18, 'F');
-  doc.setTextColor(34, 211, 160);
-  doc.setFontSize(13);
+  doc.setTextColor(37, 99, 235);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('FabriCore Factory Management', 14, 12);
-  doc.setTextColor(180, 180, 180);
-  doc.setFontSize(9);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, W - 14, 12, { align: 'right' });
+  doc.text('BLACK FOX FACTORY MANAGEMENT', 14, 10);
+  doc.setTextColor(148, 163, 184);
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Executive Operational & Financial Audit Report', 14, 14.5);
+  doc.setTextColor(203, 213, 225);
+  doc.setFontSize(8);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, W - 14, 11, { align: 'right' });
 
-  doc.setTextColor(30, 30, 30);
-  doc.setFontSize(16);
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(title, 14, 30);
-  doc.setDrawColor(34, 211, 160);
+  doc.text(title, 14, 28);
+  doc.setDrawColor(37, 99, 235);
   doc.setLineWidth(0.8);
-  doc.line(14, 33, W - 14, 33);
+  doc.line(14, 31, W - 14, 31);
 
-  let y = 40;
+  let y = 37;
 
-  sections.forEach(({ title: sTitle, head, rows, metrics }) => {
-    if (y > 250) { doc.addPage(); y = 20; }
-    doc.setFontSize(11);
+  sections.forEach(({ title: sTitle, description, head, rows, foot, metrics }) => {
+    if (y > 165) { doc.addPage(); y = 18; }
+    doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(50, 50, 50);
+    doc.setTextColor(15, 23, 42);
     doc.text(sTitle, 14, y);
-    y += 6;
+    y += 4.5;
+
+    if (description) {
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text(description, 14, y);
+      y += 5.5;
+    }
 
     if (metrics) {
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
+      const boxW = Math.min(50, (W - 28 - (metrics.length - 1) * 4) / metrics.length);
       metrics.forEach((m, i) => {
-        const x = 14 + i * 55;
-        doc.setFillColor(240, 250, 246);
-        doc.roundedRect(x, y, 50, 12, 2, 2, 'F');
-        doc.setTextColor(100, 100, 100);
+        const x = 14 + i * (boxW + 4);
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, boxW, 13, 1.5, 1.5, 'FD');
+        doc.setFillColor(37, 99, 235);
+        doc.rect(x, y, boxW, 1.2, 'F');
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(7);
         doc.text(m.label, x + 3, y + 4.5);
-        doc.setTextColor(15, 110, 86);
+        doc.setTextColor(30, 64, 175);
         doc.setFont('helvetica', 'bold');
-        doc.text(String(m.value), x + 3, y + 9.5);
-        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(String(m.value), x + 3, y + 9);
+        if (m.desc) {
+          doc.setTextColor(148, 163, 184);
+          doc.setFontSize(6);
+          doc.setFont('helvetica', 'normal');
+          doc.text(m.desc, x + 3, y + 11.8);
+        }
       });
-      y += 18;
+      y += 17;
     }
 
     if (head && rows?.length) {
@@ -80,23 +121,64 @@ const exportPDF = async (filename, title, sections) => {
         startY: y,
         head: [head],
         body: rows,
+        foot: foot ? [foot] : undefined,
         theme: 'grid',
-        headStyles: { fillColor: [15, 17, 23], textColor: [34, 211, 160], fontStyle: 'bold', fontSize: 8 },
-        bodyStyles: { fontSize: 8, textColor: [40, 40, 40] },
-        alternateRowStyles: { fillColor: [248, 252, 250] },
+        styles: { fontSize: 7, cellPadding: 2, overflow: 'ellipsize' },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
+        bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 2 },
+        footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7.5 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
         margin: { left: 14, right: 14 },
-        styles: { cellPadding: 2.5 },
       });
-      y = doc.lastAutoTable.finalY + 10;
+      y = doc.lastAutoTable.finalY + 8;
     } else if (!metrics) {
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
       doc.setTextColor(150, 150, 150);
-      doc.text('No data available for this period.', 14, y + 4);
-      y += 12;
+      doc.text('No data available for this section in the specified period.', 14, y + 4);
+      y += 8;
     }
   });
 
-  downloadPdfBlob(doc, filename);
+  // Approvals & Signatures Block on last page
+  if (y > 160) { doc.addPage(); y = 20; }
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineDashPattern([2, 2], 0);
+  doc.line(14, y + 2, W - 14, y + 2);
+  doc.setLineDashPattern([], 0);
+  y += 7;
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  const signW = (W - 28 - 16) / 3;
+  ['Prepared & Audited By', 'Finance & Cost Control', 'Executive Approval (Black Fox)'].forEach((title, idx) => {
+    const sx = 14 + idx * (signW + 8);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(203, 213, 225);
+    doc.roundedRect(sx, y, signW, 16, 1.5, 1.5, 'FD');
+    doc.setTextColor(71, 85, 105);
+    doc.setFontSize(7);
+    doc.text(title, sx + signW / 2, y + 4, { align: 'center' });
+    doc.setDrawColor(148, 163, 184);
+    doc.line(sx + 5, y + 11.5, sx + signW - 5, y + 11.5);
+    doc.setFontSize(6);
+    doc.text('Signature & Date', sx + signW / 2, y + 14.5, { align: 'center' });
+  });
+
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Black Fox Clothing Factory — Executive Report — Page ${i} of ${pageCount}`, W / 2, 202, { align: 'center' });
+  }
+
+  if (action === 'download') {
+    downloadPdfBlob(doc, filename);
+  } else {
+    printPdfBlob(doc, title);
+  }
 };
 
 const exportExcel = async (filename, sheets) => {
@@ -114,7 +196,7 @@ const exportExcel = async (filename, sheets) => {
 };
 
 /* ── Colour palette ─────────────────────────────────── */
-const COLORS = ['#22d3a0','#60a5fa','#f5a623','#f05252','#a78bfa','#fb923c'];
+const COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0284c7', '#dc2626'];
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const normalizeMonthlyRows = (rows = []) => rows.map((row) => {
@@ -172,58 +254,88 @@ const SalesTab = ({ startDate, endDate }) => {
     return { expense_date: expenseDate, amount: '', category: '', notes: '' };
   });
 
-  const handlePDF = async () => {
-    setExporting('pdf');
+  const handlePDF = async (action = 'print') => {
+    setExporting(action === 'download' ? 'pdf-download' : 'pdf-print');
     try {
       const monthly = normalizeMonthlyRows(data?.monthly || []);
-      const totalRevenue = (data?.monthly||[]).reduce((a,r) => a+(r.revenue||0),0);
-      const totalSpent = (data?.monthly||[]).reduce((a,r) => a+(r.total_spent||0),0);
-      const totalNet = (data?.monthly||[]).reduce((a,r) => a+(netMode === 'cash' ? (r.net_value||0) : (r.accrual_net_value||0)),0);
-      await exportPDF(`sales-report-${startDate}-to-${endDate}.pdf`, `Sales Report — ${startDate} to ${endDate}`, [
-        {
-          title: 'Summary',
-          metrics: [
-            { label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}` },
-            { label: 'Total Orders', value: (data?.monthly||[]).reduce((a,r) => a+(r.orders||0),0) },
-            { label: 'Collected', value: `$${(data?.monthly||[]).reduce((a,r) => a+(r.collected||0),0).toLocaleString()}` },
-            { label: 'Total Spent', value: `$${totalSpent.toLocaleString()}` },
-            { label: netMode === 'cash' ? 'Net Value (Cash)' : 'Net Value (Accrual)', value: `$${totalNet.toLocaleString()}` },
-          ],
-        },
-        {
-          title: 'Monthly Breakdown',
-          head: ['Month', 'Orders', 'Revenue ($)', 'Collected ($)', 'Spent ($)', netMode === 'cash' ? 'Cash Net ($)' : 'Accrual Net ($)'],
-          rows: monthly.map(r => [
-            r.name,
-            r.orders||0,
-            (r.revenue||0).toLocaleString(),
-            (r.collected||0).toLocaleString(),
-            (r.total_spent||0).toLocaleString(),
-            (netMode === 'cash' ? (r.net_value||0) : (r.accrual_net_value||0)).toLocaleString(),
-          ]),
-        },
-        {
-          title: 'Top Customers',
-          head: ['Customer', 'Orders', 'Revenue ($)', 'Collected ($)'],
-          rows: (data?.top_customers||[]).map(c => [c.name, c.orders, Number(c.revenue||0).toLocaleString(), Number(c.collected||0).toLocaleString()]),
-        },
-        {
-          title: 'Payment Status',
-          head: ['Status', 'Count', 'Amount ($)'],
-          rows: (data?.payment_breakdown||[]).map(p => [p.status, p.count, p.amount.toLocaleString()]),
-        },
-        {
-          title: 'Spend Breakdown',
-          head: ['Type', 'Amount ($)'],
-          rows: [
-            ['Payroll spent', Number(data?.summary?.payroll_spent || 0).toLocaleString()],
-            ['Materials spent', Number(data?.summary?.materials_spent || 0).toLocaleString()],
-            ['Total spent', Number(data?.summary?.total_spent || 0).toLocaleString()],
-            ['Cash net value', Number(data?.summary?.net_value || 0).toLocaleString()],
-            ['Accrual net value', Number(data?.summary?.accrual_net_value || 0).toLocaleString()],
-          ],
-        },
-      ]);
+      const totalRevenue = (data?.monthly || []).reduce((a, r) => a + (r.revenue || 0), 0);
+      const totalSpent = (data?.monthly || []).reduce((a, r) => a + (r.total_spent || 0), 0);
+      const totalNet = (data?.monthly || []).reduce((a, r) => a + (netMode === 'cash' ? (r.net_value || 0) : (r.accrual_net_value || 0)), 0);
+      const totalCollected = (data?.monthly || []).reduce((a, r) => a + (r.collected || 0), 0);
+      const totalOrders = (data?.monthly || []).reduce((a, r) => a + (r.orders || 0), 0);
+
+      const htmlContent = buildSalesReportHtml({ data, startDate, endDate, netMode });
+
+      await exportPDF(
+        `sales-report-${startDate}-to-${endDate}.pdf`,
+        `Sales & Cashflow Report — ${startDate} to ${endDate}`,
+        [
+          {
+            title: 'Executive Financial Summary',
+            description: 'Core revenue, collections, operating costs, and net liquidity indicators.',
+            metrics: [
+              { label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, desc: 'Invoiced orders' },
+              { label: 'Total Orders', value: totalOrders, desc: 'Sales orders count' },
+              { label: 'Collected Cash', value: `$${totalCollected.toLocaleString()}`, desc: 'Liquid funds received' },
+              { label: 'Total Spent', value: `$${totalSpent.toLocaleString()}`, desc: 'Payroll + Materials + Extra' },
+              { label: netMode === 'cash' ? 'Cash Net' : 'Accrual Net', value: `$${totalNet.toLocaleString()}`, desc: netMode === 'cash' ? 'Collected - Spent' : 'Revenue - Costs' },
+            ],
+          },
+          {
+            title: 'Monthly Cashflow Trend',
+            description: 'Chronological comparison of monthly revenue recognition, collections, and net margin.',
+            head: ['Month', 'Orders', 'Revenue ($)', 'Collected ($)', 'Spent ($)', netMode === 'cash' ? 'Cash Net ($)' : 'Accrual Net ($)'],
+            rows: monthly.map(r => [
+              r.name,
+              r.orders || 0,
+              (r.revenue || 0).toLocaleString(),
+              (r.collected || 0).toLocaleString(),
+              (r.total_spent || 0).toLocaleString(),
+              (netMode === 'cash' ? (r.net_value || 0) : (r.accrual_net_value || 0)).toLocaleString(),
+            ]),
+            foot: [
+              'Total Summary',
+              totalOrders,
+              totalRevenue.toLocaleString(),
+              totalCollected.toLocaleString(),
+              totalSpent.toLocaleString(),
+              totalNet.toLocaleString(),
+            ],
+          },
+          {
+            title: 'Top Customers & Receivables',
+            description: 'Major clients performance, invoiced revenue, collected cash, and outstanding balances.',
+            head: ['Customer', 'Orders', 'Revenue ($)', 'Collected ($)', 'Balance Due ($)'],
+            rows: (data?.top_customers || []).map(c => {
+              const rev = Number(c.revenue || 0);
+              const col = Number(c.collected || 0);
+              const due = Math.max(0, rev - col);
+              return [c.name, c.orders, rev.toLocaleString(), col.toLocaleString(), due.toLocaleString()];
+            }),
+          },
+          {
+            title: 'Payment Status Distribution',
+            description: 'Breakdown of orders based on client payment settlement state.',
+            head: ['Status', 'Orders Count', 'Amount ($)'],
+            rows: (data?.payment_breakdown || []).map(p => [p.status, p.count, p.amount.toLocaleString()]),
+          },
+          {
+            title: 'Operating Spend Breakdown',
+            description: 'Distribution of factory expenditures across payroll, materials, and overhead.',
+            head: ['Expense Category', 'Amount ($)'],
+            rows: [
+              ['Payroll & Labor (Direct)', Number(data?.summary?.payroll_spent || 0).toLocaleString()],
+              ['Materials & Raw Fabrics (COGS)', Number(data?.summary?.materials_spent || 0).toLocaleString()],
+              ['Extra Expenses & Overheads', Number(data?.summary?.extra_expenses_spent || data?.summary?.extra_spent || 0).toLocaleString()],
+              ['Total Operating Spend', Number(data?.summary?.total_spent || 0).toLocaleString()],
+              ['Cash Net Balance (Liquid)', Number(data?.summary?.net_value || 0).toLocaleString()],
+              ['Accrual Net Profit (Accounting)', Number(data?.summary?.accrual_net_value || 0).toLocaleString()],
+            ],
+          },
+        ],
+        action,
+        htmlContent
+      );
     } finally { setExporting(''); }
   };
 
@@ -305,9 +417,10 @@ const SalesTab = ({ startDate, endDate }) => {
           <Btn size="sm" variant={netMode === 'cash' ? 'primary' : 'ghost'} onClick={() => setNetMode('cash')}>Cash net</Btn>
           <Btn size="sm" variant={netMode === 'accrual' ? 'primary' : 'ghost'} onClick={() => setNetMode('accrual')}>Accrual net</Btn>
         </div>
-        <div style={{ display:'flex', gap:8 }}>
-        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'Exporting…':'↓ Excel'}</Btn>
-        <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'جاري التصدير…':'↓ Excel'}</Btn>
+          <Btn size="sm" onClick={() => handlePDF('print')} disabled={!!exporting}>{exporting==='pdf-print'?'جاري الفتح…':'🖨️ طباعة (Print / PDF)'}</Btn>
+          <Btn size="sm" variant="primary" onClick={() => handlePDF('download')} disabled={!!exporting}>{exporting==='pdf-download'?'جاري الحفظ…':'⬇️ حفظ ملف PDF'}</Btn>
         </div>
       </div>
 
@@ -427,6 +540,18 @@ const SalesTab = ({ startDate, endDate }) => {
   );
 };
 
+/* ── Stage Label Helper ────────────────────────────── */
+const getStageLabel = (stage) => {
+  switch (stage) {
+    case 'cutting': return '1. القص';
+    case 'sorting': return '2. الفرز';
+    case 'printing': return '3. المطبعة';
+    case 'ready_for_delivery': return '4. جاهز للتسليم';
+    case 'delivered': return '✓ تم التسليم';
+    default: return stage;
+  }
+};
+
 /* ── TAB: Production ────────────────────────────────── */
 const ProductionTab = ({ startDate, endDate }) => {
   const { data, loading, error } = useFetch(
@@ -435,96 +560,147 @@ const ProductionTab = ({ startDate, endDate }) => {
   );
   const [exporting, setExporting] = useState('');
 
-  const handlePDF = async () => {
-    setExporting('pdf');
+  const summary = data?.summary || {};
+  const monthly = normalizeMonthlyRows(data?.monthly || []);
+  const printShops = data?.print_shops || [];
+  const models = data?.models || [];
+  const stageBreakdown = (data?.stage_breakdown || []).map(s => ({
+    ...s,
+    name: getStageLabel(s.stage),
+    count: s.orders,
+  }));
+
+  const handlePDF = async (action = 'print') => {
+    setExporting(action === 'download' ? 'pdf-download' : 'pdf-print');
     try {
-      const c = data?.completion || {};
-      const rate = c.total > 0 ? Math.round((c.done/c.total)*100) : 0;
-      await exportPDF(`production-report-${startDate}-to-${endDate}.pdf`, `Production Report — ${startDate} to ${endDate}`, [
-        {
-          title: 'Summary',
-          metrics: [
-            { label: 'Total Orders', value: c.total||0 },
-            { label: 'Completed', value: c.done||0 },
-            { label: 'Completion Rate', value: `${rate}%` },
-          ],
-        },
-        {
-          title: 'Monthly Output',
-          head: ['Month','Orders','Completed','Units Ordered','Units Produced'],
-          rows: normalizeMonthlyRows(data?.monthly||[]).map(r => [r.name, r.total||0, r.completed||0, r.units_ordered||0, r.units_produced||0]),
-        },
-        {
-          title: 'Top Employees by Output',
-          head: ['Employee','Orders','Units Produced'],
-          rows: (data?.by_employee||[]).map(e => [e.name, e.orders, e.units_produced]),
-        },
-        {
-          title: 'Status Breakdown',
-          head: ['Status','Count'],
-          rows: (data?.status_breakdown||[]).map(s => [s.status, s.count]),
-        },
-        {
-          title: 'Product Progress',
-          head: ['Product','Orders','Ordered','Produced','Remaining','Completion %','Late Orders','Late Units'],
-          rows: (data?.product_progress||[]).map(p => [
-            p.product_name,
-            p.orders,
-            p.units_ordered,
-            p.units_produced,
-            p.units_remaining,
-            Number(p.completion_rate || 0).toFixed(1),
-            p.late_orders,
-            p.late_units,
-          ]),
-        },
-        {
-          title: 'Late Products',
-          head: ['Product','Late Orders','Late Units','Oldest Due Date'],
-          rows: (data?.late_products||[]).map(p => [p.product_name, p.late_orders, p.late_units, p.oldest_due_date || '—']),
-        },
-      ]);
+      const totalCut = Number(summary.total_cut_units || 0);
+      const totalDelivered = Number(summary.total_delivered_units || 0);
+      const yieldRate = summary.yield_rate || (totalCut > 0 ? ((totalDelivered / totalCut) * 100).toFixed(1) : 0);
+      const totalLoss = Math.max(0, totalCut - totalDelivered);
+
+      const htmlContent = buildProductionReportHtml({ data, startDate, endDate });
+
+      await exportPDF(
+        `production-pipeline-report-${startDate}-to-${endDate}.pdf`,
+        `Production Pipeline & Quality Report — ${startDate} to ${endDate}`,
+        [
+          {
+            title: 'Production Cycle & Quality Funnel Summary',
+            description: '4-phase manufacturing overview from cutting to final delivered garments.',
+            metrics: [
+              { label: 'Total Orders', value: summary.total_orders || 0, desc: 'Production orders' },
+              { label: 'Total Cut Pieces', value: `${totalCut.toLocaleString()} pcs`, desc: 'Starting cut units' },
+              { label: 'Delivered Pieces', value: `${totalDelivered.toLocaleString()} pcs`, desc: 'Approved & delivered' },
+              { label: 'Yield Rate', value: `${yieldRate}%`, desc: '(Delivered / Cut) * 100' },
+              { label: 'Total Loss/Defects', value: `${totalLoss.toLocaleString()} pcs`, desc: 'Scrap & missing units' },
+            ],
+          },
+          {
+            title: 'Model-by-Model Output & Defect Matrix',
+            description: 'Granular tracking of cut quantities, sorting, final delivery, and losses per model.',
+            head: ['Model #', 'Model Name', 'Orders', 'Cut Units', 'Sorted', 'Delivered', 'Loss', 'Revenue ($)'],
+            rows: models.map(m => [
+              m.model_number,
+              m.model_name || '—',
+              m.orders,
+              m.cut_units,
+              m.sorted_units,
+              m.delivered_units,
+              m.loss_units,
+              Number(m.revenue || 0).toLocaleString(),
+            ]),
+            foot: [
+              'Total Summary',
+              'All Models',
+              models.reduce((s, m) => s + Number(m.orders || 1), 0),
+              models.reduce((s, m) => s + Number(m.cut_units || 0), 0).toLocaleString(),
+              models.reduce((s, m) => s + Number(m.sorted_units || 0), 0).toLocaleString(),
+              models.reduce((s, m) => s + Number(m.delivered_units || 0), 0).toLocaleString(),
+              models.reduce((s, m) => s + Number(m.loss_units || 0), 0).toLocaleString(),
+              models.reduce((s, m) => s + Number(m.revenue || 0), 0).toLocaleString(),
+            ],
+          },
+          {
+            title: 'Print Shops & Outwork Quality Performance',
+            description: 'Loss rates, sent quantities, and receipt reconciliation for external printing partners.',
+            head: ['Print Shop', 'Phone', 'Orders', 'Sent Units', 'Received Units', 'Loss Units', 'Loss Rate %'],
+            rows: printShops.map(p => [
+              p.print_shop_name,
+              p.phone || '—',
+              p.orders,
+              p.sent_units,
+              p.received_units,
+              p.loss_units,
+              `${p.loss_rate}%`,
+            ]),
+          },
+          {
+            title: 'Monthly Production Output Trend',
+            description: 'Monthly progression of orders placed, completed batches, and garment volume.',
+            head: ['Month', 'Total Orders', 'Delivered Orders', 'Cut Units', 'Delivered Units', 'Delivered Revenue ($)'],
+            rows: monthly.map(r => [
+              r.name,
+              r.total || 0,
+              r.completed || 0,
+              r.units_ordered || 0,
+              r.units_produced || 0,
+              Number(r.revenue || 0).toLocaleString(),
+            ]),
+          },
+        ],
+        action,
+        htmlContent
+      );
     } finally { setExporting(''); }
   };
 
   const handleExcel = async () => {
     setExporting('excel');
     try {
-      await exportExcel(`production-report-${startDate}-to-${endDate}.xlsx`, [
+      await exportExcel(`production-pipeline-report-${startDate}-to-${endDate}.xlsx`, [
         {
-          sheetName: 'Monthly Output',
-          headers: ['Month','Orders','Completed','Units Ordered','Units Produced'],
-          rows: normalizeMonthlyRows(data?.monthly||[]).map(r => [r.name, r.total||0, r.completed||0, r.units_ordered||0, r.units_produced||0]),
-        },
-        {
-          sheetName: 'By Employee',
-          headers: ['Employee','Orders','Units Produced'],
-          rows: (data?.by_employee||[]).map(e => [e.name, e.orders, e.units_produced]),
-        },
-        {
-          sheetName: 'Status Breakdown',
-          headers: ['Status','Count'],
-          rows: (data?.status_breakdown||[]).map(s => [s.status, s.count]),
-        },
-        {
-          sheetName: 'Product Progress',
-          headers: ['Product','Orders','Ordered Units','Produced Units','Remaining Units','Completion %','Late Orders','Late Units','Earliest Late Due Date'],
-          rows: (data?.product_progress||[]).map(p => [
-            p.product_name,
-            p.orders,
-            p.units_ordered,
-            p.units_produced,
-            p.units_remaining,
-            p.completion_rate,
-            p.late_orders,
-            p.late_units,
-            p.earliest_late_due_date || '',
+          sheetName: 'Monthly Trend',
+          headers: ['Month', 'Total Orders', 'Delivered Orders', 'Cut Units', 'Delivered Units', 'Delivered Revenue'],
+          rows: monthly.map(r => [
+            r.name,
+            r.total || 0,
+            r.completed || 0,
+            r.units_ordered || 0,
+            r.units_produced || 0,
+            r.revenue || 0,
           ]),
         },
         {
-          sheetName: 'Late Products',
-          headers: ['Product','Late Orders','Late Units','Oldest Due Date'],
-          rows: (data?.late_products||[]).map(p => [p.product_name, p.late_orders, p.late_units, p.oldest_due_date || '']),
+          sheetName: 'Print Shops',
+          headers: ['Print Shop', 'Phone', 'Orders', 'Sent Units', 'Received Units', 'Loss Units', 'Loss Rate %'],
+          rows: printShops.map(p => [
+            p.print_shop_name,
+            p.phone || '',
+            p.orders,
+            p.sent_units,
+            p.received_units,
+            p.loss_units,
+            p.loss_rate,
+          ]),
+        },
+        {
+          sheetName: 'Models Performance',
+          headers: ['Model #', 'Model Name', 'Orders', 'Cut Units', 'Sorted Units', 'Delivered Units', 'Loss Units', 'Delivered Revenue'],
+          rows: models.map(m => [
+            m.model_number,
+            m.model_name || '',
+            m.orders,
+            m.cut_units,
+            m.sorted_units,
+            m.delivered_units,
+            m.loss_units,
+            m.revenue || 0,
+          ]),
+        },
+        {
+          sheetName: 'Stages Breakdown',
+          headers: ['Stage', 'Stage Name', 'Orders Count', 'Total Units'],
+          rows: stageBreakdown.map(s => [s.stage, s.name, s.orders, s.units]),
         },
       ]);
     } finally { setExporting(''); }
@@ -534,143 +710,273 @@ const ProductionTab = ({ startDate, endDate }) => {
   if (error) return <ErrorMsg msg={error} />;
   if (!data) return null;
 
-  const monthly = normalizeMonthlyRows(data.monthly||[]);
-  const completion = data.completion||{};
-  const productProgress = data.product_progress || [];
-  const lateProducts = data.late_products || [];
-  const lateUnitsTotal = lateProducts.reduce((sum, p) => sum + Number(p.late_units || 0), 0);
-  const completionRate = completion.total > 0 ? Math.round((completion.done/completion.total)*100) : 0;
-  const unitRate = completion.total_units > 0 ? Math.round((completion.produced_units/completion.total_units)*100) : 0;
-
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-      <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
-        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'Exporting…':'↓ Excel'}</Btn>
-        <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Export Toolbar */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>
+          {exporting === 'excel' ? 'جاري التصدير…' : '↓ Excel'}
+        </Btn>
+        <Btn size="sm" onClick={() => handlePDF('print')} disabled={!!exporting}>
+          {exporting === 'pdf-print' ? 'جاري الفتح…' : '🖨️ طباعة (Print / PDF)'}
+        </Btn>
+        <Btn size="sm" variant="primary" onClick={() => handlePDF('download')} disabled={!!exporting}>
+          {exporting === 'pdf-download' ? 'جاري الحفظ…' : '⬇️ حفظ ملف PDF'}
+        </Btn>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
-        <MetricCard label="Total orders"    value={completion.total||0} />
-        <MetricCard label="Completed"       value={completion.done||0}  color="var(--accent)" />
-        <MetricCard label="Completion rate" value={`${completionRate}%`} color={completionRate>70?'var(--accent)':'var(--warn)'} />
-        <MetricCard label="Unit fill rate"  value={`${unitRate}%`}       color={unitRate>70?'var(--accent)':'var(--warn)'} />
-        <MetricCard label="Late units"      value={lateUnitsTotal}        color={lateUnitsTotal > 0 ? 'var(--danger)' : 'var(--accent)'} />
+      {/* 5 Funnel KPI Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+        gap: 14,
+      }}>
+        {/* Stage 1: Cutting */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderTop: '3px solid #0284c7',
+          borderRadius: 10,
+          padding: '16px 18px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>
+            <span>✂️ 1. إجمالي القص</span>
+            <span>{summary.total_orders || 0} أوردر</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#0284c7', marginTop: 8 }}>
+            {Number(summary.total_cut_units || 0).toLocaleString()} <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>قطعة</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            الكميات المقصوصة في المصنع
+          </div>
+        </div>
+
+        {/* Stage 2: Sorting */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderTop: '3px solid #d97706',
+          borderRadius: 10,
+          padding: '16px 18px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>
+            <span>🗂️ 2. الفرز والعجز</span>
+            <span style={{ color: summary.cutting_loss_units > 0 ? '#dc2626' : '#059669' }}>
+              هالك: {summary.cutting_loss_units || 0} ق
+            </span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#d97706', marginTop: 8 }}>
+            {Number(summary.total_sorted_units || 0).toLocaleString()} <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>قطعة</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            القطع المفروزة بعد القص
+          </div>
+        </div>
+
+        {/* Stage 3: Printing */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderTop: '3px solid #7c3aed',
+          borderRadius: 10,
+          padding: '16px 18px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>
+            <span>🖨️ 3. المطابع المستلمة</span>
+            <span style={{ color: summary.printing_loss_units > 0 ? '#dc2626' : '#059669' }}>
+              عجز: {summary.printing_loss_units || 0} ق
+            </span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#7c3aed', marginTop: 8 }}>
+            {Number(summary.total_print_received_units || 0).toLocaleString()} <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>/ {Number(summary.total_print_sent_units || 0).toLocaleString()} ق</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            المستلم من المطابع والورش
+          </div>
+        </div>
+
+        {/* Stage 4: Delivery */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderTop: '3px solid #059669',
+          borderRadius: 10,
+          padding: '16px 18px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>
+            <span>🚚 4. المسلم للعملاء</span>
+            <span>{summary.delivered_orders || 0} أوردر</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#059669', marginTop: 8 }}>
+            {Number(summary.total_delivered_units || 0).toLocaleString()} <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>قطعة</span>
+          </div>
+          <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 4 }}>
+            إيراد: {Number(summary.total_delivered_revenue || 0).toLocaleString()} ج.م
+          </div>
+        </div>
+
+        {/* Yield Rate */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderTop: `3px solid ${Number(summary.yield_rate || 0) >= 80 ? '#059669' : '#d97706'}`,
+          borderRadius: 10,
+          padding: '16px 18px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 12, fontWeight: 700 }}>
+            <span>⚡ معدل الكفاءة (Yield)</span>
+            <span>نسبة الإنجاز</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: Number(summary.yield_rate || 0) >= 80 ? '#059669' : '#d97706', marginTop: 8 }}>
+            {summary.yield_rate || 0}%
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            القطع المسلمة بنجاح من المقصوص
+          </div>
+        </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
+      {/* Charts Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+        {/* Monthly Output Chart */}
         <Card>
-          <SectionTitle>Units ordered vs produced — {startDate} to {endDate}</SectionTitle>
-          <ResponsiveContainer width="100%" height={220}>
+          <SectionTitle>القطع المقصوصة مقابل المسلمة شهرياً — {startDate} إلى {endDate}</SectionTitle>
+          <ResponsiveContainer width="100%" height={230}>
             <BarChart data={monthly} barCategoryGap="25%">
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<TT />} cursor={{ fill:'rgba(255,255,255,0.04)' }} />
-              <Legend iconSize={8} wrapperStyle={{ fontSize:11, color:'var(--text-secondary)' }} />
-              <Bar dataKey="units_ordered"  name="Ordered"  fill="#60a5fa" radius={[4,4,0,0]} />
-              <Bar dataKey="units_produced" name="Produced" fill="#22d3a0" radius={[4,4,0,0]} />
+              <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<TT />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+              <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: 'var(--text-secondary)' }} />
+              <Bar dataKey="units_ordered" name="قطع مقصوصة" fill="#0284c7" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="units_produced" name="قطع مسلمة للعملاء" fill="#059669" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
+
+        {/* Stage Distribution Chart */}
         <Card>
-          <SectionTitle>Status breakdown</SectionTitle>
-          <ResponsiveContainer width="100%" height={180}>
+          <SectionTitle>توزيع الأوردرات حسب المرحلة الحالية</SectionTitle>
+          <ResponsiveContainer width="100%" height={230}>
             <PieChart>
-              <Pie data={data.status_breakdown||[]} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={70} paddingAngle={3}>
-                {(data.status_breakdown||[]).map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} />)}
+              <Pie
+                data={stageBreakdown}
+                dataKey="count"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={80}
+                paddingAngle={4}
+              >
+                {stageBreakdown.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
               </Pie>
-              <Tooltip contentStyle={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', fontSize:12 }} />
-              <Legend iconSize={8} wrapperStyle={{ fontSize:11, color:'var(--text-secondary)' }} />
+              <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', fontSize: 12, borderRadius: 8 }} />
+              <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: 'var(--text-secondary)' }} />
             </PieChart>
           </ResponsiveContainer>
         </Card>
       </div>
 
+      {/* Table 1: Print Shops Performance */}
       <Card>
-        <SectionTitle>Top employees by production output</SectionTitle>
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          {(data.by_employee||[]).map((e,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:12 }}>
-              <div style={{ width:26, height:26, borderRadius:'50%', background:'var(--accent-dim)', color:'var(--accent)',
-                display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:600, flexShrink:0 }}>
-                {e.name?.[0]?.toUpperCase()}
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                  <span style={{ fontSize:13, fontWeight:500 }}>{e.name}</span>
-                  <span style={{ fontSize:12, color:'var(--text-muted)' }}>{e.units_produced} units · {e.orders} orders</span>
-                </div>
-                <div style={{ height:5, background:'var(--bg-hover)', borderRadius:99 }}>
-                  <div style={{ width:`${Math.min((e.units_produced/Math.max(...(data.by_employee||[]).map(x=>x.units_produced),1))*100,100)}%`,
-                    height:'100%', background:'var(--accent)', borderRadius:99 }} />
-                </div>
-              </div>
-            </div>
-          ))}
-          {!data.by_employee?.length && <div style={{ color:'var(--text-muted)', fontSize:13 }}>No data yet</div>}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle>Product completion report</SectionTitle>
+        <SectionTitle>أداء المطابع والورش الخارجية (Print Shops Performance)</SectionTitle>
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'right' }}>
             <thead>
-              <tr>
-                {['Product','Orders','Ordered','Produced','Remaining','Completion','Late','Late Units'].map((h) => (
-                  <th key={h} style={{ textAlign:'left', padding:'8px 10px', fontSize:11, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'.06em', borderBottom:'1px solid var(--border)' }}>{h}</th>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['اسم المطبعة', 'الهاتف', 'الأوردرات', 'القطع المحولة', 'القطع المستلمة', 'العجز / الفقد', 'نسبة العجز %'].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {productProgress.length === 0 ? (
-                <tr><td colSpan={8} style={{ padding:'18px 10px', color:'var(--text-muted)', textAlign:'center' }}>No product data yet.</td></tr>
-              ) : productProgress.map((p, i) => {
-                const completionPct = Number(p.completion_rate || 0);
-                return (
-                  <tr key={`${p.product_name}-${i}`} style={{ borderBottom:'1px solid var(--border)' }}>
-                    <td style={{ padding:'10px' }}>{p.product_name}</td>
-                    <td style={{ padding:'10px' }}>{p.orders}</td>
-                    <td style={{ padding:'10px' }}>{p.units_ordered}</td>
-                    <td style={{ padding:'10px' }}>{p.units_produced}</td>
-                    <td style={{ padding:'10px', color:Number(p.units_remaining) > 0 ? 'var(--warn)' : 'var(--accent)' }}>{p.units_remaining}</td>
-                    <td style={{ padding:'10px' }}>
-                      <Badge variant={completionPct >= 100 ? 'success' : completionPct >= 60 ? 'info' : 'warning'}>{completionPct.toFixed(1)}%</Badge>
+              {printShops.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    لا توجد بيانات مطابع مسجلة خلال هذه الفترة.
+                  </td>
+                </tr>
+              ) : (
+                printShops.map((ps, i) => (
+                  <tr key={ps.id || i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      🖨️ {ps.print_shop_name}
                     </td>
-                    <td style={{ padding:'10px' }}>
-                      <Badge variant={Number(p.late_orders || 0) > 0 ? 'danger' : 'success'}>{Number(p.late_orders || 0) > 0 ? 'Late' : 'On time'}</Badge>
+                    <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{ps.phone || '—'}</td>
+                    <td style={{ padding: '12px', fontWeight: 600 }}>{ps.orders} أوردر</td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#0284c7' }}>
+                      {Number(ps.sent_units || 0).toLocaleString()} ق
                     </td>
-                    <td style={{ padding:'10px' }}>{p.late_units}</td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#059669' }}>
+                      {Number(ps.received_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: Number(ps.loss_units) > 0 ? '#dc2626' : 'var(--text-muted)' }}>
+                      {Number(ps.loss_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <Badge variant={Number(ps.loss_rate) > 5 ? 'danger' : Number(ps.loss_rate) > 0 ? 'warning' : 'success'}>
+                        {Number(ps.loss_rate || 0).toFixed(1)}%
+                      </Badge>
+                    </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </Card>
 
+      {/* Table 2: Models Breakdown */}
       <Card>
-        <SectionTitle>Late products</SectionTitle>
-        {(lateProducts||[]).length === 0 ? (
-          <div style={{ color:'var(--accent)', fontSize:13 }}>No late products right now.</div>
-        ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:12 }}>
-            {(lateProducts||[]).map((p, i) => (
-              <div key={`${p.product_name}-${i}`} style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 14px' }}>
-                <div style={{ fontSize:13, fontWeight:600, marginBottom:6 }}>{p.product_name}</div>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--text-secondary)' }}>
-                  <span>Late orders</span><span>{p.late_orders}</span>
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--text-secondary)' }}>
-                  <span>Late units</span><span style={{ color:'var(--danger)', fontWeight:600 }}>{p.late_units}</span>
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'var(--text-secondary)' }}>
-                  <span>Oldest due</span><span>{p.oldest_due_date || '—'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <SectionTitle>تقرير أداء الموديلات والإنتاج (Models Production & Sales)</SectionTitle>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'right' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['رقم الموديل', 'اسم الموديل', 'الأوردرات', 'المقصوص', 'المفروز', 'المسلم للعميل', 'الهالك', 'الإيراد المالي'].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {models.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    لا توجد بيانات موديلات في الفترة المحددة.
+                  </td>
+                </tr>
+              ) : (
+                models.map((m, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px', fontWeight: 800, color: 'var(--accent)' }}>
+                      {m.model_number}
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 600 }}>{m.model_name || '—'}</td>
+                    <td style={{ padding: '12px' }}>{m.orders} أوردر</td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#0284c7' }}>
+                      {Number(m.cut_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 600, color: '#d97706' }}>
+                      {Number(m.sorted_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#059669' }}>
+                      {Number(m.delivered_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: Number(m.loss_units) > 0 ? '#dc2626' : 'var(--text-muted)' }}>
+                      {Number(m.loss_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 800, color: '#059669' }}>
+                      {Number(m.revenue || 0).toLocaleString()} ج.م
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   );
@@ -684,8 +990,8 @@ const HRTab = ({ startDate, endDate }) => {
   );
   const [exporting, setExporting] = useState('');
 
-  const handlePDF = async () => {
-    setExporting('pdf');
+  const handlePDF = async (action = 'print') => {
+    setExporting(action === 'download' ? 'pdf-download' : 'pdf-print');
     try {
       const pr = data?.payroll_summary || {};
       const payrollHistory = normalizeMonthlyRows(data?.payroll_history || []).map((row) => ({
@@ -694,37 +1000,63 @@ const HRTab = ({ startDate, endDate }) => {
         pending_payout: row.pending_payout || 0,
         total_payout: row.total_payout || 0,
       }));
-      await exportPDF(`hr-report-${startDate}-to-${endDate}.pdf`, `HR & Payroll Report — ${startDate} to ${endDate}`, [
-        {
-          title: 'Payroll Summary',
-          metrics: [
-            { label: 'Total Payout', value: `$${Number(pr.total_payout||0).toLocaleString()}` },
-            { label: 'Paid Payroll', value: `$${Number(pr.paid_payout||0).toLocaleString()}` },
-            { label: 'Bonuses', value: `$${Number(pr.total_bonuses||0).toLocaleString()}` },
-            { label: 'Deductions', value: `$${Number(pr.total_deductions||0).toLocaleString()}` },
-          ],
-        },
-        {
-          title: 'Payroll Spend History',
-          head: ['Month','Paid Payroll ($)','Pending Payroll ($)','Total Payroll ($)'],
-          rows: payrollHistory.map(r => [r.name, Number(r.paid_payout).toLocaleString(), Number(r.pending_payout).toLocaleString(), Number(r.total_payout).toLocaleString()]),
-        },
-        {
-          title: 'Attendance by Department',
-          head: ['Department','Records','Present','Absent','Hours'],
-          rows: (data?.by_department||[]).map(d => [d.department, d.records, d.present, d.absent, d.hours?.toFixed(1)]),
-        },
-        {
-          title: 'Attendance Status Breakdown',
-          head: ['Status','Count'],
-          rows: (data?.attendance_summary||[]).map(a => [a.status, a.count]),
-        },
-        {
-          title: 'Top Employees by Hours',
-          head: ['Employee','Total Hours','Days Logged'],
-          rows: (data?.top_hours||[]).map(e => [e.name, e.total_hours, e.days_logged]),
-        },
-      ]);
+
+      const htmlContent = buildHrReportHtml({ data, startDate, endDate });
+
+      await exportPDF(
+        `hr-report-${startDate}-to-${endDate}.pdf`,
+        `HR & Payroll Analytics Report — ${startDate} to ${endDate}`,
+        [
+          {
+            title: 'Payroll Financial Liability Summary',
+            description: 'Disbursed wages, pending liabilities, overtime incentives, and employee deductions.',
+            metrics: [
+              { label: 'Total Liability', value: `$${Number(pr.total_payout || 0).toLocaleString()}`, desc: 'Total calculated wages' },
+              { label: 'Paid Out', value: `$${Number(pr.paid_payout || 0).toLocaleString()}`, desc: 'Disbursed to workers' },
+              { label: 'Pending Payout', value: `$${Number(Math.max(0, (pr.total_payout || 0) - (pr.paid_payout || 0))).toLocaleString()}`, desc: 'Awaiting disbursement' },
+              { label: 'Overtime & Bonuses', value: `$${Number(pr.total_bonuses || 0).toLocaleString()}`, desc: 'Production overtime incentives' },
+              { label: 'Deductions', value: `$${Number(pr.total_deductions || 0).toLocaleString()}`, desc: 'Late, absent, loan installments' },
+            ],
+          },
+          {
+            title: 'Monthly Payroll Payout History',
+            description: 'Monthly disbursement status and reconciliation of wages.',
+            head: ['Month', 'Paid Payroll ($)', 'Pending Payroll ($)', 'Total Payroll ($)'],
+            rows: payrollHistory.map(r => [
+              r.name,
+              Number(r.paid_payout).toLocaleString(),
+              Number(r.pending_payout).toLocaleString(),
+              Number(r.total_payout).toLocaleString(),
+            ]),
+            foot: [
+              'Total Summary',
+              payrollHistory.reduce((s, r) => s + Number(r.paid_payout || 0), 0).toLocaleString(),
+              payrollHistory.reduce((s, r) => s + Number(r.pending_payout || 0), 0).toLocaleString(),
+              payrollHistory.reduce((s, r) => s + Number(r.total_payout || 0), 0).toLocaleString(),
+            ],
+          },
+          {
+            title: 'Departmental Attendance & Logged Hours',
+            description: 'Worker attendance rate, recorded shifts, and worked hours across factory departments.',
+            head: ['Department', 'Attendance Records', 'Present Days', 'Absent Days', 'Logged Hours'],
+            rows: (data?.by_department || []).map(d => [
+              d.department,
+              d.records,
+              d.present,
+              d.absent,
+              `${d.hours?.toFixed(1)} hrs`,
+            ]),
+          },
+          {
+            title: 'Top Dedicated Employees by Logged Hours',
+            description: 'Staff members with highest commitment and hours on the factory floor.',
+            head: ['Employee Name', 'Total Hours', 'Days Logged'],
+            rows: (data?.top_hours || []).map(e => [e.name, `${e.total_hours} hrs`, e.days_logged]),
+          },
+        ],
+        action,
+        htmlContent
+      );
     } finally { setExporting(''); }
   };
 
@@ -770,9 +1102,10 @@ const HRTab = ({ startDate, endDate }) => {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-      <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
-        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'Exporting…':'↓ Excel'}</Btn>
-        <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
+      <div style={{ display:'flex', justifyContent:'flex-end', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'جاري التصدير…':'↓ Excel'}</Btn>
+        <Btn size="sm" onClick={() => handlePDF('print')} disabled={!!exporting}>{exporting==='pdf-print'?'جاري الفتح…':'🖨️ طباعة (Print / PDF)'}</Btn>
+        <Btn size="sm" variant="primary" onClick={() => handlePDF('download')} disabled={!!exporting}>{exporting==='pdf-download'?'جاري الحفظ…':'⬇️ حفظ ملف PDF'}</Btn>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
@@ -858,66 +1191,122 @@ const HRTab = ({ startDate, endDate }) => {
   );
 };
 
-/* ── TAB: Inventory ─────────────────────────────────── */
-const InventoryTab = () => {
-  const { data, loading, error } = useFetch(reportsApi.inventory);
+/* ── TAB: Print Shops & Outwork ─────────────────────── */
+const PrintShopsTab = ({ startDate, endDate }) => {
+  const { data, loading, error } = useFetch(
+    () => reportsApi.printShops({ start_date: startDate, end_date: endDate }),
+    [startDate, endDate]
+  );
   const [exporting, setExporting] = useState('');
 
-  const handlePDF = async () => {
-    setExporting('pdf');
+  const summary = data?.summary || {};
+  const printShops = data?.print_shops || [];
+  const recentDispatches = data?.recent_dispatches || [];
+
+  const handlePDF = async (action = 'print') => {
+    setExporting(action === 'download' ? 'pdf-download' : 'pdf-print');
     try {
-      const totalValue = (data?.by_category||[]).reduce((a,r) => a+(r.total_value||0),0);
-      await exportPDF('inventory-report.pdf', 'Inventory Report', [
-        {
-          title: 'Summary',
-          metrics: [
-            { label: 'Total Stock Value', value: `$${totalValue.toLocaleString()}` },
-            { label: 'Categories', value: (data?.by_category||[]).length },
-            { label: 'Low Stock Items', value: (data?.low_stock||[]).length },
-          ],
-        },
-        {
-          title: 'Stock by Category',
-          head: ['Category','Items','Total Qty','Value ($)'],
-          rows: (data?.by_category||[]).map(c => [c.category, c.items, c.total_qty, Number(c.total_value).toLocaleString()]),
-        },
-        {
-          title: 'Low Stock Items',
-          head: ['Material','Category','Qty','Min Qty','Level %'],
-          rows: (data?.low_stock||[]).map(i => [i.name, i.category||'—', i.quantity, i.min_quantity, `${Math.round(i.pct||0)}%`]),
-        },
-        {
-          title: 'Most Used in Production',
-          head: ['Material','Unit','Total Used','Orders'],
-          rows: (data?.usage_by_production||[]).map(m => [m.name, m.unit, m.total_used, m.orders]),
-        },
-      ]);
+      const totalSent = Number(summary.total_sent_units || 0);
+      const totalReceived = Number(summary.total_received_units || 0);
+      const totalLoss = Number(summary.total_loss_units || 0);
+      const lossRate = summary.loss_rate || (totalSent > 0 ? ((totalLoss / totalSent) * 100).toFixed(1) : 0);
+
+      const htmlContent = buildPrintShopsReportHtml({ data, startDate, endDate });
+
+      await exportPDF(
+        `print-shops-report-${startDate}-to-${endDate}.pdf`,
+        `Print Shops & Outwork Quality Report — ${startDate} to ${endDate}`,
+        [
+          {
+            title: 'Print Shops & Outwork Performance Summary',
+            description: 'Overview of outsourced embroidery and printing orders, dispatched volume, and scrap.',
+            metrics: [
+              { label: 'Registered Shops', value: summary.total_shops || printShops.length || 0, desc: 'Partner workshops' },
+              { label: 'Orders Dispatched', value: summary.orders_with_print || 0, desc: 'Batches sent to print' },
+              { label: 'Sent Units', value: `${totalSent.toLocaleString()} pcs`, desc: 'Cut fabrics delivered' },
+              { label: 'Received Units', value: `${totalReceived.toLocaleString()} pcs`, desc: 'Passed inspection' },
+              { label: 'Loss & Scrap Rate', value: `${totalLoss.toLocaleString()} pcs (${lossRate}%)`, desc: 'Max tolerance < 2.0%' },
+            ],
+          },
+          {
+            title: 'Print Shops Quality & Loss Scorecard',
+            description: 'Vendor evaluation ranking each shop by received yield and defective pieces.',
+            head: ['Print Shop', 'Phone', 'Orders', 'Active Orders', 'Sent Units', 'Received Units', 'Loss Units', 'Loss Rate %'],
+            rows: printShops.map(p => [
+              p.print_shop_name,
+              p.phone || '—',
+              p.total_orders,
+              p.active_orders,
+              p.sent_units,
+              p.received_units,
+              p.loss_units,
+              `${p.loss_rate}%`,
+            ]),
+            foot: [
+              'Total Summary',
+              'All Shops',
+              printShops.reduce((s, p) => s + Number(p.total_orders || 0), 0),
+              printShops.reduce((s, p) => s + Number(p.active_orders || 0), 0),
+              totalSent.toLocaleString(),
+              totalReceived.toLocaleString(),
+              totalLoss.toLocaleString(),
+              `${lossRate}%`,
+            ],
+          },
+          {
+            title: 'Recent Printing Dispatches Log',
+            description: 'Chronological dispatch log with delivery timestamps and operational status.',
+            head: ['Order # / Model', 'Order Name', 'Print Shop', 'Sent Date', 'Sent Units', 'Received Units', 'Current Stage'],
+            rows: recentDispatches.map(d => [
+              d.order_number || d.model_number,
+              d.order_name || '—',
+              d.print_shop_name,
+              d.print_sent_at ? new Date(d.print_sent_at).toLocaleDateString() : '—',
+              d.total_print_sent_quantity || 0,
+              d.total_print_received_quantity || 0,
+              getStageLabel(d.current_stage),
+            ]),
+          },
+        ],
+        action,
+        htmlContent
+      );
     } finally { setExporting(''); }
   };
 
   const handleExcel = async () => {
     setExporting('excel');
     try {
-      await exportExcel('inventory-report.xlsx', [
+      await exportExcel(`print-shops-report-${startDate}-to-${endDate}.xlsx`, [
         {
-          sheetName: 'By Category',
-          headers: ['Category','Items','Total Qty','Total Value ($)'],
-          rows: (data?.by_category||[]).map(c => [c.category, c.items, c.total_qty, c.total_value]),
+          sheetName: 'Print Shops Performance',
+          headers: ['Print Shop', 'Phone', 'Contact Person', 'Total Orders', 'Active Orders', 'Sent Units', 'Received Units', 'Loss Units', 'Loss Rate %'],
+          rows: printShops.map(p => [
+            p.print_shop_name,
+            p.phone || '',
+            p.contact_person || '',
+            p.total_orders,
+            p.active_orders,
+            p.sent_units,
+            p.received_units,
+            p.loss_units,
+            p.loss_rate,
+          ]),
         },
         {
-          sheetName: 'Low Stock',
-          headers: ['Material','Category','Current Qty','Min Qty','Level %'],
-          rows: (data?.low_stock||[]).map(i => [i.name, i.category||'', i.quantity, i.min_quantity, Math.round(i.pct||0)]),
-        },
-        {
-          sheetName: 'Top by Value',
-          headers: ['Material','Category','Qty','Value ($)'],
-          rows: (data?.top_by_value||[]).map(m => [m.name, m.category||'', m.quantity, m.value]),
-        },
-        {
-          sheetName: 'Production Usage',
-          headers: ['Material','Unit','Total Used','Orders'],
-          rows: (data?.usage_by_production||[]).map(m => [m.name, m.unit, m.total_used, m.orders]),
+          sheetName: 'Dispatches History',
+          headers: ['Order #', 'Model #', 'Order Name', 'Print Shop', 'Sent Date', 'Received Date', 'Sent Units', 'Received Units', 'Stage'],
+          rows: recentDispatches.map(d => [
+            d.order_number,
+            d.model_number,
+            d.order_name || '',
+            d.print_shop_name,
+            d.print_sent_at ? new Date(d.print_sent_at).toISOString().slice(0, 10) : '',
+            d.print_received_at ? new Date(d.print_received_at).toISOString().slice(0, 10) : '',
+            d.total_print_sent_quantity || 0,
+            d.total_print_received_quantity || 0,
+            d.current_stage,
+          ]),
         },
       ]);
     } finally { setExporting(''); }
@@ -927,65 +1316,147 @@ const InventoryTab = () => {
   if (error) return <ErrorMsg msg={error} />;
   if (!data) return null;
 
-  const totalValue = (data.by_category||[]).reduce((a,r) => a+(r.total_value||0),0);
-
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-      <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
-        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'Exporting…':'↓ Excel'}</Btn>
-        <Btn size="sm" variant="primary" onClick={handlePDF} disabled={!!exporting}>{exporting==='pdf'?'Generating PDF…':'↓ PDF'}</Btn>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>
+          {exporting === 'excel' ? 'جاري التصدير…' : '↓ Excel'}
+        </Btn>
+        <Btn size="sm" onClick={() => handlePDF('print')} disabled={!!exporting}>
+          {exporting === 'pdf-print' ? 'جاري الفتح…' : '🖨️ طباعة (Print / PDF)'}
+        </Btn>
+        <Btn size="sm" variant="primary" onClick={() => handlePDF('download')} disabled={!!exporting}>
+          {exporting === 'pdf-download' ? 'جاري الحفظ…' : '⬇️ حفظ ملف PDF'}
+        </Btn>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
-        <MetricCard label="Total stock value" value={`$${totalValue.toLocaleString()}`} color="var(--accent)" />
-        <MetricCard label="Categories"        value={(data.by_category||[]).length} />
-        <MetricCard label="Low stock items"   value={(data.low_stock||[]).length} color={(data.low_stock||[]).length>0?'var(--danger)':undefined} />
+      {/* KPI Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 14,
+      }}>
+        <MetricCard label="المطابع المسجلة" value={summary.total_shops || 0} icon="🖨️" />
+        <MetricCard label="أوردرات محولة للطباعة" value={summary.orders_with_print || 0} icon="📦" />
+        <MetricCard
+          label="القطع المحولة للمطابع"
+          value={`${Number(summary.total_sent_units || 0).toLocaleString()} ق`}
+          color="#0284c7"
+          icon="📤"
+        />
+        <MetricCard
+          label="المستلم ونسبة الهالك"
+          value={`${Number(summary.total_received_units || 0).toLocaleString()} ق`}
+          sub={`عجز: ${summary.total_loss_units || 0} ق (${summary.loss_rate || 0}%)`}
+          color={Number(summary.loss_rate) > 5 ? 'var(--danger)' : 'var(--accent)'}
+          icon="📥"
+        />
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
-        <Card>
-          <SectionTitle>Stock value by category</SectionTitle>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data.by_category||[]} barCategoryGap="30%">
-              <XAxis dataKey="category" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<TT prefix="$" />} cursor={{ fill:'rgba(255,255,255,0.04)' }} />
-              <Bar dataKey="total_value" name="Value ($)" radius={[4,4,0,0]}>
-                {(data.by_category||[]).map((_,i) => <Cell key={i} fill={COLORS[i%COLORS.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
-        <Card>
-          <SectionTitle>Low stock items</SectionTitle>
-          {(data.low_stock||[]).length === 0
-            ? <div style={{ color:'var(--accent)', fontSize:13 }}>All items are sufficiently stocked.</div>
-            : (data.low_stock||[]).map((item,i) => (
-              <div key={i} style={{ marginBottom:12 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                  <span style={{ fontSize:13, fontWeight:500 }}>{item.name}</span>
-                  <Badge variant="danger">{item.quantity} left</Badge>
-                </div>
-                <div style={{ height:5, background:'var(--bg-hover)', borderRadius:99 }}>
-                  <div style={{ width:`${Math.min(item.pct||0,100)}%`, height:'100%', background:'var(--danger)', borderRadius:99 }} />
-                </div>
-              </div>
-            ))
-          }
-        </Card>
-      </div>
-
+      {/* Table 1: Print Shops Quality & Performance */}
       <Card>
-        <SectionTitle>Most used materials in production</SectionTitle>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(250px, 1fr))', gap:12 }}>
-          {(data.usage_by_production||[]).map((m,i) => (
-            <div key={i} style={{ background:'var(--bg-elevated)', borderRadius:10, padding:'12px 14px', border:'1px solid var(--border)' }}>
-              <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>{m.orders} production orders</div>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:2 }}>{m.name}</div>
-              <div style={{ fontSize:13, color:COLORS[i%COLORS.length], fontWeight:500 }}>{m.total_used} {m.unit} used</div>
-            </div>
-          ))}
-          {!data.usage_by_production?.length && <div style={{ color:'var(--text-muted)', fontSize:13 }}>No production data yet</div>}
+        <SectionTitle>أداء وجودة المطابع والتشغيل الخارجي (Print Shops Performance & Loss)</SectionTitle>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'right' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['اسم المطبعة', 'بيانات التواصل', 'إجمالي الأوردرات', 'قيد الطباعة الآن', 'القطع المحولة', 'المستلم', 'العجز / الهالك', 'نسبة الفقد %'].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {printShops.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    لا توجد مطابع مسجلة أو تشغيل خارجي في هذه الفترة.
+                  </td>
+                </tr>
+              ) : (
+                printShops.map((ps, i) => (
+                  <tr key={ps.id || i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                      🖨️ {ps.print_shop_name}
+                    </td>
+                    <td style={{ padding: '12px', color: 'var(--text-muted)' }}>
+                      {ps.phone || '—'} {ps.contact_person ? `(${ps.contact_person})` : ''}
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 600 }}>{ps.total_orders} أوردر</td>
+                    <td style={{ padding: '12px' }}>
+                      {Number(ps.active_orders) > 0 ? (
+                        <Badge variant="warning">{ps.active_orders} جاري</Badge>
+                      ) : (
+                        <Badge variant="neutral">0</Badge>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#0284c7' }}>
+                      {Number(ps.sent_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#059669' }}>
+                      {Number(ps.received_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: Number(ps.loss_units) > 0 ? '#dc2626' : 'var(--text-muted)' }}>
+                      {Number(ps.loss_units || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <Badge variant={Number(ps.loss_rate) > 5 ? 'danger' : Number(ps.loss_rate) > 0 ? 'warning' : 'success'}>
+                        {Number(ps.loss_rate || 0).toFixed(1)}%
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Table 2: Recent Dispatches History */}
+      <Card>
+        <SectionTitle>سجل أذونات الخروج والتشغيل الأخيرة (Dispatches & Receipts Log)</SectionTitle>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, textAlign: 'right' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['الموديل', 'اسم الموديل', 'المطبعة', 'تاريخ الإرسال', 'الكمية المرسلة', 'الكمية المستلمة', 'المرحلة الحالية'].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {recentDispatches.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    لا توجد أذونات خروج للمطابع في هذه الفترة.
+                  </td>
+                </tr>
+              ) : (
+                recentDispatches.map((d, i) => (
+                  <tr key={d.id || i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '12px', fontWeight: 800, color: 'var(--accent)' }}>
+                      {d.model_number || d.order_number}
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 600 }}>{d.order_name || '—'}</td>
+                    <td style={{ padding: '12px', color: '#7c3aed', fontWeight: 600 }}>🖨️ {d.print_shop_name}</td>
+                    <td style={{ padding: '12px', color: 'var(--text-muted)' }}>
+                      {d.print_sent_at ? new Date(d.print_sent_at).toLocaleDateString('ar-EG') : '—'}
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: '#0284c7' }}>
+                      {Number(d.total_print_sent_quantity || 0).toLocaleString()} ق
+                    </td>
+                    <td style={{ padding: '12px', fontWeight: 700, color: d.total_print_received_quantity ? '#059669' : 'var(--text-muted)' }}>
+                      {d.total_print_received_quantity ? `${Number(d.total_print_received_quantity).toLocaleString()} ق` : 'قيد الطباعة'}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <Badge variant={d.current_stage === 'delivered' ? 'success' : d.current_stage === 'ready_for_delivery' ? 'info' : 'warning'}>
+                        {getStageLabel(d.current_stage)}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>
@@ -993,39 +1464,56 @@ const InventoryTab = () => {
 };
 
 /* ── Main component ─────────────────────────────────── */
-const TABS = ['Sales', 'Production', 'HR & Payroll', 'Inventory'];
+const TABS = ['المبيعات والتدفقات (Sales)', 'خط الإنتاج والتشغيل (Production)', 'الموظفين والرواتب (HR)', 'المطابع والتشغيل الخارجي (Print Shops)'];
 
 export default function Reports() {
-  const [tab,   setTab]   = useState(0);
+  const [tab, setTab] = useState(0);
   const initialRange = getInitialRange();
   const [startDate, setStartDate] = useState(initialRange.start);
   const [endDate, setEndDate] = useState(initialRange.end);
 
   return (
-    <div style={{ padding:'28px 30px 40px' }}>
+    <div style={{ padding: '28px 30px 40px' }}>
       <PageHeader
-        title="Reports & Analytics"
-        subtitle="Business intelligence across all modules"
+        title="التقارير والإحصائيات الشاملة"
+        subtitle="مؤشرات أداء الأعمال لخط الإنتاج، المبيعات، المطابع والتشغيل الخارجي، والرواتب"
         action={
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            {tab !== 3 && (
-              <>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                  style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)',
-                    color:'var(--text-primary)', padding:'8px 12px', fontSize:13, transition:'border .2s var(--ease-out)' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                />
-                <input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)}
-                  style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)',
-                    color:'var(--text-primary)', padding:'8px 12px', fontSize:13, transition:'border .2s var(--ease-out)' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--border)'}
-                />
-              </>
-            )}
-            {tab !== 3 && startDate > endDate && (
-              <span style={{ color:'var(--danger)', fontSize:12, fontWeight:500 }}>End date must be after start date</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                padding: '8px 12px',
+                fontSize: 13,
+                transition: 'border .2s var(--ease-out)',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border)'}
+            />
+            <input
+              type="date"
+              value={endDate}
+              min={startDate}
+              onChange={e => setEndDate(e.target.value)}
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                padding: '8px 12px',
+                fontSize: 13,
+                transition: 'border .2s var(--ease-out)',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border)'}
+            />
+            {startDate > endDate && (
+              <span style={{ color: 'var(--danger)', fontSize: 12, fontWeight: 500 }}>تاريخ النهاية يجب أن يكون بعد البداية</span>
             )}
           </div>
         }
@@ -1033,32 +1521,42 @@ export default function Reports() {
 
       {/* Tab bar */}
       <div style={{
-        display:'flex', gap:2, marginBottom:28,
-        borderBottom:'1px solid var(--border)', paddingBottom:0,
+        display: 'flex', gap: 4, marginBottom: 28,
+        borderBottom: '1px solid var(--border)', paddingBottom: 0,
+        overflowX: 'auto',
       }}>
-        {TABS.map((t,i) => (
-          <button key={i} onClick={() => setTab(i)} style={{
-            padding:'10px 20px', fontSize:13, fontWeight: tab===i ? 700 : 500,
-            background: tab===i ? 'var(--accent-dim)' : 'transparent',
-            color: tab===i ? 'var(--accent)' : 'var(--text-secondary)',
-            border:'none',
-            borderBottom: tab===i ? '2px solid var(--accent)' : '2px solid transparent',
-            borderRadius:'var(--radius-sm) var(--radius-sm) 0 0',
-            marginBottom:-1, cursor:'pointer',
-            transition:'all .2s var(--ease-out)',
-            letterSpacing:'-0.01em',
-          }}
+        {TABS.map((t, i) => (
+          <button
+            key={i}
+            onClick={() => setTab(i)}
+            style={{
+              padding: '10px 20px',
+              fontSize: 13,
+              fontWeight: tab === i ? 700 : 500,
+              background: tab === i ? 'var(--accent-dim)' : 'transparent',
+              color: tab === i ? 'var(--accent)' : 'var(--text-secondary)',
+              border: 'none',
+              borderBottom: tab === i ? '2px solid var(--accent)' : '2px solid transparent',
+              borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+              marginBottom: -1,
+              cursor: 'pointer',
+              transition: 'all .2s var(--ease-out)',
+              letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap',
+            }}
             onMouseEnter={e => { if (tab !== i) e.currentTarget.style.color = 'var(--text-primary)'; }}
             onMouseLeave={e => { if (tab !== i) e.currentTarget.style.color = 'var(--text-secondary)'; }}
-          >{t}</button>
+          >
+            {t}
+          </button>
         ))}
       </div>
 
       <div className="animate-in">
-        {tab === 0 && <SalesTab      startDate={startDate} endDate={endDate} />}
+        {tab === 0 && <SalesTab startDate={startDate} endDate={endDate} />}
         {tab === 1 && <ProductionTab startDate={startDate} endDate={endDate} />}
-        {tab === 2 && <HRTab         startDate={startDate} endDate={endDate} />}
-        {tab === 3 && <InventoryTab  />}
+        {tab === 2 && <HRTab startDate={startDate} endDate={endDate} />}
+        {tab === 3 && <PrintShopsTab startDate={startDate} endDate={endDate} />}
       </div>
     </div>
   );

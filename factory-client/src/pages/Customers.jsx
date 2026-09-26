@@ -30,6 +30,20 @@ export default function Customers() {
   const [paymentEvidence, setPaymentEvidence] = useState(null);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [editingPayment, setEditingPayment] = useState(null);
+  const [editPaymentForm, setEditPaymentForm] = useState({
+    payment_date: '',
+    amount: '',
+    notes: '',
+    payment_method: '',
+    reference_number: '',
+  });
+  const [editPaymentEvidence, setEditPaymentEvidence] = useState(null);
+  const [editPaymentSaving, setEditPaymentSaving] = useState(false);
+  const [editPaymentError, setEditPaymentError] = useState('');
+  const [deletePaymentTarget, setDeletePaymentTarget] = useState(null);
+  const [deletePaymentSaving, setDeletePaymentSaving] = useState(false);
+  const [deletePaymentError, setDeletePaymentError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -159,10 +173,87 @@ export default function Customers() {
       setPaymentForm(emptyPaymentForm());
       setPaymentEvidence(null);
       await reloadLedger();
+      refetch();
     } catch (e) {
       setPaymentError(e.message);
     } finally {
       setPaymentSaving(false);
+    }
+  };
+
+  const openEditPayment = (payment) => {
+    setEditingPayment(payment);
+    setEditPaymentForm({
+      payment_date: payment.payment_date ? payment.payment_date.slice(0, 10) : '',
+      amount: String(payment.amount ?? ''),
+      notes: payment.notes || '',
+      payment_method: payment.payment_method || '',
+      reference_number: payment.reference_number || '',
+    });
+    setEditPaymentEvidence(null);
+    setEditPaymentError('');
+  };
+
+  const handleUpdatePayment = async () => {
+    if (!editingPayment || !selectedCustomer) return;
+    const amountVal = Number(editPaymentForm.amount);
+    if (!amountVal || amountVal <= 0) {
+      setEditPaymentError(t('validAmountRequired', 'Please enter a valid amount greater than 0'));
+      return;
+    }
+
+    setEditPaymentSaving(true);
+    setEditPaymentError('');
+    try {
+      const payload = editPaymentEvidence
+        ? (() => {
+            const formData = new FormData();
+            if (editPaymentForm.payment_date) formData.append('payment_date', editPaymentForm.payment_date);
+            formData.append('amount', String(amountVal));
+            formData.append('notes', editPaymentForm.notes || '');
+            formData.append('payment_method', editPaymentForm.payment_method || '');
+            formData.append('reference_number', editPaymentForm.reference_number || '');
+            formData.append('evidence', editPaymentEvidence);
+            return formData;
+          })()
+        : {
+            payment_date: editPaymentForm.payment_date || null,
+            amount: amountVal,
+            notes: editPaymentForm.notes || '',
+            payment_method: editPaymentForm.payment_method || null,
+            reference_number: editPaymentForm.reference_number || null,
+          };
+
+      await salesApi.updatePayment(selectedCustomer.id, editingPayment.id, payload);
+      setEditingPayment(null);
+      setEditPaymentEvidence(null);
+      await reloadLedger();
+      refetch();
+    } catch (e) {
+      setEditPaymentError(e.message || 'Failed to update payment');
+    } finally {
+      setEditPaymentSaving(false);
+    }
+  };
+
+  const openDeletePayment = (payment) => {
+    setDeletePaymentTarget(payment);
+    setDeletePaymentError('');
+  };
+
+  const handleDeletePayment = async () => {
+    if (!deletePaymentTarget || !selectedCustomer) return;
+    setDeletePaymentSaving(true);
+    setDeletePaymentError('');
+    try {
+      await salesApi.deletePayment(selectedCustomer.id, deletePaymentTarget.id);
+      setDeletePaymentTarget(null);
+      await reloadLedger();
+      refetch();
+    } catch (e) {
+      setDeletePaymentError(e.message || 'Failed to delete payment');
+    } finally {
+      setDeletePaymentSaving(false);
     }
   };
 
@@ -250,6 +341,20 @@ export default function Customers() {
       ) : '—',
     },
     { key: 'notes', label: t('notes', 'Notes'), render: v => v || '—' },
+    {
+      key: 'actions',
+      label: '',
+      render: (_, row) => (
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+          <Btn size="sm" variant="secondary" onClick={() => openEditPayment(row)}>
+            {t('edit', 'Edit')}
+          </Btn>
+          <Btn size="sm" variant="danger" onClick={() => openDeletePayment(row)}>
+            {t('delete', 'Delete')}
+          </Btn>
+        </div>
+      ),
+    },
   ];
 
   let ledgerBody = <Spinner />;
@@ -444,7 +549,7 @@ export default function Customers() {
       )}
 
       {deleteTarget && (
-        <Modal title={t('deleteOrder', 'Delete Order')} onClose={() => setDeleteTarget(null)} width={420}>
+        <Modal title={t('deleteOrder', 'Delete Order')} onClose={() => setDeleteTarget(null)} width={420} zIndex={120}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               {t('confirmDeleteOrder', 'Enter your password to confirm deleting order')} {deleteTarget.order_number}.
@@ -460,6 +565,126 @@ export default function Customers() {
               <Btn onClick={() => setDeleteTarget(null)} disabled={deleteSaving}>{t('cancel', 'Cancel')}</Btn>
               <Btn variant="danger" onClick={handleDeleteOrder} disabled={deleteSaving}>
                 {deleteSaving ? t('deleting', 'Deleting…') : t('delete', 'Delete')}
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {editingPayment && (
+        <Modal
+          title={t('editPayment', 'Edit Payment')}
+          onClose={() => setEditingPayment(null)}
+          width={520}
+          zIndex={120}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input
+                label={t('paymentDate', 'Payment date')}
+                type="date"
+                value={editPaymentForm.payment_date}
+                onChange={e => setEditPaymentForm({ ...editPaymentForm, payment_date: e.target.value })}
+              />
+              <Input
+                label={t('amount', 'Amount')}
+                type="number"
+                step="any"
+                min="0.01"
+                value={editPaymentForm.amount}
+                onChange={e => setEditPaymentForm({ ...editPaymentForm, amount: e.target.value })}
+              />
+            </div>
+
+            <Input
+              label={t('notes', 'Notes')}
+              value={editPaymentForm.notes}
+              onChange={e => setEditPaymentForm({ ...editPaymentForm, notes: e.target.value })}
+              placeholder={t('notesPlaceholder', 'Payment notes / description')}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <Input
+                label={t('paymentMethod', 'Payment method')}
+                value={editPaymentForm.payment_method}
+                onChange={e => setEditPaymentForm({ ...editPaymentForm, payment_method: e.target.value })}
+                placeholder="e.g. cash, bank, check"
+              />
+              <Input
+                label={t('referenceNumber', 'Reference #')}
+                value={editPaymentForm.reference_number}
+                onChange={e => setEditPaymentForm({ ...editPaymentForm, reference_number: e.target.value })}
+                placeholder="Ref / Check number"
+              />
+            </div>
+
+            <div>
+              <Input
+                label={t('newEvidence', 'Update Evidence (optional)')}
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={e => setEditPaymentEvidence(e.target.files?.[0] || null)}
+              />
+              {editingPayment.evidence_url && !editPaymentEvidence && (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  {t('currentFile', 'Current file')}:{' '}
+                  <a href={resolveApiAssetUrl(editingPayment.evidence_url)} target="_blank" rel="noreferrer" style={{ color: 'var(--info)' }}>
+                    {editingPayment.evidence_name || t('viewFile', 'View current evidence')}
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {editPaymentError && <ErrorMsg msg={editPaymentError} />}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+              <Btn onClick={() => setEditingPayment(null)} disabled={editPaymentSaving}>
+                {t('cancel', 'Cancel')}
+              </Btn>
+              <Btn
+                variant="primary"
+                onClick={handleUpdatePayment}
+                disabled={editPaymentSaving || !editPaymentForm.amount}
+                aria-busy={editPaymentSaving}
+              >
+                {editPaymentSaving ? <Spinner /> : t('saveChanges', 'Save changes')}
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {deletePaymentTarget && (
+        <Modal
+          title={t('deletePaymentTitle', 'Delete Payment')}
+          onClose={() => setDeletePaymentTarget(null)}
+          width={440}
+          zIndex={120}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {t('confirmDeletePaymentMsg', 'Are you sure you want to delete this payment of')}{' '}
+              <strong style={{ color: 'var(--accent)', margin: '0 4px' }}>
+                ${Number(deletePaymentTarget.amount || 0).toLocaleString()}
+              </strong>
+              {deletePaymentTarget.payment_date ? ` (${new Date(deletePaymentTarget.payment_date).toLocaleDateString()})` : ''}?
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {t('deletePaymentWarning', 'This will revert invoice allocations and recalculate the customer ledger balance.')}
+            </div>
+
+            {deletePaymentError && <ErrorMsg msg={deletePaymentError} />}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+              <Btn onClick={() => setDeletePaymentTarget(null)} disabled={deletePaymentSaving}>
+                {t('cancel', 'Cancel')}
+              </Btn>
+              <Btn
+                variant="danger"
+                onClick={handleDeletePayment}
+                disabled={deletePaymentSaving}
+              >
+                {deletePaymentSaving ? t('deleting', 'Deleting…') : t('delete', 'Delete')}
               </Btn>
             </div>
           </div>

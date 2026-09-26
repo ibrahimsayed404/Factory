@@ -314,20 +314,20 @@ export default function Payroll() {
       const statusLabel = row.status === 'paid' ? t('paid', 'Paid') : t('pending', 'Pending');
 
       return `
-        <div style="page-break-inside: avoid; margin-bottom: 24px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #0f1117;">
+        <div style="page-break-inside: avoid; margin-bottom: 20px; padding: 16px 18px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #0f172a;">
             <div>
-              <div style="font-size: 16px; font-weight: 700; color: #0f1117;">${row.employee_name || '—'}</div>
-              <div style="font-size: 12px; color: #64748b;">${row.department_name || '—'} · ${row.role || '—'}</div>
+              <div style="font-size: 16px; font-weight: 800; color: #0f172a;">${row.employee_name || '—'}</div>
+              <div style="font-size: 12px; color: #475569; font-weight: 600; margin-top: 2px;">${row.department_name || '—'} · ${row.role || '—'}</div>
             </div>
             <div style="text-align: right;">
-              <div style="font-size: 18px; font-weight: 700; color: #0f6e56;">${formatCurrency(row.net_salary)}</div>
-              <div style="font-size: 11px; color: #64748b;">${t('netSalary', 'Net salary')}</div>
+              <div style="font-size: 18px; font-weight: 900; color: #15803d;">${formatCurrency(row.net_salary)}</div>
+              <div style="font-size: 11px; color: #64748b; font-weight: 600;">${t('netSalary', 'Net salary')}</div>
               <span class="badge ${statusClass}" style="margin-top: 4px;">${statusLabel}</span>
             </div>
           </div>
           ${fieldsHtml}
-          ${row.week_start ? `<div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">${formatWeekInterval(row.week_start, row.week_end, t)}</div>` : ''}
+          ${row.week_start ? `<div style="margin-top: 8px; font-size: 11px; color: #64748b; font-weight: 600;">الأسبوع المالي: ${formatWeekInterval(row.week_start, row.week_end, t)}</div>` : ''}
         </div>
       `;
     }).join('');
@@ -340,62 +340,76 @@ export default function Payroll() {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>${t('payroll', 'Payroll')} — ${weekLabel}</title>
         <style>
+          @page { size: A4 portrait; margin: 10mm 12mm; }
+          * { box-sizing: border-box; }
           body {
-            font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
-            margin: 20px;
-            color: #1e293b;
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 10px 14px;
+            color: #0f172a;
             background: #fff;
             direction: ${direction};
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           .header-banner {
-            background: #0f1117;
-            color: #22d3a0;
-            padding: 20px 24px;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 18px 24px;
             border-radius: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
           }
           .header-banner h1 {
-            font-size: 18px;
+            font-size: 19px;
             margin: 0;
-            font-weight: 700;
+            font-weight: 900;
+            letter-spacing: -0.01em;
           }
           .header-banner .meta {
             color: #94a3b8;
-            font-size: 12px;
+            font-size: 11px;
+            margin-top: 3px;
           }
           .title-section {
-            margin-bottom: 20px;
-            border-bottom: 2px solid #22d3a0;
+            margin-bottom: 18px;
+            border-bottom: 3px solid #2563eb;
             padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
           }
           .title-section h2 {
-            font-size: 20px;
-            margin: 0 0 5px 0;
+            font-size: 22px;
+            margin: 0;
             color: #0f172a;
+            font-weight: 900;
           }
           .metrics-container {
             display: flex;
-            gap: 16px;
+            gap: 14px;
             margin-bottom: 24px;
           }
           .metric-card {
             flex: 1;
             background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            border-top: 3px solid #2563eb;
+            border-radius: 8px;
             padding: 12px 16px;
           }
           .metric-card .label {
-            font-size: 12px;
+            font-size: 11px;
             color: #64748b;
+            font-weight: 700;
             margin-bottom: 4px;
+            text-transform: uppercase;
           }
           .metric-card .val {
-            font-size: 16px;
-            font-weight: 700;
+            font-size: 18px;
+            font-weight: 900;
             color: #0f172a;
           }
           table {
@@ -404,28 +418,29 @@ export default function Payroll() {
             margin-top: 10px;
           }
           th, td {
-            padding: 10px 12px;
+            padding: 9px 12px;
             text-align: ${isAr ? 'right' : 'left'};
-            font-size: 13px;
+            font-size: 12px;
             border-bottom: 1px solid #e2e8f0;
           }
           th {
-            background: #0f6e56;
+            background: #0f172a;
             color: #fff;
-            font-weight: 600;
+            font-weight: 700;
           }
           tr:nth-child(even) {
             background: #f8fafc;
           }
           .num {
             text-align: right;
+            font-weight: 700;
           }
           .badge {
             display: inline-block;
             padding: 3px 8px;
             border-radius: 4px;
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 700;
           }
           .badge.paid {
             background: #dcfce7;
@@ -435,51 +450,133 @@ export default function Payroll() {
             background: #fef9c3;
             color: #a16207;
           }
+          .signatures {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            margin-top: 28px;
+            padding-top: 18px;
+            border-top: 2px dashed #cbd5e1;
+            text-align: center;
+          }
+          .sign-box {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px 14px;
+            background: #f8fafc;
+          }
+          .sign-box.stamp {
+            background: #fff;
+            border: 1px solid #cbd5e1;
+          }
+          .sign-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 35px;
+          }
+          .sign-line {
+            border-top: 1px dashed #94a3b8;
+            padding-top: 6px;
+            font-size: 11px;
+            color: #475569;
+          }
+          .stamp-badge {
+            display: inline-block;
+            border: 2px solid #2563eb;
+            border-radius: 50%;
+            padding: 4px 8px;
+            color: #2563eb;
+            font-size: 9px;
+            font-weight: 900;
+            margin: 4px auto 6px;
+            transform: rotate(-3deg);
+          }
           @media print {
-            body { margin: 10px; }
+            body { margin: 0; padding: 0; }
             .header-banner {
-              background: #0f1117 !important;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              background: #0f172a !important;
+              color: #fff !important;
             }
             th {
-               background: #0f6e56 !important;
-               color: #fff !important;
-               -webkit-print-color-adjust: exact;
-               print-color-adjust: exact;
+              background: #0f172a !important;
+              color: #fff !important;
             }
             .metric-card {
-               background: #f8fafc !important;
-               -webkit-print-color-adjust: exact;
-               print-color-adjust: exact;
+              background: #f8fafc !important;
             }
           }
         </style>
       </head>
       <body>
         <div class="header-banner">
-          <h1>FabriCore Factory Management</h1>
-          <div class="meta">${new Date().toLocaleString()}</div>
+          <div>
+            <h1>مصنع بلاك فوكس للملابس الجاهزة — BLACK FOX</h1>
+            <div class="meta">كشف الرواتب الأسبوعي ومستحقات العاملين المعتمدة</div>
+          </div>
+          <div style="text-align: ${isAr ? 'left' : 'right'}; font-size: 11px; color: #94a3b8;">
+            <div>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
+            <div style="font-family: monospace; color: #38bdf8; margin-top: 2px;">DOC: BF-PAYROLL-${selectedWeek.weekStart || 'W'}</div>
+          </div>
         </div>
         <div class="title-section">
-          <h2>${t('payroll', 'Payroll')}</h2>
-          <div style="font-size: 14px; color: #475569;">${weekLabel}</div>
+          <div>
+            <h2>${t('payroll', 'Payroll')}</h2>
+            <div style="font-size: 13px; color: #475569; font-weight: 600; margin-top: 2px;">فترة التشغيل: ${weekLabel}</div>
+          </div>
+          <div style="font-size: 12px; color: #2563eb; font-weight: 700; background: #eff6ff; padding: 4px 12px; border-radius: 6px;">
+            كشف رواتب معتمد
+          </div>
         </div>
         <div class="metrics-container">
           <div class="metric-card">
             <div class="label">${t('employees', 'Employees')}</div>
-            <div class="val">${selectedWeek.employeeCount}</div>
+            <div class="val">${selectedWeek.employeeCount} موظف</div>
           </div>
           <div class="metric-card">
             <div class="label">${t('totalNet', 'Total Net')}</div>
-            <div class="val">${formatCurrency(selectedWeek.totalNet)}</div>
+            <div class="val" style="color:#15803d">${formatCurrency(selectedWeek.totalNet)}</div>
           </div>
           <div class="metric-card">
             <div class="label">${t('status', 'Status')}</div>
             <div class="val">${selectedWeek.paidCount}/${selectedWeek.employeeCount} ${t('paid', 'paid')}</div>
           </div>
         </div>
+
+        <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-right:4px solid #16a34a; border-radius:6px; padding:10px 14px; margin-bottom:20px; font-size:11.5px; color:#166534; line-height:1.5;">
+          <div style="font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+            <span>📘</span> معادلة وضوابط احتساب صافي الراتب المستحق:
+          </div>
+          <div style="margin-bottom:4px;">
+            <strong>المعادلة:</strong> <code>الراتب الأساسي + (بدل الإضافي المحتسب + مكافآت الإدارة) - (خصم التأخير المرجح + خصم الغياب + قسط السلفة + جزاءات الجودة) = صافي الراتب المستحق</code>
+          </div>
+          <div style="font-size:10.5px; color:#475569;">
+            * ملاحظة: يتم احتساب دقائق التأخير والإضافي بناءً على الأوزان المعتمدة في لائحة الحضور. استقطاعات السلف تخصم تلقائياً من المستحق الأسبوعي.
+          </div>
+        </div>
+
         ${employeeBreakdowns}
+
+        <div class="signatures">
+          <div class="sign-box">
+            <div class="sign-title">المحاسب المسؤول</div>
+            <div class="sign-line">التوقيع: .......................................</div>
+          </div>
+          <div class="sign-box">
+            <div class="sign-title">المدير المالي والرقابة</div>
+            <div class="sign-line">التوقيع: .......................................</div>
+          </div>
+          <div class="sign-box stamp">
+            <div class="sign-title">اعتماد الإدارة العامة</div>
+            <div class="stamp-badge">BLACK FOX APPROVED</div>
+            <div class="sign-line">الختم والتاريخ المعتمد</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 8px; display: flex; justify-content: space-between;">
+          <span>Black Fox Clothing Factory Management</span>
+          <span>وثيقة رواتب رسمية — سرية ومحمية</span>
+        </div>
       </body>
       </html>
     `;

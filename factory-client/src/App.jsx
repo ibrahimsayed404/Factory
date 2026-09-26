@@ -25,6 +25,12 @@ const ProductionOutsourcing = lazy(() => import('./pages/ProductionOutsourcing')
 const ProductionFinal = lazy(() => import('./pages/ProductionFinal'));
 const ProductionTrackingReport = lazy(() => import('./pages/ProductionTrackingReport'));
 const ProductionOrderManage = lazy(() => import('./pages/ProductionOrderManage'));
+const ProductionCutting = lazy(() => import('./pages/ProductionCutting'));
+const ProductionSortingPhase = lazy(() => import('./pages/ProductionSortingPhase'));
+const ProductionPrintingPhase = lazy(() => import('./pages/ProductionPrintingPhase'));
+const ProductionDeliveryPhase = lazy(() => import('./pages/ProductionDeliveryPhase'));
+const PrintShops = lazy(() => import('./pages/PrintShops'));
+const ProductionTrackingBoard = lazy(() => import('./pages/ProductionTrackingBoard'));
 const Attendance = lazy(() => import('./pages/Attendance'));
 const Reports    = lazy(() => import('./pages/Reports'));
 const Accounting = lazy(() => import('./pages/Accounting'));
@@ -63,14 +69,18 @@ export default function App() {
                   <Route path="/sales"      element={<Protected><Sales /></Protected>} />
                   <Route path="/customers"  element={<Protected><Customers /></Protected>} />
                   <Route path="/accounting" element={FEATURE_FLAGS.accounting ? <Protected><Accounting /></Protected> : <Navigate to="/" replace />} />
-                  <Route path="/production"  element={<Protected><Production /></Protected>} />
-                  <Route path="/production-pipeline" element={FEATURE_FLAGS.productionPipeline ? <Protected><ProductionPipeline /></Protected> : <Navigate to="/" replace />} />
-                  <Route path="/production-orders/create" element={<Protected><ProductionOrderCreate /></Protected>} />
-                  <Route path="/production-orders/sorting" element={<Protected><ProductionSorting /></Protected>} />
-                  <Route path="/production-orders/outsourcing" element={<Protected><ProductionOutsourcing /></Protected>} />
-                  <Route path="/production-orders/final" element={<Protected><ProductionFinal /></Protected>} />
-                  <Route path="/production-orders/report" element={<Protected><ProductionTrackingReport /></Protected>} />
-                  <Route path="/production-orders/manage" element={<Protected><ProductionOrderManage /></Protected>} />
+                  <Route path="/production"  element={<Protected><ProductionTrackingBoard /></Protected>} />
+                  <Route path="/production-pipeline" element={<Protected><ProductionTrackingBoard /></Protected>} />
+                  <Route path="/production-orders/cutting" element={<Protected><ProductionCutting /></Protected>} />
+                  <Route path="/production-orders/create" element={<Protected><ProductionCutting /></Protected>} />
+                  <Route path="/production-orders/sorting" element={<Protected><ProductionSortingPhase /></Protected>} />
+                  <Route path="/production-orders/printing" element={<Protected><ProductionPrintingPhase /></Protected>} />
+                  <Route path="/production-orders/outsourcing" element={<Protected><ProductionPrintingPhase /></Protected>} />
+                  <Route path="/production-orders/delivery" element={<Protected><ProductionDeliveryPhase /></Protected>} />
+                  <Route path="/production-orders/final" element={<Protected><ProductionDeliveryPhase /></Protected>} />
+                  <Route path="/print-shops" element={<Protected><PrintShops /></Protected>} />
+                  <Route path="/production-orders/report" element={<Protected><ProductionTrackingBoard /></Protected>} />
+                  <Route path="/production-orders/manage" element={<Protected><ProductionTrackingBoard /></Protected>} />
                   <Route path="/manufacturing/boms" element={FEATURE_FLAGS.manufacturingBoms ? <Protected><Bom /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/manufacturing/routings" element={FEATURE_FLAGS.manufacturingRoutings ? <Protected><Routings /></Protected> : <Navigate to="/" replace />} />
                   <Route path="/attendance" element={<Protected><Attendance /></Protected>} />

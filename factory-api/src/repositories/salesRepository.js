@@ -326,6 +326,66 @@ const insertCustomerPayment = async (client, {
   return result.rows[0];
 };
 
+const getCustomerPaymentById = async (client, customerId, paymentId) => {
+  const result = await client.query(
+    `SELECT id, customer_id, invoice_id, payment_date::text AS payment_date, amount,
+            payment_method, reference_number, notes, evidence_url, evidence_name,
+            evidence_mime, created_by, created_at
+     FROM customer_payments
+     WHERE id = $1 AND customer_id = $2
+     FOR UPDATE`,
+    [paymentId, customerId]
+  );
+  return result.rows[0] || null;
+};
+
+const updateCustomerPayment = async (client, paymentId, {
+  payment_date,
+  amount,
+  payment_method,
+  reference_number,
+  notes,
+  evidenceUrl,
+  evidenceName,
+  evidenceMime,
+}) => {
+  const result = await client.query(
+    `UPDATE customer_payments
+     SET payment_date = $1,
+         amount = $2,
+         payment_method = $3,
+         reference_number = $4,
+         notes = $5,
+         evidence_url = $6,
+         evidence_name = $7,
+         evidence_mime = $8
+     WHERE id = $9
+     RETURNING id, customer_id, invoice_id, payment_date::text AS payment_date, amount,
+               payment_method, reference_number, notes, evidence_url, evidence_name,
+               evidence_mime, created_by, created_at`,
+    [
+      payment_date,
+      amount,
+      payment_method,
+      reference_number,
+      notes,
+      evidenceUrl,
+      evidenceName,
+      evidenceMime,
+      paymentId,
+    ]
+  );
+  return result.rows[0];
+};
+
+const deleteCustomerPayment = async (client, paymentId) => {
+  const result = await client.query(
+    'DELETE FROM customer_payments WHERE id = $1 RETURNING *',
+    [paymentId]
+  );
+  return result.rows[0] || null;
+};
+
 const getProductByIdForUpdate = async (client, productId) => {
   const result = await client.query('SELECT * FROM products WHERE id = $1 FOR UPDATE', [productId]);
   return result.rows[0] || null;
@@ -753,6 +813,38 @@ const insertPaymentAllocation = async (client, paymentId, invoiceId, amount) => 
     [paymentId, invoiceId, amount]
   );
   return result.rows[0];
+};
+
+const getPaymentAllocations = async (client, paymentId) => {
+  const result = await client.query(
+    'SELECT * FROM customer_payment_allocations WHERE customer_payment_id = $1',
+    [paymentId]
+  );
+  return result.rows;
+};
+
+const deletePaymentAllocations = async (client, paymentId) => {
+  await client.query(
+    'DELETE FROM customer_payment_allocations WHERE customer_payment_id = $1',
+    [paymentId]
+  );
+};
+
+const decrementInvoicePaid = async (client, invoiceId, amount) => {
+  const result = await client.query(
+    `UPDATE invoices
+     SET paid_amount = GREATEST(0, paid_amount - $1),
+         status = CASE
+           WHEN GREATEST(0, paid_amount - $1) + credited_amount >= total_amount THEN 'paid'
+           WHEN GREATEST(0, paid_amount - $1) > 0 THEN 'partially_paid'
+           ELSE 'issued'
+         END,
+         updated_at = NOW()
+     WHERE id = $2
+     RETURNING *`,
+    [amount, invoiceId]
+  );
+  return result.rows[0] || null;
 };
 
 const incrementInvoicePaid = async (client, invoiceId, amount) => {
@@ -1204,6 +1296,9 @@ module.exports = {
   getCustomerById,
   getCustomerLedgerDetails,
   insertCustomerPayment,
+  getCustomerPaymentById,
+  updateCustomerPayment,
+  deleteCustomerPayment,
   getProductByIdForUpdate,
   getProductByNameForUpdate,
   getProductReservedQuantityForUpdate,
@@ -1237,7 +1332,10 @@ module.exports = {
   getInvoiceItems,
   getOpenInvoicesForCustomer,
   insertPaymentAllocation,
+  getPaymentAllocations,
+  deletePaymentAllocations,
   incrementInvoicePaid,
+  decrementInvoicePaid,
   incrementInvoiceCredited,
   getDeliveryNotesCount,
   getDeliveryNotes,

@@ -16,6 +16,8 @@ router.get('/customers', authenticate, sales.getCustomers);
 router.post('/customers', authenticate, authorizeAdmin, v.customerCreate, sales.createCustomer);
 router.get('/customers/:id/ledger', authenticate, v.idParam, sales.getCustomerLedger);
 router.post('/customers/:id/payments', authenticate, authorizeAdmin, paymentEvidenceUpload.single('evidence'), validateEvidenceSignature, v.idParam, v.customerPaymentCreate, sales.createCustomerPayment);
+router.put('/customers/:id/payments/:paymentId', authenticate, authorizeAdmin, paymentEvidenceUpload.single('evidence'), validateEvidenceSignature, v.customerPaymentUpdate, sales.updateCustomerPayment);
+router.delete('/customers/:id/payments/:paymentId', authenticate, authorizeAdmin, v.customerPaymentDelete, sales.deleteCustomerPayment);
 
 // Sales Orders
 router.get('/sales/analytics', authenticate, sales.getAnalytics);

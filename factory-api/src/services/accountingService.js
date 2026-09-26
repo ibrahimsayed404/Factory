@@ -517,6 +517,9 @@ const postProductionCompletion = (productionOrder, amount, client = null) => {
   }, client);
 };
 
+const deleteCustomerPaymentEntry = (paymentId, client = null) =>
+  accountingRepository.deleteJournalEntriesBySource('customer_payment', paymentId, client);
+
 module.exports = {
   ACCOUNTS,
   postJournalEntry,
@@ -536,6 +539,7 @@ module.exports = {
   createExpense,
   postSalesInvoice,
   postCustomerPayment,
+  deleteCustomerPaymentEntry,
   postSalesCredit,
   postPurchaseReceipt,
   postSupplierPayment,

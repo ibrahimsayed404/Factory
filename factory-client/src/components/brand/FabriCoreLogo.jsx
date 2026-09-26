@@ -1,19 +1,10 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
-import logoImage from '../../assets/fabricore-logo.webp';
+import BlackFoxLogo from './BlackFoxLogo';
 
-const FabriCoreLogo = ({ compact = false, className = '', style = {} }) => {
-  const width = compact ? 160 : 300;
-
-  return (
-    <img
-      src={logoImage}
-      alt="FabriCore Clothing Factory"
-      width={width}
-      className={className}
-      style={{ display: 'block', width: '100%', maxWidth: width, height: 'auto', ...style }}
-    />
-  );
+const FabriCoreLogo = (props) => {
+  return <BlackFoxLogo {...props} />;
 };
 
 export default FabriCoreLogo;
+

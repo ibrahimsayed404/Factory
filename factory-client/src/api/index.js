@@ -313,6 +313,8 @@ export const salesApi = {
   }),
   customerLedger: (id)      => api.get(`/customers/${id}/ledger`),
   addPayment:     (id, body)=> api.post(`/customers/${id}/payments`, body),
+  updatePayment:  (customerId, paymentId, body) => api.put(`/customers/${customerId}/payments/${paymentId}`, body),
+  deletePayment:  (customerId, paymentId) => api.delete(`/customers/${customerId}/payments/${paymentId}`),
   createCustomer: (body)    => api.post('/customers', body),
   // Returns the data array directly; defaults to limit=1000 to fetch all records
   orders:         (params = '?limit=1000') => api.get(`/sales${params}`).then(r => Array.isArray(r?.data) ? r.data : []),
@@ -351,6 +353,10 @@ export const reportsApi = {
     return api.get(`/reports/hr${query}`);
   },
   inventory:  ()             => api.get('/reports/inventory'),
+  printShops: (params)       => {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return api.get(`/reports/print-shops${query}`);
+  },
 };
 
 export const settingsApi = {
@@ -427,3 +433,27 @@ export const qcApi = {
   defectCategories: () => api.get('/qc/defect-categories').then(r => Array.isArray(r) ? r : r?.data || []),
   reports: () => api.get('/qc/reports').then(r => r?.data || r),
 };
+
+// Print Shops (دليل المطابع)
+export const printShopApi = {
+  list: () => api.get('/print-shops').then(r => Array.isArray(r) ? r : r?.data || []),
+  get: (id) => api.get(`/print-shops/${id}`),
+  create: (body) => api.post('/print-shops', body),
+  update: (id, body) => api.put(`/print-shops/${id}`, body),
+  delete: (id) => api.delete(`/print-shops/${id}`),
+};
+
+// 4-Stage Production Cycle API (دورة العمليات: قص - فرز - مطبعة - تسليم)
+export const productionCycleApi = {
+  listOrders: (params = '') => api.get(`/production-cycle/orders${params}`).then(r => Array.isArray(r) ? r : r?.data || []),
+  getOrder: (id) => api.get(`/production-cycle/orders/${id}`),
+  createCutting: (body) => api.post('/production-cycle/orders/cutting', body),
+  submitSorting: (id, body) => api.put(`/production-cycle/orders/${id}/sorting`, body),
+  sendToPrint: (id, body) => api.put(`/production-cycle/orders/${id}/print/send`, body),
+  receiveFromPrint: (id, body) => api.put(`/production-cycle/orders/${id}/print/receive`, body),
+  skipPrint: (id) => api.put(`/production-cycle/orders/${id}/print/skip`),
+  deliver: (id, body) => api.put(`/production-cycle/orders/${id}/deliver`, body),
+  deleteOrder: (id) => api.delete(`/production-cycle/orders/${id}`),
+  getKPIs: () => api.get('/production-cycle/kpis'),
+};
+

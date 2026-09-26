@@ -10,19 +10,27 @@ const productionColors = {
   in_progress: 'var(--info)',
   done: 'var(--accent)',
   shipped: '#8a95aa',
-  sorting: 'var(--info)',
-  outsourcing: '#a78bfa',
+  sorting: '#f59e0b',
+  outsourcing: '#a855f7',
   completed: 'var(--accent)',
+  cutting: '#38bdf8',
+  printing: '#a855f7',
+  ready_for_delivery: '#22c55e',
+  delivered: '#10b981',
 };
 
 const productionStatusLabel = (status) => ({
-  pending: 'Pending',
-  in_progress: 'In Progress',
-  done: 'Done',
-  shipped: 'Shipped',
-  sorting: 'Sorting',
-  outsourcing: 'Outsourcing',
-  completed: 'Completed',
+  pending: 'قيد الانتظار',
+  in_progress: 'قيد التشغيل',
+  done: 'مكتمل',
+  shipped: 'تم الشحن',
+  cutting: '1. القص (Cutting)',
+  sorting: '2. الفرز (Sorting)',
+  outsourcing: '3. المطبعة (Printing)',
+  printing: '3. المطبعة (Printing)',
+  ready_for_delivery: '4. جاهز للتسليم (Ready)',
+  delivered: '✓ تم التسليم (Delivered)',
+  completed: 'مكتمل',
 }[status] || status.replaceAll('_', ' '));
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -203,9 +211,16 @@ export default function Dashboard() {
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: 16,
                 }}>
-                  {['input', 'sorting', 'outsourcing', 'final'].map((phase) => {
-                    const data = stageEfficiency[phase] || {};
-                    const phaseLabel = t(phase, phase.charAt(0).toUpperCase() + phase.slice(1));
+                  {['cutting', 'sorting', 'printing', 'delivery'].map((phase) => {
+                    const fallbackKey = phase === 'cutting' ? 'input' : phase === 'printing' ? 'outsourcing' : phase === 'delivery' ? 'final' : phase;
+                    const data = stageEfficiency[phase] || stageEfficiency[fallbackKey] || {};
+                    const phaseLabels = {
+                      cutting: '1. القص (Cutting)',
+                      sorting: '2. الفرز (Sorting)',
+                      printing: '3. المطبعة (Printing)',
+                      delivery: '4. التسليم (Delivery)',
+                    };
+                    const phaseLabel = phaseLabels[phase] || t(phase, phase);
                     return (
                       <div key={phase} style={{
                         padding: 14,

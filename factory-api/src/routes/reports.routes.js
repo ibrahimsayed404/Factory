@@ -10,5 +10,6 @@ router.post('/reports/sales/expenses', authenticate, authorizeAdmin, v.salesExpe
 router.get('/reports/production',  authenticate, reports.productionOverview);
 router.get('/reports/hr',          authenticate, reports.hrOverview);
 router.get('/reports/inventory',   authenticate, reports.inventoryOverview);
+router.get('/reports/print-shops', authenticate, reports.printShopsOverview);
 
 module.exports = router;

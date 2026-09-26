@@ -60,12 +60,22 @@ export default function ProductionTrackingReport() {
 
   const warning = (report?.loss_percentage || 0) > 10;
 
+  const cutQty = report?.total_cut_quantity ?? report?.input ?? 0;
+  const sortedQty = report?.total_sorted_quantity ?? report?.sorting ?? cutQty;
+  const printSent = report?.total_print_sent_quantity ?? report?.outsourcing ?? 0;
+  const printRecv = report?.total_print_received_quantity ?? printSent;
+  const deliveredQty = report?.total_delivered_quantity ?? report?.final ?? 0;
+  const cutLoss = Math.max(0, cutQty - sortedQty);
+  const printLoss = Math.max(0, printSent - printRecv);
+  const totalLoss = cutLoss + printLoss;
+  const eff = cutQty > 0 ? ((deliveredQty / cutQty) * 100).toFixed(1) : (report?.efficiency ?? 100);
+
   const chartData = report
     ? [
-      { name: t('input', 'Input'), quantity: report.input ?? 0 },
-      { name: t('sorting', 'Sorting'), quantity: report.sorting ?? 0 },
-      { name: t('outsourcing', 'Outsourcing'), quantity: report.outsourcing ?? 0 },
-      { name: t('final', 'Final'), quantity: report.final ?? 0 },
+      { name: '1. القص', quantity: cutQty },
+      { name: '2. الفرز', quantity: sortedQty },
+      { name: '3. المطبعة', quantity: printRecv || printSent },
+      { name: '4. التسليم', quantity: deliveredQty },
     ]
     : [];
 
@@ -93,19 +103,23 @@ export default function ProductionTrackingReport() {
 
   const tableData = report
     ? [
-      { label: t('input', 'Input'), value: report.input ?? '—' },
-      { label: t('sorting', 'Sorting'), value: `${report.sorting ?? '—'} (loss: ${report.sorting_loss ?? '—'})` },
-      { label: t('outsourcing', 'Outsourcing'), value: `${report.outsourcing ?? '—'} (loss: ${report.outsourcing_loss ?? '—'})` },
-      { label: t('final', 'Final'), value: `${report.final ?? '—'} (loss: ${report.final_loss ?? '—'})` },
-      { label: t('totalLoss', 'Total Loss'), value: report.total_loss ?? '—' },
-      { label: t('lossPercentage', 'Loss Percentage'), value: report.loss_percentage !== null && report.loss_percentage !== undefined ? `${report.loss_percentage}%` : '—' },
-      { label: t('efficiency', 'Efficiency'), value: report.efficiency !== null && report.efficiency !== undefined ? `${report.efficiency}%` : '—' },
+      { label: 'رقم الموديل واسم الأوردر', value: `${report.model_number || report.order_number} — ${report.order_name || report.product_name || '—'}` },
+      { label: 'المرحلة الحالية للأوردر', value: report.current_stage || '—' },
+      { label: '1. مرحلة القص (Cut Qty)', value: `${cutQty} قطعة` },
+      { label: '2. مرحلة الفرز (Sorted Qty)', value: `${sortedQty} قطعة ${cutLoss > 0 ? `(هالك القص: ${cutLoss} ق)` : '✓ بدون هالك'}` },
+      { label: '3. المطبعة والتشغيل الخارجي', value: report.print_shop_name ? `${report.print_shop_name} — أرسل: ${printSent} ق | استلم: ${printRecv} ق ${printLoss > 0 ? `(عجز: ${printLoss} ق)` : ''}` : 'لم يحول لمطبعة خارجية' },
+      { label: '4. التسليم للعميل (Delivery)', value: deliveredQty > 0 ? `${deliveredQty} قطعة (العميل: ${report.customer_name || '—'} · ${report.total_price ? Number(report.total_price).toLocaleString() + ' ج.م' : ''})` : 'بانتظار التسليم' },
+      { label: 'إجمالي القطع المفقودة (Total Loss)', value: `${totalLoss} قطعة` },
+      { label: 'معدل الكفاءة والإنجاز (Yield)', value: `${eff}%` },
     ]
     : [];
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      <PageHeader title={t('productionTrackingReport', 'Production Tracking Report')} subtitle={t('comparePhases', 'Compare quantities across Input, Sorting, Outsourcing, and Final phases')} />
+      <PageHeader
+        title="تقرير متابعة دورة الإنتاج الشاملة"
+        subtitle="مقارنة الكميات والهالك عبر مراحل التشغيل الأربعة: القص، الفرز، المطبعة، والتسليم"
+      />
 
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}

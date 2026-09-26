@@ -30,6 +30,32 @@ const createCustomerPayment = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const updateCustomerPayment = async (req, res, next) => {
+  try {
+    const result = await salesService.updateCustomerPayment(
+      req.user.id,
+      req.params.id,
+      req.params.paymentId,
+      req.file,
+      req.body,
+      extractReqContext(req)
+    );
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
+const deleteCustomerPayment = async (req, res, next) => {
+  try {
+    const result = await salesService.deleteCustomerPayment(
+      req.user.id,
+      req.params.id,
+      req.params.paymentId,
+      extractReqContext(req)
+    );
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
 const getOrders = async (req, res, next) => {
   try {
     const result = await salesService.listSalesOrders(req.query);
@@ -150,6 +176,8 @@ module.exports = {
   createCustomer,
   getCustomerLedger,
   createCustomerPayment,
+  updateCustomerPayment,
+  deleteCustomerPayment,
   getOrders,
   getOrder,
   createOrder,

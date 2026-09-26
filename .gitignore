@@ -22,3 +22,7 @@ nssm-2.24/
 .vercel
 .env*
 backups/
+*.csv
+*.xlsx
+before-restore-snapshot.txt
+*-output.txt

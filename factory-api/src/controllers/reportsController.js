@@ -288,123 +288,135 @@ const productionOverview = async (req, res, next) => {
       fallback: 'year',
     });
 
-    const [monthly, byEmployee, statusBreakdown, completion, productProgress, lateProducts] = await Promise.all([
-      // Monthly orders created + completed
+    const [pipelineSummaryRes, stageBreakdownRes, printShopsRes, modelsRes, monthlyRes] = await Promise.all([
+      // 1. Overall Pipeline Totals
       pool.query(`
         SELECT
-          date_trunc('month', created_at)::date AS month_start,
-          to_char(date_trunc('month', created_at), 'Mon YYYY') AS month_label,
-          COUNT(*)::int AS total,
-          SUM(CASE WHEN status IN ${PRODUCTION_COMPLETED_STATUSES} THEN 1 ELSE 0 END)::int AS completed,
-          COALESCE(SUM(quantity), 0)::int AS units_ordered,
-          COALESCE(SUM(produced_qty), 0)::int AS units_produced
+          COUNT(*)::int AS total_orders,
+          COUNT(CASE WHEN current_stage = 'delivered' THEN 1 END)::int AS delivered_orders,
+          COALESCE(SUM(total_cut_quantity), 0)::int AS total_cut_units,
+          COALESCE(SUM(total_sorted_quantity), 0)::int AS total_sorted_units,
+          COALESCE(SUM(total_print_sent_quantity), 0)::int AS total_print_sent_units,
+          COALESCE(SUM(total_print_received_quantity), 0)::int AS total_print_received_units,
+          COALESCE(SUM(total_delivered_quantity), 0)::int AS total_delivered_units,
+          COALESCE(SUM(total_price), 0)::float AS total_delivered_revenue
         FROM production_orders
-        WHERE created_at >= $1::date
-          AND created_at <  ($2::date + interval '1 day')
+        WHERE created_at >= $1::date AND created_at < ($2::date + interval '1 day')
+      `, [startDate, endDate]),
+
+      // 2. Stage Breakdown
+      pool.query(`
+        SELECT
+          current_stage AS stage,
+          COUNT(*)::int AS orders,
+          COALESCE(SUM(COALESCE(total_delivered_quantity, total_print_received_quantity, total_sorted_quantity, total_cut_quantity, quantity, 0)), 0)::int AS units
+        FROM production_orders
+        WHERE created_at >= $1::date AND created_at < ($2::date + interval '1 day')
+        GROUP BY current_stage
+        ORDER BY orders DESC
+      `, [startDate, endDate]),
+
+      // 3. Print Shops Performance
+      pool.query(`
+        SELECT
+          ps.id,
+          ps.name AS print_shop_name,
+          ps.phone,
+          COUNT(po.id)::int AS orders,
+          COALESCE(SUM(po.total_print_sent_quantity), 0)::int AS sent_units,
+          COALESCE(SUM(po.total_print_received_quantity), 0)::int AS received_units,
+          GREATEST(COALESCE(SUM(po.total_print_sent_quantity), 0) - COALESCE(SUM(po.total_print_received_quantity), 0), 0)::int AS loss_units,
+          CASE
+            WHEN COALESCE(SUM(po.total_print_sent_quantity), 0) > 0
+            THEN ROUND((GREATEST(COALESCE(SUM(po.total_print_sent_quantity), 0) - COALESCE(SUM(po.total_print_received_quantity), 0), 0)::numeric / SUM(po.total_print_sent_quantity)) * 100, 1)
+            ELSE 0
+          END::float AS loss_rate
+        FROM print_shops ps
+        JOIN production_orders po ON po.print_shop_id = ps.id
+        WHERE po.created_at >= $1::date AND po.created_at < ($2::date + interval '1 day')
+        GROUP BY ps.id, ps.name, ps.phone
+        ORDER BY orders DESC, sent_units DESC
+      `, [startDate, endDate]),
+
+      // 4. Models Performance
+      pool.query(`
+        SELECT
+          COALESCE(NULLIF(po.model_number, ''), po.order_number) AS model_number,
+          COALESCE(po.order_name, po.product_name) AS model_name,
+          COUNT(*)::int AS orders,
+          COALESCE(SUM(po.total_cut_quantity), 0)::int AS cut_units,
+          COALESCE(SUM(po.total_sorted_quantity), 0)::int AS sorted_units,
+          COALESCE(SUM(po.total_delivered_quantity), 0)::int AS delivered_units,
+          GREATEST(COALESCE(SUM(po.total_cut_quantity), 0) - COALESCE(SUM(po.total_delivered_quantity), 0), 0)::int AS loss_units,
+          COALESCE(SUM(po.total_price), 0)::float AS revenue
+        FROM production_orders po
+        WHERE po.created_at >= $1::date AND po.created_at < ($2::date + interval '1 day')
+        GROUP BY 1, 2
+        ORDER BY cut_units DESC, orders DESC
+      `, [startDate, endDate]),
+
+      // 5. Monthly Trend
+      pool.query(`
+        SELECT
+          date_trunc('month', po.created_at)::date AS month_start,
+          to_char(date_trunc('month', po.created_at), 'Mon YYYY') AS month_label,
+          COUNT(*)::int AS total,
+          SUM(CASE WHEN po.current_stage = 'delivered' THEN 1 ELSE 0 END)::int AS completed,
+          COALESCE(SUM(po.total_cut_quantity), 0)::int AS units_ordered,
+          COALESCE(SUM(po.total_delivered_quantity), 0)::int AS units_produced,
+          COALESCE(SUM(po.total_price), 0)::float AS revenue
+        FROM production_orders po
+        WHERE po.created_at >= $1::date AND po.created_at < ($2::date + interval '1 day')
         GROUP BY 1, 2
         ORDER BY 1
       `, [startDate, endDate]),
-
-      // Top 5 employees by orders assigned
-      pool.query(`
-        SELECT e.name,
-               COUNT(po.id)::int AS orders,
-               COALESCE(SUM(po.produced_qty),0)::int AS units_produced
-        FROM employees e
-        JOIN production_orders po ON po.assigned_to = e.id
-        WHERE po.created_at >= $1::date
-          AND po.created_at <  ($2::date + interval '1 day')
-        GROUP BY e.id, e.name
-        ORDER BY orders DESC LIMIT 5
-      `, [startDate, endDate]),
-
-      // Status breakdown
-      pool.query(`
-        SELECT status, COUNT(*)::int AS count
-        FROM production_orders
-        WHERE created_at >= $1::date
-          AND created_at <  ($2::date + interval '1 day')
-        GROUP BY status
-      `, [startDate, endDate]),
-
-      // Overall completion rate
-      pool.query(`
-        SELECT
-          COUNT(*)::int AS total,
-          SUM(CASE WHEN status IN ${PRODUCTION_COMPLETED_STATUSES} THEN 1 ELSE 0 END)::int AS done,
-          COALESCE(SUM(quantity),0)::int    AS total_units,
-          COALESCE(SUM(produced_qty),0)::int AS produced_units
-        FROM production_orders
-        WHERE created_at >= $1::date
-          AND created_at <  ($2::date + interval '1 day')
-      `, [startDate, endDate]),
-
-      // Detailed product progress for the year
-      pool.query(`
-        SELECT
-          product_name,
-          COUNT(*)::int AS orders,
-          COALESCE(SUM(quantity),0)::int AS units_ordered,
-          COALESCE(SUM(produced_qty),0)::int AS units_produced,
-          GREATEST(COALESCE(SUM(quantity),0) - COALESCE(SUM(produced_qty),0), 0)::int AS units_remaining,
-          CASE
-            WHEN COALESCE(SUM(quantity),0) > 0
-              THEN ROUND((COALESCE(SUM(produced_qty),0)::numeric / NULLIF(COALESCE(SUM(quantity),0),0)) * 100, 1)
-            ELSE 0
-          END::float AS completion_rate,
-          SUM(CASE
-            WHEN due_date IS NOT NULL
-             AND due_date < CURRENT_DATE
-             AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
-              THEN 1
-            ELSE 0
-          END)::int AS late_orders,
-          COALESCE(SUM(CASE
-            WHEN due_date IS NOT NULL
-             AND due_date < CURRENT_DATE
-             AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
-              THEN GREATEST(quantity - produced_qty, 0)
-            ELSE 0
-          END), 0)::int AS late_units,
-          MIN(due_date) FILTER (
-            WHERE due_date IS NOT NULL
-              AND due_date < CURRENT_DATE
-              AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
-          )::date AS earliest_late_due_date
-        FROM production_orders
-        WHERE created_at >= $1::date
-          AND created_at <  ($2::date + interval '1 day')
-        GROUP BY product_name
-        ORDER BY units_remaining DESC, product_name ASC
-      `, [startDate, endDate]),
-
-      // Late products snapshot
-      pool.query(`
-        SELECT
-          product_name,
-          COUNT(*)::int AS late_orders,
-          COALESCE(SUM(GREATEST(quantity - produced_qty, 0)),0)::int AS late_units,
-          MIN(due_date)::date AS oldest_due_date
-        FROM production_orders
-        WHERE created_at >= $1::date
-          AND created_at <  ($2::date + interval '1 day')
-          AND due_date IS NOT NULL
-          AND due_date < CURRENT_DATE
-          AND status NOT IN ${PRODUCTION_COMPLETED_STATUSES}
-        GROUP BY product_name
-        ORDER BY oldest_due_date ASC, late_units DESC
-      `, [startDate, endDate]),
     ]);
 
+    const summary = pipelineSummaryRes.rows[0] || {};
+    const totalCut = summary.total_cut_units || 0;
+    const totalDelivered = summary.total_delivered_units || 0;
+    const yieldRate = totalCut > 0 ? Number(((totalDelivered / totalCut) * 100).toFixed(1)) : 0;
+
     res.json({
-      start_date:       startDate,
-      end_date:         endDate,
-      monthly:          monthly.rows,
-      by_employee:      byEmployee.rows,
-      status_breakdown: statusBreakdown.rows,
-      completion:       completion.rows[0],
-      product_progress: productProgress.rows,
-      late_products:    lateProducts.rows,
+      start_date: startDate,
+      end_date: endDate,
+      summary: {
+        total_orders: summary.total_orders || 0,
+        delivered_orders: summary.delivered_orders || 0,
+        total_cut_units: totalCut,
+        total_sorted_units: summary.total_sorted_units || 0,
+        cutting_loss_units: Math.max(0, totalCut - (summary.total_sorted_units || totalCut)),
+        total_print_sent_units: summary.total_print_sent_units || 0,
+        total_print_received_units: summary.total_print_received_units || 0,
+        printing_loss_units: Math.max(0, (summary.total_print_sent_units || 0) - (summary.total_print_received_units || 0)),
+        total_delivered_units: totalDelivered,
+        total_delivered_revenue: summary.total_delivered_revenue || 0,
+        yield_rate: yieldRate,
+      },
+      monthly: monthlyRes.rows,
+      stage_breakdown: stageBreakdownRes.rows,
+      print_shops: printShopsRes.rows,
+      models: modelsRes.rows,
+      // Backwards-compatible mappings for legacy/shared UI components:
+      completion: {
+        total: summary.total_orders || 0,
+        done: summary.delivered_orders || 0,
+        total_units: totalCut,
+        produced_units: totalDelivered,
+      },
+      status_breakdown: stageBreakdownRes.rows.map(r => ({ status: r.stage, count: r.orders })),
+      product_progress: modelsRes.rows.map(m => ({
+        product_name: `${m.model_number} - ${m.model_name}`,
+        orders: m.orders,
+        units_ordered: m.cut_units,
+        units_produced: m.delivered_units,
+        units_remaining: Math.max(0, m.cut_units - m.delivered_units),
+        completion_rate: m.cut_units > 0 ? Number(((m.delivered_units / m.cut_units) * 100).toFixed(1)) : 0,
+        late_orders: 0,
+        late_units: 0,
+      })),
+      by_employee: [],
+      late_products: [],
     });
   } catch (err) { next(err); }
 };
@@ -574,4 +586,94 @@ const inventoryOverview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { salesOverview, createSalesExpense, productionOverview, hrOverview, inventoryOverview };
+// GET /api/reports/print-shops?start_date=2026-01-01&end_date=2026-03-31
+const printShopsOverview = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = resolveDateRange({
+      startDateInput: req.query.start_date,
+      endDateInput: req.query.end_date,
+      yearInput: req.query.year,
+      fallback: 'year',
+    });
+
+    const [shopsRes, recentDispatchesRes, summaryRes] = await Promise.all([
+      // 1. Performance per Print Shop
+      pool.query(`
+        SELECT
+          ps.id,
+          ps.name AS print_shop_name,
+          ps.phone,
+          ps.contact_person,
+          COUNT(po.id)::int AS total_orders,
+          SUM(CASE WHEN po.current_stage = 'printing' THEN 1 ELSE 0 END)::int AS active_orders,
+          COALESCE(SUM(po.total_print_sent_quantity), 0)::int AS sent_units,
+          COALESCE(SUM(po.total_print_received_quantity), 0)::int AS received_units,
+          GREATEST(COALESCE(SUM(po.total_print_sent_quantity), 0) - COALESCE(SUM(po.total_print_received_quantity), 0), 0)::int AS loss_units,
+          CASE
+            WHEN COALESCE(SUM(po.total_print_sent_quantity), 0) > 0
+            THEN ROUND((GREATEST(COALESCE(SUM(po.total_print_sent_quantity), 0) - COALESCE(SUM(po.total_print_received_quantity), 0), 0)::numeric / SUM(po.total_print_sent_quantity)) * 100, 1)
+            ELSE 0
+          END::float AS loss_rate
+        FROM print_shops ps
+        LEFT JOIN production_orders po ON po.print_shop_id = ps.id
+          AND po.created_at >= $1::date AND po.created_at < ($2::date + interval '1 day')
+        GROUP BY ps.id, ps.name, ps.phone, ps.contact_person
+        ORDER BY sent_units DESC, total_orders DESC
+      `, [startDate, endDate]),
+
+      // 2. Recent Dispatches / Slips
+      pool.query(`
+        SELECT
+          po.id,
+          po.order_number,
+          po.model_number,
+          po.order_name,
+          ps.name AS print_shop_name,
+          po.total_print_sent_quantity,
+          po.total_print_received_quantity,
+          po.print_sent_at,
+          po.print_received_at,
+          po.current_stage
+        FROM production_orders po
+        JOIN print_shops ps ON po.print_shop_id = ps.id
+        WHERE po.created_at >= $1::date AND po.created_at < ($2::date + interval '1 day')
+        ORDER BY po.print_sent_at DESC NULLS LAST, po.created_at DESC
+        LIMIT 25
+      `, [startDate, endDate]),
+
+      // 3. Totals
+      pool.query(`
+        SELECT
+          COUNT(DISTINCT po.id)::int AS orders_with_print,
+          COALESCE(SUM(po.total_print_sent_quantity), 0)::int AS total_sent,
+          COALESCE(SUM(po.total_print_received_quantity), 0)::int AS total_received,
+          GREATEST(COALESCE(SUM(po.total_print_sent_quantity), 0) - COALESCE(SUM(po.total_print_received_quantity), 0), 0)::int AS total_loss
+        FROM production_orders po
+        WHERE po.print_shop_id IS NOT NULL
+          AND po.created_at >= $1::date AND po.created_at < ($2::date + interval '1 day')
+      `, [startDate, endDate]),
+    ]);
+
+    const totals = summaryRes.rows[0] || {};
+    const sent = totals.total_sent || 0;
+    const loss = totals.total_loss || 0;
+    const lossRate = sent > 0 ? Number(((loss / sent) * 100).toFixed(1)) : 0;
+
+    res.json({
+      start_date: startDate,
+      end_date: endDate,
+      summary: {
+        total_shops: shopsRes.rows.length,
+        orders_with_print: totals.orders_with_print || 0,
+        total_sent_units: sent,
+        total_received_units: totals.total_received || 0,
+        total_loss_units: loss,
+        loss_rate: lossRate,
+      },
+      print_shops: shopsRes.rows,
+      recent_dispatches: recentDispatchesRes.rows,
+    });
+  } catch (err) { next(err); }
+};
+
+module.exports = { salesOverview, createSalesExpense, productionOverview, hrOverview, inventoryOverview, printShopsOverview };

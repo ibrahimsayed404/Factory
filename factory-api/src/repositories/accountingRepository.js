@@ -384,6 +384,16 @@ const createExpenseRecord = async (client, data) => {
   return result.rows[0];
 };
 
+const deleteJournalEntriesBySource = async (sourceType, sourceId, client = pool) => {
+  const result = await client.query(
+    `DELETE FROM accounting_journal_entries
+     WHERE source_type = $1 AND source_id = $2
+     RETURNING id`,
+    [sourceType, sourceId]
+  );
+  return result.rows;
+};
+
 module.exports = {
   getAccountByCode,
   getAccountById,
@@ -398,6 +408,7 @@ module.exports = {
   getSourceAccountNet,
   insertJournalEntry,
   insertJournalLine,
+  deleteJournalEntriesBySource,
   listJournalEntries,
   getJournalEntryById,
   getLedgerRows,

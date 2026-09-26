@@ -41,4 +41,48 @@ describe('Employee Routes & Middleware Validation Unit Tests', () => {
       });
     expect(res.statusCode).toBe(400);
   });
+
+  test('POST /api/employees rejects invalid salary_type with 400', async () => {
+    const res = await request(app)
+      .post('/api/employees')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Invalid Salary Type',
+        salary_type: 'crypto',
+      });
+    expect(res.statusCode).toBe(400);
+  });
+
+  test('POST /api/employees rejects negative hourly_rate with 400', async () => {
+    const res = await request(app)
+      .post('/api/employees')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Negative Rate Employee',
+        hourly_rate: -10,
+      });
+    expect(res.statusCode).toBe(400);
+  });
+
+  test('POST /api/employees rejects negative fixed_salary with 400', async () => {
+    const res = await request(app)
+      .post('/api/employees')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Negative Salary Employee',
+        fixed_salary: -500,
+      });
+    expect(res.statusCode).toBe(400);
+  });
+
+  test('POST /api/employees rejects emergency_contact longer than 100 chars with 400', async () => {
+    const res = await request(app)
+      .post('/api/employees')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        name: 'Long Contact Employee',
+        emergency_contact: 'a'.repeat(101),
+      });
+    expect(res.statusCode).toBe(400);
+  });
 });

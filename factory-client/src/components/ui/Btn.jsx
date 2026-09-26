@@ -15,9 +15,14 @@ export const Btn = ({ children, variant = 'ghost', size = 'md', onClick, disable
   const styles = {
     primary: {
       background: 'var(--gradient-accent)',
-      color: '#0a1a14',
+      color: '#ffffff',
       border: 'none',
-      boxShadow: '0 2px 8px rgba(34,211,160,0.25)',
+      boxShadow: '0 2px 8px var(--accent-glow)',
+    },
+    secondary: {
+      background: 'var(--bg-hover)',
+      color: 'var(--text-primary)',
+      border: '1px solid var(--border)',
     },
     ghost: {
       background: 'transparent',
@@ -37,7 +42,11 @@ export const Btn = ({ children, variant = 'ghost', size = 'md', onClick, disable
         if (disabled) return;
         e.currentTarget.style.transform = 'translateY(-1px)';
         if (variant === 'primary') {
-          e.currentTarget.style.boxShadow = '0 4px 16px rgba(34,211,160,0.4)';
+          e.currentTarget.style.boxShadow = '0 4px 14px var(--accent-glow)';
+        }
+        if (variant === 'secondary') {
+          e.currentTarget.style.borderColor = 'var(--border-hover)';
+          e.currentTarget.style.background = 'var(--bg-active)';
         }
         if (variant === 'ghost') {
           e.currentTarget.style.borderColor = 'var(--border-hover)';
@@ -49,7 +58,11 @@ export const Btn = ({ children, variant = 'ghost', size = 'md', onClick, disable
       }}
       onMouseLeave={e => {
         e.currentTarget.style.transform = 'translateY(0)';
-        if (variant === 'primary') e.currentTarget.style.boxShadow = '0 2px 8px rgba(34,211,160,0.25)';
+        if (variant === 'primary') e.currentTarget.style.boxShadow = '0 2px 8px var(--accent-glow)';
+        if (variant === 'secondary') {
+          e.currentTarget.style.borderColor = 'var(--border)';
+          e.currentTarget.style.background = 'var(--bg-hover)';
+        }
         if (variant === 'ghost') {
           e.currentTarget.style.borderColor = 'var(--border)';
           e.currentTarget.style.background = 'transparent';

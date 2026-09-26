@@ -7,7 +7,7 @@ import { apiRequestState } from '../../api';
 import { ErrorMsg } from '../ui';
 import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 import { useLanguage } from '../../context/LanguageContext';
-import FabriCoreLogo from '../brand/FabriCoreLogo';
+import BlackFoxLogo from '../brand/BlackFoxLogo';
 import { FEATURE_FLAGS } from '../../config/featureFlags';
 
 /* ── Nav Section Label ──────────────────────────────────── */
@@ -32,7 +32,7 @@ const NavItem = ({ to, label, icon }) => (
     textDecoration: 'none', marginBottom: 2,
     transition: 'all .2s var(--ease-out)',
     position: 'relative',
-    borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+    borderInlineStart: isActive ? '3px solid var(--accent)' : '3px solid transparent',
   })}
     onMouseEnter={e => {
       const isActive = e.currentTarget.style.color.includes('var(--accent)');
@@ -103,17 +103,17 @@ export const Layout = ({ children }) => {
         <div style={{
           position: 'absolute', top: -60, left: -60,
           width: 180, height: 180,
-          background: 'radial-gradient(circle, rgba(34,211,160,0.06) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(37,99,235,0.08) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
 
         {/* Logo */}
         <div style={{
-          padding: '22px 20px 18px',
+          padding: '16px 14px 14px',
           borderBottom: '1px solid var(--border)',
           position: 'relative',
         }}>
-          <FabriCoreLogo compact style={{ maxWidth: '100%', height: 'auto' }} />
+          <BlackFoxLogo compact style={{ maxWidth: '100%', height: 'auto' }} />
         </div>
 
         {/* Controls */}
@@ -143,22 +143,13 @@ export const Layout = ({ children }) => {
           <NavSection>{t('main', 'Main')}</NavSection>
           <NavItem to="/" label={t('dashboard', 'Dashboard')} icon="▦" />
 
-          <NavSection>{t('operations', 'Operations')}</NavSection>
-          <NavItem to="/production" label={t('production', 'Production')} icon="⚙" />
-          {FEATURE_FLAGS.manufacturingBoms && <NavItem to="/manufacturing/boms" label={t('boms', 'BOMs')} icon="📄" />}
-          {FEATURE_FLAGS.manufacturingRoutings && <NavItem to="/manufacturing/routings" label={t('routings', 'Routings')} icon="🔄" />}
-          {FEATURE_FLAGS.productionPipeline && <NavItem to="/production-pipeline" label={t('productionPipeline', 'Pipeline Kanban')} icon="🗂" />}
-          <NavItem to="/production-orders/create" label={t('createOrder', 'Create Order')} icon="🧵" />
-          <NavItem to="/production-orders/sorting" label={t('sorting', 'Sorting (فرز)')} icon="🗂" />
-          <NavItem to="/production-orders/outsourcing" label={t('outsourcing', 'Outsourcing')} icon="🚚" />
-          <NavItem to="/production-orders/final" label={t('finalPhase', 'Final Phase')} icon="✅" />
-          <NavItem to="/production-orders/report" label={t('prodReport', 'Prod Report')} icon="📉" />
-          <NavItem to="/production-orders/manage" label={t('manageOrders', 'Manage Orders')} icon="🗑" />
-          <NavItem to="/products"   label={t('products', 'Products')}    icon="🏷️" />
-          <NavItem to="/inventory"  label={t('inventory', 'Inventory')}  icon="📦" />
-          {FEATURE_FLAGS.purchasing && <NavItem to="/purchasing" label={t('purchasing', 'Purchasing')} icon="🛒" />}
-          {FEATURE_FLAGS.qcInspections && <NavItem to="/qc/inspections" label={t('qcInspections', 'QC Inspections')} icon="🔍" />}
-          {FEATURE_FLAGS.qcReports && <NavItem to="/qc/reports" label={t('qcReports', 'QC Reports')} icon="📋" />}
+          <NavSection>{t('operations', 'العمليات')}</NavSection>
+          <NavItem to="/production-pipeline" label={t('productionTracking', 'متابعة خط الإنتاج')} icon="📊" />
+          <NavItem to="/production-orders/cutting" label={t('cuttingPhase', 'القص وإنشاء الأوامر')} icon="✂️" />
+          <NavItem to="/production-orders/sorting" label={t('sortingPhase', 'فرز ما بعد القص')} icon="🗂️" />
+          <NavItem to="/production-orders/printing" label={t('printingPhase', 'المطبعة')} icon="🖨️" />
+          <NavItem to="/production-orders/delivery" label={t('deliveryPhase', 'التسليم للعميل')} icon="🚚" />
+          <NavItem to="/print-shops" label={t('printShops', 'دليل المطابع')} icon="🏢" />
 
           <NavSection>{t('people', 'People')}</NavSection>
           <NavItem to="/employees"  label={t('employees', 'Employees')}  icon="👥" />
@@ -182,10 +173,10 @@ export const Layout = ({ children }) => {
           <div style={{
             width: 34, height: 34, borderRadius: 'var(--radius-sm)',
             background: 'var(--gradient-accent)',
-            color: '#0a1a14',
+            color: '#ffffff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 13, fontWeight: 700, flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(34,211,160,0.2)',
+            boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
           }}>
             {user?.name?.[0]?.toUpperCase() || 'U'}
           </div>

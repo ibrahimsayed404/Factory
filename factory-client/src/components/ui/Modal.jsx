@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 
-export const Modal = ({ title, onClose, children, width = 500 }) => {
+export const Modal = ({ title, onClose, children, width = 500, zIndex = 100 }) => {
   const modalRef = useRef(null);
   useEffect(() => {
     if (modalRef.current) {
@@ -17,7 +17,7 @@ export const Modal = ({ title, onClose, children, width = 500 }) => {
       aria-modal="true"
       aria-labelledby="modal-title"
       style={{
-        position: 'fixed', inset: 0, zIndex: 100,
+        position: 'fixed', inset: 0, zIndex,
         background: 'rgba(0, 0, 0, 0.65)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',

@@ -68,6 +68,14 @@ const employeeUpsert = [
   body('weekend_days').optional({ checkFalsy: true }).matches(/^[0-6](,[0-6])*$/).withMessage('weekend_days must be comma-separated day indexes (0-6)'),
   body('device_user_id').optional({ checkFalsy: true }).isLength({ max: 100 }).withMessage('device_user_id is too long'),
   body('salary').optional({ checkFalsy: true }).isFloat({ min: 0 }).withMessage('salary must be >= 0'),
+  body('salary_type').optional({ checkFalsy: true }).isIn(['hourly', 'production', 'fixed']).withMessage('salary_type must be hourly, production, or fixed'),
+  body('hourly_rate').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('hourly_rate must be >= 0'),
+  body('production_rate').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('production_rate must be >= 0'),
+  body('fixed_salary').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('fixed_salary must be >= 0'),
+  body('monthly_incentives').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('monthly_incentives must be >= 0'),
+  body('insurance_rate').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('insurance_rate must be >= 0'),
+  body('emergency_contact').optional({ nullable: true }).isLength({ max: 100 }).withMessage('emergency_contact cannot exceed 100 characters'),
+  body('national_id').optional({ nullable: true }).isLength({ max: 50 }).withMessage('national_id cannot exceed 50 characters'),
   body('status').optional({ checkFalsy: true }).isIn(['active', 'inactive', 'terminated']).withMessage('invalid status'),
   body('hire_date')
     .optional({ checkFalsy: true, nullable: true })
@@ -171,6 +179,23 @@ const customerPaymentCreate = [
   body('payment_date').optional({ checkFalsy: true }).isISO8601().withMessage('payment_date must be YYYY-MM-DD'),
   body('amount').isFloat({ min: 0.01 }).withMessage('amount must be greater than 0'),
   body('notes').optional({ nullable: true }).isLength({ max: 500 }).withMessage('notes is too long'),
+  handleValidation,
+];
+
+const customerPaymentUpdate = [
+  param('id').isInt({ min: 1 }).withMessage('customer id must be a positive integer'),
+  param('paymentId').isInt({ min: 1 }).withMessage('payment id must be a positive integer'),
+  body('payment_date').optional({ checkFalsy: true }).isISO8601().withMessage('payment_date must be YYYY-MM-DD'),
+  body('amount').optional({ checkFalsy: true }).isFloat({ min: 0.01 }).withMessage('amount must be greater than 0'),
+  body('notes').optional({ nullable: true }).isLength({ max: 500 }).withMessage('notes is too long'),
+  body('payment_method').optional({ nullable: true }).isLength({ max: 50 }).withMessage('payment_method is too long'),
+  body('reference_number').optional({ nullable: true }).isLength({ max: 100 }).withMessage('reference_number is too long'),
+  handleValidation,
+];
+
+const customerPaymentDelete = [
+  param('id').isInt({ min: 1 }).withMessage('customer id must be a positive integer'),
+  param('paymentId').isInt({ min: 1 }).withMessage('payment id must be a positive integer'),
   handleValidation,
 ];
 
@@ -333,6 +358,8 @@ module.exports = {
   payrollDeleteWeek,
   customerCreate,
   customerPaymentCreate,
+  customerPaymentUpdate,
+  customerPaymentDelete,
   salesExpenseCreate,
   salesCreate,
   salesStatusUpdate,

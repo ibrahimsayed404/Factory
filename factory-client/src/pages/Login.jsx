@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Input, Btn, ErrorMsg, Spinner } from '../components/ui';
 import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
 import { useLanguage } from '../context/LanguageContext';
-import FabriCoreLogo from '../components/brand/FabriCoreLogo';
+import BlackFoxLogo from '../components/brand/BlackFoxLogo';
 
 export default function Login() {
   const { login } = useAuth();
@@ -76,8 +76,8 @@ export default function Login() {
           }} />
 
           {/* Logo */}
-          <div style={{ marginBottom: 30 }}>
-            <FabriCoreLogo style={{ width: '100%', height: 'auto' }} />
+          <div style={{ marginBottom: 24 }}>
+            <BlackFoxLogo style={{ width: '100%', height: 'auto' }} />
           </div>
 
           <h1 style={{
@@ -116,7 +116,7 @@ export default function Login() {
           textAlign: 'center', marginTop: 20,
           fontSize: 12, color: 'var(--text-muted)',
         }}>
-          FabriCore Factory Management System
+          Black Fox Factory Management System
         </p>
       </div>
     </div>

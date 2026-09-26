@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "env:local": "node scripts/switch-env.js local",
+    "env:live": "node scripts/switch-env.js live",
+    "setup:test-env": "node scripts/setup-local-test-env.js",
     "db:ensure": "node scripts/ensure-db.js",
     "bootstrap:admin": "node scripts/bootstrap-admin.js",
     "seed:sample": "node scripts/seed-sample-data.js",

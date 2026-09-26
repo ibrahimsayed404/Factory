@@ -9,7 +9,7 @@ const getStats = async (req, res, next) => {
                   WHERE date_trunc('month', payment_date) = date_trunc('month', NOW())`),
       pool.query(`SELECT COUNT(*) FROM employees WHERE status='active'`),
       pool.query(`SELECT COUNT(*) FROM materials WHERE quantity <= min_quantity`),
-      pool.query(`SELECT status, COUNT(*) FROM production_orders GROUP BY status`),
+      pool.query(`SELECT COALESCE(current_stage, status) AS status, COUNT(*)::int AS count FROM production_orders GROUP BY COALESCE(current_stage, status)`),
       // Monthly spend = paid payroll + material cost + extra expenses (mirrors Reports formula)
       pool.query(`
         SELECT

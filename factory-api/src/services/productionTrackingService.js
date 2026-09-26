@@ -501,6 +501,24 @@ const buildDetailedReport = (orderRow, phaseRows) => {
     loss_percentage: metrics.loss_percentage,
     alerts,
     phases: phaseRows.map(formatPhaseRow),
+    // 4-Stage Pipeline Integration
+    order_name: orderRow.order_name || null,
+    current_stage: orderRow.current_stage || null,
+    total_cut_quantity: Number(orderRow.total_cut_quantity || inputQty || 0),
+    total_sorted_quantity: orderRow.total_sorted_quantity !== null && orderRow.total_sorted_quantity !== undefined ? Number(orderRow.total_sorted_quantity) : sortingQty,
+    total_print_sent_quantity: orderRow.total_print_sent_quantity !== null && orderRow.total_print_sent_quantity !== undefined ? Number(orderRow.total_print_sent_quantity) : outsourcingQty,
+    total_print_received_quantity: orderRow.total_print_received_quantity !== null && orderRow.total_print_received_quantity !== undefined ? Number(orderRow.total_print_received_quantity) : null,
+    total_delivered_quantity: orderRow.total_delivered_quantity !== null && orderRow.total_delivered_quantity !== undefined ? Number(orderRow.total_delivered_quantity) : finalQty,
+    total_price: orderRow.total_price ? Number(orderRow.total_price) : null,
+    print_shop_name: orderRow.print_shop_name || null,
+    customer_name: orderRow.customer_name || null,
+    colors: Array.isArray(orderRow.colors) ? orderRow.colors : (typeof orderRow.colors === 'string' ? JSON.parse(orderRow.colors || '[]') : []),
+    pipeline_stages: [
+      { key: 'cutting', name: 'القص', quantity: Number(orderRow.total_cut_quantity || inputQty || 0) },
+      { key: 'sorting', name: 'الفرز', quantity: Number(orderRow.total_sorted_quantity || sortingQty || orderRow.total_cut_quantity || inputQty || 0) },
+      { key: 'printing', name: 'المطبعة', quantity: Number(orderRow.total_print_received_quantity || orderRow.total_print_sent_quantity || outsourcingQty || 0) },
+      { key: 'delivery', name: 'التسليم', quantity: Number(orderRow.total_delivered_quantity || finalQty || 0) },
+    ],
   };
 };
 
@@ -1035,6 +1053,53 @@ const getDashboardEfficiencySummary = async () => {
     summary[phaseName].average_loss_percentage = count > 0
       ? Number((percentageSums[phaseName] / count).toFixed(2))
       : 0;
+  }
+
+  // 4-Stage Pipeline Integration
+  try {
+    const pipeRes = await pool.query(`
+      SELECT
+        COUNT(CASE WHEN current_stage = 'cutting' THEN 1 END)::int AS cutting_orders,
+        COUNT(CASE WHEN current_stage = 'sorting' THEN 1 END)::int AS sorting_orders,
+        COUNT(CASE WHEN current_stage = 'printing' THEN 1 END)::int AS printing_orders,
+        COUNT(CASE WHEN current_stage IN ('ready_for_delivery', 'delivered') THEN 1 END)::int AS delivery_orders,
+        COALESCE(SUM(total_cut_quantity), 0)::int AS cut_total,
+        COALESCE(SUM(total_sorted_quantity), 0)::int AS sorted_total,
+        COALESCE(SUM(total_print_sent_quantity), 0)::int AS print_sent_total,
+        COALESCE(SUM(total_print_received_quantity), 0)::int AS print_received_total,
+        COALESCE(SUM(total_delivered_quantity), 0)::int AS delivered_total
+      FROM production_orders
+    `);
+    const p = pipeRes.rows[0] || {};
+    const cutLossPct = p.cut_total > 0 && p.sorted_total > 0
+      ? Number((Math.max(0, p.cut_total - p.sorted_total) / p.cut_total * 100).toFixed(2))
+      : 0;
+    const printLossPct = p.print_sent_total > 0 && p.print_received_total > 0
+      ? Number((Math.max(0, p.print_sent_total - p.print_received_total) / p.print_sent_total * 100).toFixed(2))
+      : 0;
+
+    summary.cutting = {
+      total_quantity: p.cut_total || summary.input.total_quantity,
+      average_loss_percentage: cutLossPct,
+      current_order_count: p.cutting_orders || summary.input.current_order_count,
+    };
+    if (!summary.sorting.total_quantity && p.sorted_total) {
+      summary.sorting.total_quantity = p.sorted_total;
+      summary.sorting.average_loss_percentage = cutLossPct;
+      summary.sorting.current_order_count = p.sorting_orders;
+    }
+    summary.printing = {
+      total_quantity: p.print_received_total || p.print_sent_total || summary.outsourcing.total_quantity,
+      average_loss_percentage: printLossPct || summary.outsourcing.average_loss_percentage,
+      current_order_count: p.printing_orders || summary.outsourcing.current_order_count,
+    };
+    summary.delivery = {
+      total_quantity: p.delivered_total || summary.final.total_quantity,
+      average_loss_percentage: 0,
+      current_order_count: p.delivery_orders || summary.final.current_order_count,
+    };
+  } catch (_e) {
+    // Fallback gracefully
   }
 
   return summary;
