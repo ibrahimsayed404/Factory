@@ -94,7 +94,7 @@ export default function PrintShops() {
         }
       />
 
-      {actionError && <ErrorMsg error={actionError} style={{ marginBottom: 16 }} />}
+      {actionError && <ErrorMsg error={actionError} onDismiss={() => setActionError('')} style={{ marginBottom: 16 }} />}
 
       <Card style={{ padding: 24 }}>
         {loading ? (
@@ -177,11 +177,11 @@ export default function PrintShops() {
       {modalOpen && (
         <Modal
           title={editingShop ? `تعديل بيانات ${editingShop.name}` : 'إضافة مطبعة / ورشة جديدة'}
-          onClose={() => setModalOpen(false)}
+          onClose={() => { setModalOpen(false); setError(''); }}
           zIndex={120}
         >
           <div style={{ padding: 8 }}>
-            {error && <ErrorMsg error={error} style={{ marginBottom: 16 }} />}
+            {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
 
             <div style={{ display: 'grid', gap: 14 }}>
               <Input
@@ -217,7 +217,7 @@ export default function PrintShops() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-              <Btn variant="secondary" onClick={() => setModalOpen(false)}>
+              <Btn variant="secondary" onClick={() => { setModalOpen(false); setError(''); }}>
                 إلغاء
               </Btn>
               <Btn variant="primary" onClick={handleSave} disabled={saving}>

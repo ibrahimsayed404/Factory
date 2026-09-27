@@ -112,7 +112,7 @@ export default function ProductionSortingPhase() {
         }
       />
 
-      {error && <ErrorMsg error={error} style={{ marginBottom: 16 }} />}
+      {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
       {successMsg && (
         <div style={{
           background: 'rgba(34, 197, 94, 0.15)',
@@ -130,6 +130,7 @@ export default function ProductionSortingPhase() {
       {/* Active Sorting Modal / Form Card if Order is Selected */}
       {selectedOrder && (
         <Card style={{ marginBottom: 32, padding: 24, border: '2px solid var(--accent, #38bdf8)' }}>
+          {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>أنت الآن تقوم بفرز الأوردر:</span>
@@ -137,7 +138,7 @@ export default function ProductionSortingPhase() {
                 موديل {selectedOrder.model_number} — {selectedOrder.order_name || selectedOrder.product_name}
               </h3>
             </div>
-            <Btn variant="secondary" size="sm" onClick={() => setSelectedOrder(null)}>
+            <Btn variant="secondary" size="sm" onClick={() => { setSelectedOrder(null); setError(''); }}>
               إلغاء الفرز
             </Btn>
           </div>

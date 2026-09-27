@@ -91,7 +91,7 @@ const createCuttingOrder = async ({ modelNumber, orderName, colors, notes, userI
 /**
  * 2. Get All Production Orders with full colors and stage data
  */
-const listProductionOrders = async (filters = {}) => {
+const listProductionOrders = async (filters = {}, clientOrPool = pool) => {
   const { orderId, stage, status, search, printShopId, customerId } = filters;
   const conditions = [];
   const params = [];
@@ -165,15 +165,15 @@ const listProductionOrders = async (filters = {}) => {
     ORDER BY po.id DESC
   `;
 
-  const result = await pool.query(query, params);
+  const result = await clientOrPool.query(query, params);
   return result.rows;
 };
 
 /**
  * 3. Get Single Production Order by ID with full details
  */
-const getProductionOrderById = async (id) => {
-  const orders = await listProductionOrders({ orderId: id });
+const getProductionOrderById = async (id, clientOrPool = pool) => {
+  const orders = await listProductionOrders({ orderId: id }, clientOrPool);
   if (!orders || orders.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
   return orders[0];
 };
@@ -189,6 +189,7 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
   }
 
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query('BEGIN');
 
@@ -227,7 +228,7 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
     // Determine next stage: if next_action is 'delivery' (plain order), jump to ready_for_delivery, else printing
     const nextStage = next_action === 'delivery' ? STAGE_READY_FOR_DELIVERY : STAGE_PRINTING;
 
-    const updatedOrder = await client.query(
+    await client.query(
       `UPDATE production_orders
        SET total_sorted_quantity = $1,
            sorting_notes = $2,
@@ -240,13 +241,21 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
     );
 
     await client.query('COMMIT');
-    return await getProductionOrderById(orderId);
+    committed = true;
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr.message);
+      }
+    }
     throw err;
   } finally {
     client.release();
   }
+
+  return await getProductionOrderById(orderId);
 };
 
 /**
@@ -258,6 +267,7 @@ const sendToPrintShop = async (orderId, { print_shop_id, colors, print_notes, se
   if (!print_shop_id) throw new ApiError(400, 'يرجى اختيار المطبعة');
 
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query('BEGIN');
 
@@ -317,13 +327,21 @@ const sendToPrintShop = async (orderId, { print_shop_id, colors, print_notes, se
     );
 
     await client.query('COMMIT');
-    return await getProductionOrderById(orderId);
+    committed = true;
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr.message);
+      }
+    }
     throw err;
   } finally {
     client.release();
   }
+
+  return await getProductionOrderById(orderId);
 };
 
 /**
@@ -337,6 +355,7 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
   }
 
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query('BEGIN');
 
@@ -379,13 +398,21 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
     );
 
     await client.query('COMMIT');
-    return await getProductionOrderById(orderId);
+    committed = true;
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr.message);
+      }
+    }
     throw err;
   } finally {
     client.release();
   }
+
+  return await getProductionOrderById(orderId);
 };
 
 /**
@@ -393,6 +420,7 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
  */
 const skipPrint = async (orderId) => {
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query('BEGIN');
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
@@ -407,13 +435,21 @@ const skipPrint = async (orderId) => {
     );
 
     await client.query('COMMIT');
-    return await getProductionOrderById(orderId);
+    committed = true;
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr.message);
+      }
+    }
     throw err;
   } finally {
     client.release();
   }
+
+  return await getProductionOrderById(orderId);
 };
 
 /**
@@ -430,6 +466,7 @@ const deliverToCustomer = async (orderId, { customer_id, unit_price, delivery_no
   }
 
   const client = await pool.connect();
+  let committed = false;
   try {
     await client.query('BEGIN');
 
@@ -537,13 +574,21 @@ const deliverToCustomer = async (orderId, { customer_id, unit_price, delivery_no
     );
 
     await client.query('COMMIT');
-    return await getProductionOrderById(orderId);
+    committed = true;
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr.message);
+      }
+    }
     throw err;
   } finally {
     client.release();
   }
+
+  return await getProductionOrderById(orderId);
 };
 
 /**

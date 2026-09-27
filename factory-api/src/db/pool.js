@@ -10,7 +10,7 @@ const useSsl = ['require', 'true', '1'].includes(sslMode) || process.env.NODE_EN
 // Vercel/serverless: tiny pools. Supabase Session mode only allows ~15 clients total.
 // Prefer Transaction pooler (port 6543) in cloud; keep max low so instances don't exhaust it.
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-const defaultMax = isServerless ? 1 : 5;
+const defaultMax = isServerless ? 2 : 5;
 const max = Math.max(1, parseInt(process.env.DB_POOL_MAX || String(defaultMax), 10));
 
 const pool = new Pool({

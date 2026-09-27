@@ -105,7 +105,7 @@ export default function ProductionCutting() {
         }
       />
 
-      {error && <ErrorMsg error={error} style={{ marginBottom: 16 }} />}
+      {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
       {successMsg && (
         <div style={{
           background: 'rgba(34, 197, 94, 0.15)',

@@ -63,8 +63,9 @@ export default function ProductionPrintingPhase() {
   };
 
   const handleConfirmSend = async (shouldPrint = true) => {
-    if (!sendTargetOrder || !selectedShopId) {
-      setError('يرجى اختيار المطبعة');
+    if (!sendTargetOrder) return;
+    if (!selectedShopId) {
+      setError('يرجى اختيار المطبعة المستلمة من القائمة');
       return;
     }
 
@@ -163,7 +164,7 @@ export default function ProductionPrintingPhase() {
         }
       />
 
-      {error && <ErrorMsg error={error} style={{ marginBottom: 16 }} />}
+      {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
       {successMsg && (
         <div style={{
           background: 'rgba(34, 197, 94, 0.15)',
@@ -421,10 +422,34 @@ export default function ProductionPrintingPhase() {
       {sendTargetOrder && (
         <Modal
           title={`إرسال موديل ${sendTargetOrder.model_number} للمطبعة`}
-          onClose={() => setSendTargetOrder(null)}
+          onClose={() => { setSendTargetOrder(null); setError(''); }}
           zIndex={120}
         >
           <div style={{ padding: 8 }}>
+            {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
+
+            {(!printShops || printShops.length === 0) && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#ef4444',
+                padding: '12px 16px',
+                borderRadius: 6,
+                marginBottom: 16,
+                fontSize: 13,
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}>
+                <span>⚠️ لا توجد مطابع مسجلة حتى الآن. يجب إضافة مطبعة أولاً من دليل المطابع لتتمكن من إرسال الأوردر.</span>
+                <Btn variant="secondary" size="sm" onClick={() => navigate('/print-shops')}>
+                  🏢 فتح دليل المطابع
+                </Btn>
+              </div>
+            )}
+
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontWeight: 700, marginBottom: 6, fontSize: 14 }}>
                 اختر المطبعة المستلمة *
@@ -525,7 +550,7 @@ export default function ProductionPrintingPhase() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <Btn variant="secondary" onClick={() => setSendTargetOrder(null)}>
+              <Btn variant="secondary" onClick={() => { setSendTargetOrder(null); setError(''); }}>
                 إلغاء
               </Btn>
               <Btn
@@ -544,10 +569,11 @@ export default function ProductionPrintingPhase() {
       {receiveTargetOrder && (
         <Modal
           title={`استلام موديل ${receiveTargetOrder.model_number} من المطبعة`}
-          onClose={() => setReceiveTargetOrder(null)}
+          onClose={() => { setReceiveTargetOrder(null); setError(''); }}
           zIndex={120}
         >
           <div style={{ padding: 8 }}>
+            {error && <ErrorMsg error={error} onDismiss={() => setError('')} style={{ marginBottom: 16 }} />}
             <div style={{
               background: 'rgba(217, 119, 6, 0.1)',
               padding: 12,
@@ -641,7 +667,7 @@ export default function ProductionPrintingPhase() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
-              <Btn variant="secondary" onClick={() => setReceiveTargetOrder(null)}>
+              <Btn variant="secondary" onClick={() => { setReceiveTargetOrder(null); setError(''); }}>
                 إلغاء
               </Btn>
               <Btn
