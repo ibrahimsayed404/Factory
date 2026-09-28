@@ -1,10 +1,10 @@
 const express = require('express');
+const { uploadsPath } = require('../../utils/uploadsPath');
 const router = express.Router();
 const qcController = require('./qc.controller');
 const { authenticate, authorizeAdmin } = require('../../middleware/auth');
 const { qcPhotoUpload, validateEvidenceSignature } = require('../../middleware/upload');
 
-const path = require('node:path');
 const fsPromises = require('node:fs').promises;
 const storageService = require('../../services/storageService');
 
@@ -31,7 +31,7 @@ router.get('/uploads/qc-photos/:filename', authenticate, async (req, res, next) 
     if (!filename || /[/\\]/.test(filename) || filename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
-    const filePath = path.join(__dirname, '..', '..', '..', 'uploads', 'qc-photos', filename);
+    const filePath = uploadsPath('qc-photos', filename);
     try {
       await fsPromises.access(filePath);
       return res.sendFile(filePath);

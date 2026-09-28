@@ -1,4 +1,5 @@
 const { randomBytes } = require('node:crypto');
+const { uploadsPath } = require('../../utils/uploadsPath');
 const fs = require('node:fs');
 const path = require('node:path');
 const pool = require('../../db/pool');
@@ -366,7 +367,7 @@ const updateCustomerPayment = async (userId, customerId, paymentId, file, data, 
 
     if (file && existingPayment.evidence_url && existingPayment.evidence_url !== evidenceUrl && existingPayment.evidence_url.startsWith('/api/uploads/payment-evidence/')) {
       const oldFilename = path.basename(existingPayment.evidence_url);
-      const oldPath = path.join(__dirname, '..', '..', '..', 'uploads', 'payment-evidence', oldFilename);
+      const oldPath = uploadsPath('payment-evidence', oldFilename);
       if (fs.existsSync(oldPath)) {
         try { fs.unlinkSync(oldPath); } catch (e) { console.warn('Failed to remove old evidence file:', e.message); }
       }
@@ -422,7 +423,7 @@ const deleteCustomerPayment = async (userId, customerId, paymentId, reqContext =
 
     if (existingPayment.evidence_url && existingPayment.evidence_url.startsWith('/api/uploads/payment-evidence/')) {
       const filename = path.basename(existingPayment.evidence_url);
-      const filePath = path.join(__dirname, '..', '..', '..', 'uploads', 'payment-evidence', filename);
+      const filePath = uploadsPath('payment-evidence', filename);
       if (fs.existsSync(filePath)) {
         try { fs.unlinkSync(filePath); } catch (e) { console.warn('Failed to remove evidence file:', e.message); }
       }

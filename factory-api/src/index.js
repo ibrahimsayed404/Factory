@@ -5,6 +5,8 @@ const { startAutoPayrollScheduler } = require('./modules/payroll/autoPayroll.sch
 const { startAutoAttendanceScheduler } = require('./modules/employees/autoAttendance.scheduler');
 
 const PORT = process.env.PORT || 5000;
+// HOST=127.0.0.1 keeps the desktop app's API off the local network.
+const HOST = process.env.HOST || undefined;
 
 const ensureSalesSchema = async () => {
   // Non-destructive compatibility fix for older databases.
@@ -20,8 +22,8 @@ const ensureSalesSchema = async () => {
 (async () => {
   try {
     await ensureSalesSchema();
-    app.listen(PORT, () => {
-      console.log(`Factory API running on http://localhost:${PORT}`);
+    app.listen(PORT, HOST, () => {
+      console.log(`Factory API running on http://${HOST || 'localhost'}:${PORT}`);
       startAutoPayrollScheduler();
       startAutoAttendanceScheduler();
     });
