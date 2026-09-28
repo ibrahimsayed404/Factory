@@ -27,6 +27,7 @@ const runPayrollIntegrityCheck = async (client = pool) => {
     SELECT DISTINCT week_start
     FROM payroll
     WHERE week_start IS NOT NULL
+      AND COALESCE(status, '') <> 'void'
     ORDER BY week_start ASC
   `);
 
@@ -41,6 +42,7 @@ const runPayrollIntegrityCheck = async (client = pool) => {
       FROM payroll p
       JOIN employees e ON p.employee_id = e.id
       WHERE p.week_start = $1::date
+        AND COALESCE(p.status, '') <> 'void' -- voided rows were never paid; don't alert on them
       ORDER BY p.employee_id ASC
     `, [weekStart]);
 
