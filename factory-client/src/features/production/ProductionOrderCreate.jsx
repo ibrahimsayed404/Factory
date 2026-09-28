@@ -15,16 +15,10 @@ const createEmptyMaterial = () => ({
   material_quantity: '',
 });
 
-const splitColors = (value) => String(value || '')
-  .split(',')
-  .map((color) => color.trim())
-  .filter(Boolean);
-
 export default function ProductionOrderCreate() {
   const { t } = useLanguage();
   const { data: materials, loading: materialsLoading } = useFetch(inventoryApi.list);
   const { data: products, loading: productsLoading } = useFetch(productApi.list);
-  const { data: orders } = useFetch(productionTrackingApi.list);
   const loading = materialsLoading || productsLoading;
   const [productId, setProductId] = useState('');
   const [productNumber, setProductNumber] = useState('');

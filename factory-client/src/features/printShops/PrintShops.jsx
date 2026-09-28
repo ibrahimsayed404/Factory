@@ -101,7 +101,7 @@ export default function PrintShops() {
           <div style={{ textAlign: 'center', padding: 40 }}><Spinner /></div>
         ) : (shops || []).length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-            لا توجد مطابع مسجلة حتى الآن. اضغط على "إضافة مطبعة جديدة" للبدء.
+            لا توجد مطابع مسجلة حتى الآن. اضغط على &quot;إضافة مطبعة جديدة&quot; للبدء.
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>

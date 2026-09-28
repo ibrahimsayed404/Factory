@@ -369,10 +369,9 @@ const getBaseStyles = () => `
 /**
  * Build Sales & Cashflow Detailed Report HTML (A4 Landscape)
  */
-export const buildSalesReportHtml = ({ data = {}, startDate = '', endDate = '', netMode = 'cash' }) => {
+export const buildSalesReportHtml = ({ data = {}, startDate = '', endDate = '' }) => {
   const monthly = data.monthly || [];
   const topCustomers = data.top_customers || [];
-  const paymentBreakdown = data.payment_breakdown || [];
   const summary = data.summary || {};
 
   const totalRevenue = monthly.reduce((s, r) => s + Number(r.revenue || 0), 0);
@@ -645,7 +644,6 @@ export const buildSalesReportHtml = ({ data = {}, startDate = '', endDate = '', 
  */
 export const buildProductionReportHtml = ({ data = {}, startDate = '', endDate = '' }) => {
   const summary = data.summary || {};
-  const monthly = data.monthly || [];
   const printShops = data.print_shops || [];
   const models = data.models || [];
 

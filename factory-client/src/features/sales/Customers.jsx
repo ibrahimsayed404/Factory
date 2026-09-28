@@ -317,18 +317,6 @@ export default function Customers() {
       }))
       .filter((item) => item.product_name);
   };
-  const orderColumns = [
-    { key: 'order_number', label: 'Order #' },
-    { key: 'order_date', label: t('date', 'Date') },
-    { key: 'total_products', label: t('productsTaken', 'Products') },
-    { key: 'total_amount', label: t('totalOrdered', 'Total') },
-    { key: 'paid_amount', label: t('totalPaid', 'Paid') },
-    { key: 'balance', label: t('remaining', 'Remaining') },
-    { key: 'payment_status', label: t('payment', 'Payment') },
-    { key: 'status', label: t('status', 'Order status') },
-    { key: 'details', label: t('details', 'Details') },
-    { key: 'actions', label: '' },
-  ];
   const paymentColumns = [
     { key: 'payment_date', label: t('paymentDate', 'Payment date'), render: v => v ? new Date(v).toLocaleDateString() : '—' },
     { key: 'amount', label: t('amount', 'Amount'), render: v => <span style={{ color: 'var(--accent)', fontWeight: 600 }}>+${Number(v || 0).toLocaleString()}</span> },

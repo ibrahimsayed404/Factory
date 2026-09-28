@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productionCycleApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
-import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal } from '../../components/ui';
+import { PageHeader, Card, Btn, Spinner, Modal } from '../../components/ui';
 import { PrintableOrderSlip } from './PrintableOrderSlip';
 
 export default function ProductionTrackingBoard() {
@@ -876,6 +876,7 @@ export default function ProductionTrackingBoard() {
                             variant="danger"
                             size="sm"
                             onClick={() => handleDeleteOrder(ord.id, ord.model_number)}
+                            disabled={deletingId === ord.id}
                             title="حذف الأوردر"
                           >
                             🗑️
@@ -1023,6 +1024,7 @@ export default function ProductionTrackingBoard() {
                 variant="danger"
                 size="sm"
                 onClick={() => handleDeleteOrder(selectedOrderDetails.id, selectedOrderDetails.model_number)}
+                disabled={deletingId === selectedOrderDetails.id}
               >
                 🗑️ حذف أمر الإنتاج
               </Btn>
@@ -1047,7 +1049,7 @@ export default function ProductionTrackingBoard() {
 }
 
 // Subcomponent: Order Kanban Card
-function OrderKanbanCard({ order, density = 'compact', onOpenDetails, onOpenSlip, onAction, actionText, onDelete }) {
+function OrderKanbanCard({ order, density = 'compact', onOpenDetails, onAction, actionText }) {
   const pieces = order.total_cut_quantity || order.quantity || 0;
 
   if (density === 'compact') {

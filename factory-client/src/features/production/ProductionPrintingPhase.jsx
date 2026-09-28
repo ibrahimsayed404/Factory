@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { productionCycleApi } from './production.api';
 import { printShopApi } from '../printShops/printShops.api';
 import { useFetch } from '../../hooks/useFetch';
-import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal, Select, Input } from '../../components/ui';
+import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal } from '../../components/ui';
 import { PrintableOrderSlip } from './PrintableOrderSlip';
 
 export default function ProductionPrintingPhase() {

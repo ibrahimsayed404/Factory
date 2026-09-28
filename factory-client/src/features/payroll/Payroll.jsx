@@ -95,17 +95,6 @@ const formatWeekInterval = (weekStart, weekEnd, t) => {
   return `${t('from', 'from')} ${startDayName} ${t('to', 'to')} ${endDayName} ${t('from', 'from')} ${startDay}/${startMonth} ${t('to', 'to')} ${endDay}/${endMonth}`;
 };
 
-let reportExportModules;
-const loadReportExportModules = async () => {
-  if (!reportExportModules) {
-    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
-      import('jspdf'),
-      import('jspdf-autotable'),
-    ]);
-    reportExportModules = { jsPDF, autoTable };
-  }
-  return reportExportModules;
-};
 
 // Default the visible window to roughly the last 12 weeks, bounded so the fetch
 // never silently truncates. Users can widen the range via the filter bar.

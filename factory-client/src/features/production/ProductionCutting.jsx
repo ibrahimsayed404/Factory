@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productionCycleApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
-import { PageHeader, Card, Table, Btn, Input, Spinner, ErrorMsg } from '../../components/ui';
+import { PageHeader, Card, Btn, Input, Spinner, ErrorMsg } from '../../components/ui';
 import { PrintableOrderSlip } from './PrintableOrderSlip';
 
 export default function ProductionCutting() {

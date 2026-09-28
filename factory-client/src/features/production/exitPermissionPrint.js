@@ -132,7 +132,6 @@ export const printExitPermission = ({
   employeeName,
   completedAt,
   documentRef,
-  language = 'ar',
 }) => {
   if (!globalThis.window || !globalThis.document?.body) return;
 

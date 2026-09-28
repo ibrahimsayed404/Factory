@@ -44,7 +44,6 @@ const exportPDF = async (filename, title, sections, action = 'print', htmlConten
   // Landscape A4 orientation: 297mm width x 210mm height gives ample room for 8+ columns without text-wrapping
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth(); // 297mm
-  const H = doc.internal.pageSize.getHeight(); // 210mm
 
   // Dark Corporate Header Banner
   doc.setFillColor(15, 23, 42);

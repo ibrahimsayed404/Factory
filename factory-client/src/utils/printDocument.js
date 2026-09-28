@@ -21,7 +21,7 @@ export const printViaPopup = (html) => {
     return true;
   } catch (e) {
     console.warn('printViaPopup failed:', e);
-    try { win.close(); } catch (_) {}
+    try { win.close(); } catch (_) { /* popup already closed */ }
     return false;
   }
 };

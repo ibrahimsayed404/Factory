@@ -396,6 +396,8 @@ export default function Sales() {
           })}
           <Btn variant="outline" size="sm" onClick={addOrderRow} style={{ marginBottom: 16 }}>{t('addOrder', '+ Add order')}</Btn>
 
+          {createError && <ErrorMsg msg={createError} />}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
             <Btn onClick={() => setShowModal(false)}>{t('cancel', 'Cancel')}</Btn>
             <Btn variant="primary" onClick={handleCreate} disabled={saving}>{saving ? t('saving', 'Creating…') : t('createOrderButton', 'Create order')}</Btn>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PageHeader, Table, Button, Card, Badge, Modal, Input, Label, Select, ErrorMsg } from '../../components/ui';
+import { PageHeader, Table, Button, Card, Badge, ErrorMsg } from '../../components/ui';
 import { api } from '../../api/client';
 
 export default function Purchasing() {
@@ -111,7 +111,7 @@ export default function Purchasing() {
               { key: 'phone', label: 'Phone' },
               { key: 'city', label: 'City' },
               { key: 'country', label: 'Country' },
-              { key: 'actions', label: 'Actions', render: (_, row) => (
+              { key: 'actions', label: 'Actions', render: () => (
                 <div style={{ display: 'flex', gap: 5 }}>
                   <Button size="sm" variant="outline">Ledger</Button>
                   <Button size="sm" variant="outline">Performance</Button>
