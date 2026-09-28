@@ -1,7 +1,7 @@
 const { Router } = require('express');
-const manufacturingController = require('../controllers/manufacturingController');
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const { handleValidation } = require('../middleware/validation');
+const manufacturingController = require('./manufacturing.controller');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const { handleValidation } = require('../../middleware/validation');
 const { body } = require('express-validator');
 
 const router = Router();

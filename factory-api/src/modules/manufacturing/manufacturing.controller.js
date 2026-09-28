@@ -1,5 +1,5 @@
-const bomService = require('../services/bomService');
-const routingService = require('../services/routingService');
+const bomService = require('./bom.service');
+const routingService = require('./routing.service');
 
 // BOMs
 const createBom = async (req, res, next) => {

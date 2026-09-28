@@ -1,11 +1,11 @@
 const { randomBytes } = require('node:crypto');
 const pool = require('../db/pool');
-const bomService = require('./bomService');
-const routingService = require('./routingService');
+const bomService = require('../modules/manufacturing/bom.service');
+const routingService = require('../modules/manufacturing/routing.service');
 const inventoryService = require('../modules/inventory/inventory.service');
 const accountingService = require('../modules/accounting/accounting.service');
 const productionRepository = require('../repositories/productionRepository');
-const manufacturingRepository = require('../repositories/manufacturingRepository');
+const manufacturingRepository = require('../modules/manufacturing/manufacturing.repository');
 const ApiError = require('../utils/ApiError');
 
 const buildOrderNumber = (prefix) => {

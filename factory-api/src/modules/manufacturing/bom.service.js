@@ -1,6 +1,6 @@
-const manufacturingRepository = require('../repositories/manufacturingRepository');
-const pool = require('../db/pool');
-const ApiError = require('../utils/ApiError');
+const manufacturingRepository = require('./manufacturing.repository');
+const pool = require('../../db/pool');
+const ApiError = require('../../utils/ApiError');
 
 const createBom = async (bomData, materials) => {
   if (!materials || materials.length === 0) {
