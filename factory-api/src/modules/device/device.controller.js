@@ -12,6 +12,8 @@ const {
 const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
 const WEEKEND_PRESENT_NOTE = 'present vacation';
+const DEVICE_NOTE = 'auto-ingested-from-device';
+const MISSING_CHECK_IN_NOTE = 'auto-ingested-from-device; missing check-in punch';
 const DUPLICATE_PUNCH_WINDOW_MINUTES = Number(process.env.ATTENDANCE_DUPLICATE_PUNCH_MINUTES || 3);
 
 const normalizePunchTimestamp = (input) => {
@@ -68,7 +70,28 @@ const buildExternalEventId = (event, employeeId) => {
   return crypto.createHash('sha256').update(base).digest('hex').slice(0, 32);
 };
 
+// Same rule as manual attendance edits: never rewrite a day whose payroll is paid.
+const isPaidPayrollDate = async (client, employeeId, attendanceDate) => {
+  const res = await client.query(
+    `SELECT 1 FROM payroll
+     WHERE employee_id = $1
+       AND status = 'paid'
+       AND (
+         (week_start IS NOT NULL AND week_end IS NOT NULL AND $2::date BETWEEN week_start AND week_end)
+         OR (week_start IS NULL AND month IS NOT NULL AND year IS NOT NULL
+             AND EXTRACT(MONTH FROM $2::date) = month AND EXTRACT(YEAR FROM $2::date) = year)
+       )
+     LIMIT 1`,
+    [employeeId, attendanceDate]
+  );
+  return res.rows.length > 0;
+};
+
 const recalculateAttendanceFromEvents = async (client, employee, attendanceDate, policy) => {
+  if (await isPaidPayrollDate(client, employee.id, attendanceDate)) {
+    return { skipped: 'paid_payroll_period' };
+  }
+
   const punches = await client.query(
     `SELECT punched_at, TO_CHAR(punched_at, 'HH24:MI') AS punch_time
      FROM attendance_punch_events
@@ -94,14 +117,27 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate,
     dedupedPunches.push(punch);
   }
 
-  const checkIn = dedupedPunches[0].punch_time;
-  const hasCheckout = dedupedPunches.length > 1;
-  const checkOut = hasCheckout ? dedupedPunches[dedupedPunches.length - 1].punch_time : null;
-  const hoursWorked = hasCheckout ? calculateHoursWorked(checkIn, checkOut, null) : null;
   const weekendAttendance = isWeekendDate(employee, attendanceDate);
+  const { shiftEnd, overnightShift } = resolveShiftWindow(employee);
+  const firstPunchMin = toMinutes(dedupedPunches[0].punch_time);
+  // A single punch at/after shift end is the leaving punch (the arrival punch is
+  // missing), not a check-in 9+ hours late. Record it as check-out, charge no
+  // lateness, and flag it for review.
+  const missingCheckIn = dedupedPunches.length === 1 && !weekendAttendance && !overnightShift
+    && shiftEnd !== null && firstPunchMin !== null && firstPunchMin >= shiftEnd;
+
+  const checkIn = missingCheckIn ? null : dedupedPunches[0].punch_time;
+  const hasCheckout = dedupedPunches.length > 1;
+  const checkOut = hasCheckout
+    ? dedupedPunches[dedupedPunches.length - 1].punch_time
+    : (missingCheckIn ? dedupedPunches[0].punch_time : null);
+  const hoursWorked = hasCheckout ? calculateHoursWorked(checkIn, checkOut, null) : null;
   const workedMinutes = hasCheckout ? calculateWorkedMinutes(checkIn, checkOut) : 0;
 
-  const metrics = weekendAttendance
+  const zeroMetrics = { late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0 };
+  const metrics = missingCheckIn
+    ? zeroMetrics
+    : weekendAttendance
     ? {
       late_minutes: 0,
       early_leave_minutes: 0,
@@ -119,7 +155,7 @@ const recalculateAttendanceFromEvents = async (client, employee, attendanceDate,
     };
 
   const status = weekendAttendance ? 'present' : ((metrics.late_minutes > 0 || metrics.early_leave_minutes > 0) ? 'late' : 'present');
-  const notes = weekendAttendance ? WEEKEND_PRESENT_NOTE : 'auto-ingested-from-device';
+  const notes = weekendAttendance ? WEEKEND_PRESENT_NOTE : (missingCheckIn ? MISSING_CHECK_IN_NOTE : DEVICE_NOTE);
 
   const upsert = await client.query(
     `INSERT INTO attendance (
@@ -238,6 +274,11 @@ const ingestPunchEvents = async (req, res, next) => {
       );
 
       const attendance = await recalculateAttendanceFromEvents(client, employee, attendanceDate, policy);
+      if (attendance?.skipped) {
+        // Punch is kept in attendance_punch_events; the paid day is left untouched.
+        results.push({ ok: true, external_event_id: externalId, employee_id: employee.id, attendance_date: attendanceDate, skipped: attendance.skipped });
+        continue;
+      }
       results.push({ ok: true, external_event_id: externalId, employee_id: employee.id, attendance_date: attendanceDate, attendance });
     }
 

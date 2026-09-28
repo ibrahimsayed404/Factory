@@ -818,6 +818,69 @@ describe('Device punch ingestion', () => {
     expect(Number(list.body[0].early_leave_minutes)).toBe(0);
     expect(Number(list.body[0].overtime_minutes)).toBe(480);
   });
+  const createDeviceWorker = async (agent, deviceUserId) => {
+    const emp = await agent.post('/api/employees').send({
+      name: `Device Worker ${deviceUserId}`,
+      email: `${deviceUserId.toLowerCase()}@test.com`,
+      role: 'Operator',
+      shift: 'morning',
+      shift_start: '09:00',
+      shift_end: '17:00',
+      weekend_days: '5,6',
+      device_user_id: deviceUserId,
+      salary: 2000,
+    });
+    expect(emp.status).toBe(201);
+    return emp.body.id;
+  };
+
+  const punch = (events) => request(app)
+    .post('/api/device/punch-events')
+    .set('x-device-api-key', process.env.DEVICE_INGEST_API_KEY)
+    .send({ events });
+
+  test('a lone punch after shift end is recorded as check-out, not a 9-hour-late check-in', async () => {
+    const agent = await createAdminAndLogin();
+    const employeeId = await createDeviceWorker(agent, 'DVC-LONE');
+
+    const ingest = await punch([
+      { external_event_id: 'lone-1', device_id: 'scanner-a', device_user_id: 'DVC-LONE', punched_at: '2026-03-16T17:45:00' },
+    ]);
+    expect(ingest.status).toBe(207);
+
+    const list = await agent.get(`/api/employees/${employeeId}/attendance?month=3&year=2026`);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].check_in).toBeNull();
+    expect(list.body[0].check_out).toMatch(/^17:45/);
+    expect(Number(list.body[0].late_minutes)).toBe(0);
+    expect(list.body[0].status).toBe('present');
+    expect(list.body[0].notes).toContain('missing check-in punch');
+  });
+
+  test('device punches never rewrite a day inside a paid payroll week', async () => {
+    const agent = await createAdminAndLogin();
+    const employeeId = await createDeviceWorker(agent, 'DVC-PAID');
+
+    await punch([
+      { external_event_id: 'paid-in', device_id: 'scanner-a', device_user_id: 'DVC-PAID', punched_at: '2026-03-16T09:00:00' },
+      { external_event_id: 'paid-out', device_id: 'scanner-a', device_user_id: 'DVC-PAID', punched_at: '2026-03-16T17:00:00' },
+    ]);
+    await pool.query(
+      "INSERT INTO payroll (employee_id, month, year, base_salary, net_salary, status, week_start, week_end) VALUES ($1, 3, 2026, 2000, 2000, 'paid', '2026-03-14', '2026-03-20')",
+      [employeeId]
+    );
+
+    // A late re-sync of the device sends an earlier punch for the same, already paid day.
+    const resync = await punch([
+      { external_event_id: 'paid-resync', device_id: 'scanner-a', device_user_id: 'DVC-PAID', punched_at: '2026-03-16T08:10:00' },
+    ]);
+    expect(resync.status).toBe(207);
+    expect(resync.body.results[0].skipped).toBe('paid_payroll_period');
+
+    const list = await agent.get(`/api/employees/${employeeId}/attendance?month=3&year=2026`);
+    expect(list.body[0].check_in).toMatch(/^09:00/);
+    expect(list.body[0].check_out).toMatch(/^17:00/);
+  });
 });
 
 describe('Paid payroll spend reporting', () => {
