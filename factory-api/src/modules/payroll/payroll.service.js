@@ -625,9 +625,9 @@ const calculatePayrollForEmployee = async (employee, options) => {
   if (useWeeklySalary) {
     const hrData = await payrollRepository.getHrDataForWeeklyPayroll(employee.id, weekStart, weekEnd);
     const activeLoans = hrData.loans;
-    // Prorate the monthly installment across the weeks in a month so a full
-    // installment is not deducted every single week.
-    const weeksPerMonth = Math.max(1, Number(policy.weeksPerMonth || 4));
+    // Loan policy: the full installment (hr_loans.monthly_installment, despite
+    // the column name) is deducted from every weekly payroll until the loan is
+    // repaid. It is intentionally not prorated across the month.
 
     // Reconcile against what has already been deducted for this exact payroll
     // record so regeneration never double-charges a loan.
