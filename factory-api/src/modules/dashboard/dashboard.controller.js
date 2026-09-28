@@ -1,5 +1,5 @@
 const pool = require('../../db/pool');
-const productionTrackingService = require('../../services/productionTrackingService');
+const productionTrackingService = require('../productionTracking/productionTracking.service');
 
 const getStats = async (req, res, next) => {
   try {

@@ -1,5 +1,5 @@
 const salesService = require('../../src/services/salesService');
-const productionTrackingService = require('../../src/services/productionTrackingService');
+const productionTrackingService = require('../../src/modules/productionTracking/productionTracking.service');
 const salesRepository = require('../../src/repositories/salesRepository');
 const pool = require('../../src/db/pool');
 

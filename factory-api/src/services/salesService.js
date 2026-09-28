@@ -6,7 +6,7 @@ const salesRepository = require('../repositories/salesRepository');
 const auditService = require('./auditService');
 const inventoryService = require('../modules/inventory/inventory.service');
 const accountingService = require('../modules/accounting/accounting.service');
-const productionTrackingService = require('./productionTrackingService');
+const productionTrackingService = require('../modules/productionTracking/productionTracking.service');
 const storageService = require('./storageService');
 const ApiError = require('../utils/ApiError');
 

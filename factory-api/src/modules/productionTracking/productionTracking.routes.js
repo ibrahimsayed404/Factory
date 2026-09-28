@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const v = require('../middleware/validation');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
 
-const productionTracking = require('../controllers/productionTrackingController');
+const productionTracking = require('./productionTracking.controller');
 
 router.get('/production-orders', authenticate, productionTracking.list);
 router.get('/production-orders/machines', authenticate, productionTracking.listMachines);

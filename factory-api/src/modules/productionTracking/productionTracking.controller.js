@@ -1,6 +1,6 @@
-const productionTrackingService = require('../services/productionTrackingService');
-const auditService = require('../services/auditService');
-const { verifyUserPassword } = require('../utils/verifyPassword');
+const productionTrackingService = require('./productionTracking.service');
+const auditService = require('../../services/auditService');
+const { verifyUserPassword } = require('../../utils/verifyPassword');
 
 const list = async (req, res, next) => {
   try {
