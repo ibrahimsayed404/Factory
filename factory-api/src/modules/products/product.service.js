@@ -1,7 +1,7 @@
-const pool = require('../db/pool');
-const productRepository = require('../repositories/productRepository');
-const auditService = require('./auditService');
-const ApiError = require('../utils/ApiError');
+const pool = require('../../db/pool');
+const productRepository = require('./product.repository');
+const auditService = require('../../services/auditService');
+const ApiError = require('../../utils/ApiError');
 
 const listProducts = async () => {
   return await productRepository.getAllProducts();

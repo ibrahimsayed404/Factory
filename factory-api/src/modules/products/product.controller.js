@@ -1,5 +1,5 @@
-const productService = require('../services/productService');
-const { extractReqContext } = require('../services/auditService');
+const productService = require('./product.service');
+const { extractReqContext } = require('../../services/auditService');
 
 const getAll = async (req, res, next) => {
   try {

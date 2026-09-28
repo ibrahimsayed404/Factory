@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
 
-const products = require('../controllers/productController');
+const products = require('./product.controller');
 
 router.get('/products', authenticate, products.getAll);
 router.get('/products/:id', authenticate, products.getOne);
