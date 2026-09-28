@@ -12,7 +12,7 @@ import { FEATURE_FLAGS } from './config/featureFlags';
 const Login      = lazy(() => import('./features/auth/Login'));
 const Dashboard  = lazy(() => import('./features/dashboard/Dashboard'));
 const Inventory  = lazy(() => import('./pages/Inventory'));
-const Employees  = lazy(() => import('./pages/Employees'));
+const Employees  = lazy(() => import('./features/employees/Employees'));
 const Payroll    = lazy(() => import('./pages/Payroll'));
 const Loans      = lazy(() => import('./pages/Loans'));
 const Sales      = lazy(() => import('./pages/Sales'));

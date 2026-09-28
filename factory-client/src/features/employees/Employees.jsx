@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { employeeApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, SearchInput } from '../components/ui';
+import { employeeApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, SearchInput } from '../../components/ui';
 
 const SHIFT_DEFAULTS = {
   morning: { start: '08:00', end: '17:00' },
