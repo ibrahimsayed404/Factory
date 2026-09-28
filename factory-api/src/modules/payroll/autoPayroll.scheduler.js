@@ -1,6 +1,6 @@
-const pool = require('../db/pool');
-const payrollService = require('./payrollService');
-const payrollIntegrityCheckService = require('./payrollIntegrityCheckService');
+const pool = require('../../db/pool');
+const payrollService = require('./payroll.service');
+const payrollIntegrityCheckService = require('./payrollIntegrityCheck.service');
 
 const AUTO_PAYROLL_SETTING_KEY = 'payroll_last_auto_week_start';
 const ONE_HOUR_MS = 60 * 60 * 1000;

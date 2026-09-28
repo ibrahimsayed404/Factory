@@ -1,6 +1,6 @@
 const pool = require('../../db/pool');
 const employeeRepository = require('./employee.repository');
-const payrollRepository = require('../../repositories/payrollRepository');
+const payrollRepository = require('../payroll/payroll.repository');
 const auditService = require('../../services/auditService');
 const ApiError = require('../../utils/ApiError');
 const {

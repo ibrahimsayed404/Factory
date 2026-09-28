@@ -1,7 +1,7 @@
 const {
   countEmployedWorkDays,
   buildApprovedLeaveDatesSet,
-} = require('../../src/services/payrollService');
+} = require('../../src/modules/payroll/payroll.service');
 
 describe('countEmployedWorkDays (base-salary proration)', () => {
   const fridayWeekend = new Set([5]); // Friday only

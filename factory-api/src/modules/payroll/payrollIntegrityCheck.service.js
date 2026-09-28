@@ -1,7 +1,7 @@
-const pool = require('../db/pool');
-const payrollRepository = require('../repositories/payrollRepository');
-const { computeLivePayrollFigures } = require('./payrollService');
-const { getAttendancePayrollPolicy } = require('../utils/policySettings');
+const pool = require('../../db/pool');
+const payrollRepository = require('./payroll.repository');
+const { computeLivePayrollFigures } = require('./payroll.service');
+const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
 const round2 = (n) => Number(Number(n || 0).toFixed(2));
 

@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin, authorizeCronOrAdmin } = require('../middleware/auth');
-const v = require('../middleware/validation');
+const { authenticate, authorizeAdmin, authorizeCronOrAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
 
-const payroll = require('../controllers/payrollController');
+const payroll = require('./payroll.controller');
 
 router.get('/payroll', authenticate, authorizeAdmin, payroll.getAll);
 router.post('/payroll', authenticate, authorizeAdmin, v.payrollCreate, payroll.create);

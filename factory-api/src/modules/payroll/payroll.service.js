@@ -1,9 +1,9 @@
-const pool = require('../db/pool');
-const payrollRepository = require('../repositories/payrollRepository');
-const accountingService = require('../modules/accounting/accounting.service');
-const { getAttendancePayrollPolicy } = require('../utils/policySettings');
-const ApiError = require('../utils/ApiError');
-const { SHIFT_SCHEDULES, toMinutes } = require('../utils/attendanceMetrics');
+const pool = require('../../db/pool');
+const payrollRepository = require('./payroll.repository');
+const accountingService = require('../accounting/accounting.service');
+const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
+const ApiError = require('../../utils/ApiError');
+const { SHIFT_SCHEDULES, toMinutes } = require('../../utils/attendanceMetrics');
 
 const round2 = (n) => Number(Number(n || 0).toFixed(2));
 

@@ -1,7 +1,7 @@
 require('dotenv').config();
 const app = require('./app');
 const pool = require('./db/pool');
-const { startAutoPayrollScheduler } = require('./services/autoPayrollScheduler');
+const { startAutoPayrollScheduler } = require('./modules/payroll/autoPayroll.scheduler');
 const { startAutoAttendanceScheduler } = require('./modules/employees/autoAttendance.scheduler');
 
 const PORT = process.env.PORT || 5000;

@@ -1,5 +1,5 @@
-const payrollService = require('../services/payrollService');
-const { runAutoPayrollForCurrentWeek } = require('../services/autoPayrollScheduler');
+const payrollService = require('./payroll.service');
+const { runAutoPayrollForCurrentWeek } = require('./autoPayroll.scheduler');
 
 const getAll = async (req, res, next) => {
   try {
