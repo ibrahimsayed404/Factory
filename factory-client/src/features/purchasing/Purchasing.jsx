@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { PageHeader, Table, Button, Card, Badge, Modal, Input, Label, Select, ErrorMsg } from '../components/ui';
-import api from '../api';
+import { PageHeader, Table, Button, Card, Badge, Modal, Input, Label, Select, ErrorMsg } from '../../components/ui';
+import api from '../../api';
 
 export default function Purchasing() {
   const [activeTab, setActiveTab] = useState('orders'); // orders, requests, suppliers

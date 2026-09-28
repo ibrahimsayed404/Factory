@@ -35,7 +35,7 @@ const Attendance = lazy(() => import('./features/attendance/Attendance'));
 const Reports    = lazy(() => import('./features/reports/Reports'));
 const Accounting = lazy(() => import('./features/accounting/Accounting'));
 const Products   = lazy(() => import('./features/products/Products'));
-const Purchasing = lazy(() => import('./pages/Purchasing'));
+const Purchasing = lazy(() => import('./features/purchasing/Purchasing'));
 const Bom        = lazy(() => import('./pages/BOM'));
 const Routings   = lazy(() => import('./pages/Routings'));
 const QCInspections = lazy(() => import('./pages/QCInspections'));
