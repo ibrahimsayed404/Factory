@@ -92,4 +92,11 @@ describe('Quality Control API Integration Tests', () => {
     // Clean up
     await pool.query('DELETE FROM qc_inspections WHERE id = $1', [inspectionId]);
   });
+
+  it('should block non-admin users from QC reports', async () => {
+    const res = await request(app)
+      .get('/api/qc/reports')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
 });

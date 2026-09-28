@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const qcController = require('./qc.controller');
-const { authenticate } = require('../../middleware/auth');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
 const { qcPhotoUpload, validateEvidenceSignature } = require('../../middleware/upload');
 
 const path = require('node:path');
@@ -46,8 +46,8 @@ router.get('/uploads/qc-photos/:filename', authenticate, async (req, res, next) 
   }
 });
 
-// Reports - might need higher privileges
-router.get('/qc/reports', authenticate, qcController.getReports);
+// Reports are admin-only
+router.get('/qc/reports', authenticate, authorizeAdmin, qcController.getReports);
 
 module.exports = router;
 

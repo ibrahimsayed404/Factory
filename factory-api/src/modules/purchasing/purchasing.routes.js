@@ -1,48 +1,44 @@
 const express = require('express');
 const router = express.Router();
 const purchasingController = require('./purchasing.controller');
-const { authenticate } = require('../../middleware/auth');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
 
-const isManagerOrAdmin = (req, res, next) => {
-  if (req.user.role === 'admin' || req.user.role === 'manager') {
-    return next();
-  }
-  return res.status(403).json({ error: 'Requires manager or admin role' });
-};
+// Purchasing (suppliers, requests, orders, receipts, supplier payments) is admin-only.
+router.use(authenticate, authorizeAdmin);
 
 // =======================
 // SUPPLIERS
 // =======================
-router.post('/suppliers', authenticate, isManagerOrAdmin, purchasingController.createSupplier);
-router.get('/suppliers', authenticate, purchasingController.getSuppliers);
-router.get('/suppliers/:id/ledger', authenticate, purchasingController.getSupplierLedger);
-router.get('/suppliers/:id/performance', authenticate, purchasingController.getSupplierPerformance);
+router.post('/suppliers', purchasingController.createSupplier);
+router.get('/suppliers', purchasingController.getSuppliers);
+router.get('/suppliers/:id/ledger', purchasingController.getSupplierLedger);
+router.get('/suppliers/:id/performance', purchasingController.getSupplierPerformance);
 
 // =======================
 // PURCHASE REQUESTS
 // =======================
-router.post('/requests', authenticate, purchasingController.createPurchaseRequest);
-router.get('/requests', authenticate, purchasingController.getPurchaseRequests);
-router.get('/requests/:id', authenticate, purchasingController.getPurchaseRequestById);
-router.post('/requests/:id/approve', authenticate, isManagerOrAdmin, purchasingController.approvePurchaseRequest);
+router.post('/requests', purchasingController.createPurchaseRequest);
+router.get('/requests', purchasingController.getPurchaseRequests);
+router.get('/requests/:id', purchasingController.getPurchaseRequestById);
+router.post('/requests/:id/approve', purchasingController.approvePurchaseRequest);
 
 // =======================
 // PURCHASE ORDERS
 // =======================
-router.post('/orders', authenticate, isManagerOrAdmin, purchasingController.createPurchaseOrder);
-router.get('/orders', authenticate, purchasingController.getPurchaseOrders);
-router.get('/orders/:id', authenticate, purchasingController.getPurchaseOrderById);
-router.post('/orders/:id/approve', authenticate, isManagerOrAdmin, purchasingController.approvePurchaseOrder);
-router.post('/orders/:id/order', authenticate, isManagerOrAdmin, purchasingController.markOrderAsOrdered);
+router.post('/orders', purchasingController.createPurchaseOrder);
+router.get('/orders', purchasingController.getPurchaseOrders);
+router.get('/orders/:id', purchasingController.getPurchaseOrderById);
+router.post('/orders/:id/approve', purchasingController.approvePurchaseOrder);
+router.post('/orders/:id/order', purchasingController.markOrderAsOrdered);
 
 // =======================
 // GOODS RECEIPT
 // =======================
-router.post('/orders/:id/receive', authenticate, isManagerOrAdmin, purchasingController.receiveGoods);
+router.post('/orders/:id/receive', purchasingController.receiveGoods);
 
 // =======================
 // PAYMENTS
 // =======================
-router.post('/payments', authenticate, isManagerOrAdmin, purchasingController.paySupplier);
+router.post('/payments', purchasingController.paySupplier);
 
 module.exports = router;
