@@ -1,11 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const { uploadsPath } = require('../utils/uploadsPath');
 
 const getUploadDir = (subDir) => {
   const baseDir = process.env.VERCEL
     ? path.join('/tmp', 'uploads', subDir)
-    : path.join(__dirname, '..', '..', 'uploads', subDir);
+    : uploadsPath(subDir);
   try {
     fs.mkdirSync(baseDir, { recursive: true });
   } catch (err) {

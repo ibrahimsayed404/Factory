@@ -5,7 +5,10 @@ const { Pool, types } = require('pg');
 types.setTypeParser(1082, (val) => val);
 
 const sslMode = (process.env.PGSSLMODE || process.env.DB_SSL || '').toLowerCase();
-const useSsl = ['require', 'true', '1'].includes(sslMode) || process.env.NODE_ENV === 'production';
+// DB_SSL=false explicitly turns SSL off even in production (desktop app talking
+// to a local Postgres that has no SSL). Otherwise production defaults to SSL.
+const sslForcedOff = ['false', '0', 'disable'].includes((process.env.DB_SSL || '').toLowerCase());
+const useSsl = !sslForcedOff && (['require', 'true', '1'].includes(sslMode) || process.env.NODE_ENV === 'production');
 
 // Vercel/serverless: tiny pools. Supabase Session mode only allows ~15 clients total.
 // Prefer Transaction pooler (port 6543) in cloud; keep max low so instances don't exhaust it.

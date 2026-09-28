@@ -24,11 +24,7 @@ const main = async () => {
   // 3. Get all migration files
   const files = fs.readdirSync(migrationsDir)
     .filter(f => f.endsWith('.sql'))
-    .sort((a, b) => {
-      if (a.includes('production_tracking_phases') && b.includes('production_phase_analytics')) return -1;
-      if (a.includes('production_phase_analytics') && b.includes('production_tracking_phases')) return 1;
-      return a.localeCompare(b);
-    });
+    .sort((a, b) => a.localeCompare(b));
 
   console.log(`Found ${files.length} migration files to apply.`);
 

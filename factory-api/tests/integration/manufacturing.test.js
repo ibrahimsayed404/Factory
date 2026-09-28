@@ -1,7 +1,5 @@
 require('dotenv').config();
-if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
-  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
-}
+require('./dbSafetyGuard');
 const request = require('supertest');
 const app = require('../../src/app');
 const pool = require('../../src/db/pool');
@@ -60,17 +58,21 @@ describe('Manufacturing ERP Integration Tests', () => {
       testProductId = pRes.rows[0].id;
 
       // Create test materials
-      const m1Res = await client.query(
-        `INSERT INTO materials (name, category, unit, quantity, cost_per_unit) VALUES ('Cotton Fabric', 'fabric', 'meters', 1000, 5)
-         ON CONFLICT (name) DO UPDATE SET cost_per_unit = 5 RETURNING id`
-      );
-      testMaterial1Id = m1Res.rows[0].id;
-
-      const m2Res = await client.query(
-        `INSERT INTO materials (name, category, unit, quantity, cost_per_unit) VALUES ('Buttons', 'button', 'pcs', 5000, 0.1)
-         ON CONFLICT (name) DO UPDATE SET cost_per_unit = 0.1 RETURNING id`
-      );
-      testMaterial2Id = m2Res.rows[0].id;
+      // materials.name has no unique constraint, so find-or-create by name.
+      const findOrCreateMaterial = async (name, category, unit, quantity, cost) => {
+        const existing = await client.query('SELECT id FROM materials WHERE name = $1 ORDER BY id LIMIT 1', [name]);
+        if (existing.rows.length) {
+          await client.query('UPDATE materials SET cost_per_unit = $2 WHERE id = $1', [existing.rows[0].id, cost]);
+          return existing.rows[0].id;
+        }
+        const created = await client.query(
+          'INSERT INTO materials (name, category, unit, quantity, cost_per_unit) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+          [name, category, unit, quantity, cost]
+        );
+        return created.rows[0].id;
+      };
+      testMaterial1Id = await findOrCreateMaterial('Cotton Fabric', 'fabric', 'meters', 1000, 5);
+      testMaterial2Id = await findOrCreateMaterial('Buttons', 'button', 'pcs', 5000, 0.1);
 
       // Create production stage
       const sRes = await client.query(

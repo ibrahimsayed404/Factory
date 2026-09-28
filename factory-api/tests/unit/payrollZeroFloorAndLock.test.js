@@ -20,15 +20,15 @@ const {
   computeLivePayrollFigures,
   getPayroll,
   generatePayroll,
-} = require('../../src/services/payrollService');
-const payrollRepository = require('../../src/repositories/payrollRepository');
+} = require('../../src/modules/payroll/payroll.service');
+const payrollRepository = require('../../src/modules/payroll/payroll.repository');
 const ApiError = require('../../src/utils/ApiError');
 
 // Silence shift-resolution warnings during tests
 beforeAll(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 afterAll(() => { console.warn.mockRestore(); });
 
-jest.mock('../../src/repositories/payrollRepository', () => ({
+jest.mock('../../src/modules/payroll/payroll.repository', () => ({
   getAttendanceForPayroll: jest.fn().mockResolvedValue([]),
   getApprovedLeavesForPayroll: jest.fn().mockResolvedValue([]),
   hasWeekendDaysColumn: jest.fn().mockResolvedValue(true),
@@ -47,7 +47,7 @@ jest.mock('../../src/repositories/payrollRepository', () => ({
   getPayrollRecords: jest.fn(),
 }));
 
-jest.mock('../../src/services/accountingService', () => ({
+jest.mock('../../src/modules/accounting/accounting.service', () => ({
   reconcilePayrollAccrual: jest.fn().mockResolvedValue(),
   postPayrollPayment: jest.fn().mockResolvedValue(),
 }));

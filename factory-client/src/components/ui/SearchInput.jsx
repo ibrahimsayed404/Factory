@@ -50,7 +50,6 @@ export const SearchInput = ({ placeholder = 'Search...', value = '', onChange, o
               : '0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03)',
             ...props.style,
           }}
-          placeholderStyle={{ color: '#9ca3af' }}
         />
         
         {hasValue && (

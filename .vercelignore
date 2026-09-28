@@ -23,3 +23,8 @@ nssm-2.24/
 *.sln
 coverage/
 .vercel
+
+# database dumps and local build staging must never be uploaded
+backups/
+*.dump
+factory-desktop/.stage

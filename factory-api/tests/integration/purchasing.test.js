@@ -1,7 +1,5 @@
 require('dotenv').config();
-if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
-  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
-}
+require('./dbSafetyGuard');
 const request = require('supertest');
 const app = require('../../src/app');
 const pool = require('../../src/db/pool');
@@ -76,6 +74,29 @@ afterAll(async () => {
 });
 
 describe('Purchasing Module (Procure-to-Pay)', () => {
+
+  it('should block non-admin users from every purchasing route', async () => {
+    const hash = await bcrypt.hash('staff123', 10);
+    await pool.query(
+      `INSERT INTO users (name, email, password, role) VALUES ('Staff', 'staff-purchasing@test.com', $1, 'staff')`,
+      [hash]
+    );
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'staff-purchasing@test.com', password: 'staff123' });
+    const staffToken = login.body.token;
+    expect(staffToken).toBeDefined();
+
+    for (const [method, url] of [
+      ['get', '/api/purchasing/suppliers'],
+      ['get', '/api/purchasing/orders'],
+      ['post', '/api/purchasing/requests'],
+      ['post', '/api/purchasing/payments'],
+    ]) {
+      const res = await request(app)[method](url).set('Authorization', `Bearer ${staffToken}`).send({});
+      expect(res.status).toBe(403);
+    }
+  });
 
   it('should create a new supplier', async () => {
     const res = await request(app)

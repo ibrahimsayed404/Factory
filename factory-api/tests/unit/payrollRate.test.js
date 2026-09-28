@@ -1,4 +1,4 @@
-const { getRates, resolveShiftHours } = require('../../src/services/payrollService');
+const { getRates, resolveShiftHours } = require('../../src/modules/payroll/payroll.service');
 
 describe('Payroll minuteRate calculation unit tests', () => {
   const policy = { workHoursPerDay: 8, workingDaysPerMonth: 30 };

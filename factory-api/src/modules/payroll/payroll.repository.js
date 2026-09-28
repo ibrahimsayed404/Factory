@@ -1,0 +1,899 @@
+const pool = require('../../db/pool');
+
+let hasWeekendDaysColumnCache = null;
+
+const hasWeekendDaysColumn = async () => {
+  if (hasWeekendDaysColumnCache === true) return true;
+  const result = await pool.query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'employees'
+        AND column_name = 'weekend_days'
+    ) AS exists`
+  );
+  hasWeekendDaysColumnCache = Boolean(result.rows[0]?.exists);
+  return hasWeekendDaysColumnCache;
+};
+
+let hasEmployeeNameColumnCache = null;
+const hasEmployeeNameColumn = async () => {
+  if (hasEmployeeNameColumnCache === true) return true;
+  const result = await pool.query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'payroll'
+        AND column_name = 'employee_name'
+    ) AS exists`
+  );
+  hasEmployeeNameColumnCache = Boolean(result.rows[0]?.exists);
+  return hasEmployeeNameColumnCache;
+};
+
+let hasSnapshotColumnsCache = null;
+const hasSnapshotColumns = async () => {
+  if (hasSnapshotColumnsCache === true) return true;
+  const result = await pool.query(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'payroll'
+        AND column_name = 'snapshot_salary'
+    ) AS exists`
+  );
+  hasSnapshotColumnsCache = Boolean(result.rows[0]?.exists);
+  return hasSnapshotColumnsCache;
+};
+
+const getPayrollRecordsCount = async ({ weekStart, month, year, status, dateFrom, dateTo }) => {
+  let countQuery = `
+    SELECT COUNT(*)
+    FROM payroll p
+    LEFT JOIN employees e ON p.employee_id = e.id
+    WHERE 1=1
+  `;
+  const countParams = [];
+  if (weekStart) { countParams.push(weekStart); countQuery += ` AND p.week_start = $${countParams.length}`; }
+  if (month) { countParams.push(month); countQuery += ` AND p.month = $${countParams.length}`; }
+  if (year) { countParams.push(year); countQuery += ` AND p.year = $${countParams.length}`; }
+  if (status) { countParams.push(status); countQuery += ` AND p.status = $${countParams.length}`; }
+  else { countQuery += ` AND p.status != 'void'`; }
+  if (dateFrom) { countParams.push(dateFrom); countQuery += ` AND p.week_start >= $${countParams.length}::date`; }
+  if (dateTo) { countParams.push(dateTo); countQuery += ` AND p.week_start <= $${countParams.length}::date`; }
+  const countResult = await pool.query(countQuery, countParams);
+  return Number.parseInt(countResult.rows[0].count, 10);
+};
+
+const getPayrollRecords = async ({ weekStart, month, year, status, dateFrom, dateTo, limit, offset, weekendDaysExpr, supportsWeekendDays }) => {
+  const weekendDaysSupported = supportsWeekendDays ?? (await hasWeekendDaysColumn());
+  const supportsEmployeeName = await hasEmployeeNameColumn();
+  const weekendSelect = weekendDaysSupported ? 'COALESCE(e.weekend_days, \'5\') AS weekend_days,' : '\'5\' AS weekend_days,';
+  const nameSelect = supportsEmployeeName 
+    ? "COALESCE(e.name, p.employee_name, 'Unknown Employee') AS employee_name," 
+    : "COALESCE(e.name, 'Unknown Employee') AS employee_name,";
+  const nameOrder = supportsEmployeeName
+    ? "ORDER BY COALESCE(e.name, p.employee_name, 'Unknown Employee')"
+    : "ORDER BY COALESCE(e.name, 'Unknown Employee')";
+
+  // week_start/week_end are cast to text (plain YYYY-MM-DD) so the JSON wire
+  // format is timezone-stable — DATE columns would otherwise serialize as UTC
+  // midnight ISO strings and shift a day on negative-UTC-offset clients.
+  let query = `
+    SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end,
+      ${nameSelect} e.role, e.shift, e.shift_start, e.shift_end, e.salary AS employee_salary, e.hire_date, e.termination_date, ${weekendSelect}
+      d.name AS department_name,
+      COALESCE(att.late_minutes, 0)::int AS late_minutes,
+      COALESCE(att.late_weighted_minutes, 0)::float AS late_weighted_minutes,
+      COALESCE(att.early_leave_minutes, 0)::int AS early_leave_minutes,
+      COALESCE(att.overtime_minutes, 0)::int AS overtime_minutes,
+      COALESCE(att.weekend_overtime_minutes, 0)::int AS weekend_overtime_minutes,
+      COALESCE(att.absent_days, 0)::int AS absent_days,
+      COALESCE(att.half_days, 0)::int AS half_days
+    FROM payroll p
+    LEFT JOIN employees e ON p.employee_id = e.id
+    LEFT JOIN departments d ON e.department_id = d.id
+    LEFT JOIN LATERAL (
+      SELECT
+        SUM(a.late_minutes)::int AS late_minutes,
+        SUM(
+          CASE
+            WHEN COALESCE(a.late_minutes, 0) <= 10 THEN COALESCE(a.late_minutes, 0)::float
+            ELSE COALESCE(a.late_minutes, 0)::float * 1.5
+          END
+        )::float AS late_weighted_minutes,
+        SUM(a.early_leave_minutes)::int AS early_leave_minutes,
+        SUM(a.overtime_minutes)::int AS overtime_minutes,
+        SUM(CASE WHEN EXTRACT(DOW FROM a.date)::int = ANY(string_to_array(${weekendDaysExpr}, ',')::int[]) THEN a.overtime_minutes ELSE 0 END)::int AS weekend_overtime_minutes,
+        SUM(CASE WHEN a.status='absent' THEN 1 ELSE 0 END)::int AS absent_days,
+        SUM(CASE WHEN a.status='half-day' THEN 1 ELSE 0 END)::int AS half_days
+      FROM attendance a
+      WHERE a.employee_id = p.employee_id
+        AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+        AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+        AND (
+          (p.week_start IS NOT NULL AND a.date >= p.week_start AND a.date <= COALESCE(p.week_end, (p.week_start::date + INTERVAL '6 days')::date))
+          OR
+          (p.week_start IS NULL AND EXTRACT(MONTH FROM a.date) = p.month AND EXTRACT(YEAR FROM a.date) = p.year)
+        )
+    ) att ON true
+    WHERE 1=1
+  `;
+  const params = [];
+  if (weekStart) { params.push(weekStart); query += ` AND p.week_start = $${params.length}`; }
+  if (month) { params.push(month); query += ` AND p.month = $${params.length}`; }
+  if (year) { params.push(year); query += ` AND p.year = $${params.length}`; }
+  if (status) { params.push(status); query += ` AND p.status = $${params.length}`; }
+  else { query += ` AND p.status != 'void'`; }
+  if (dateFrom) { params.push(dateFrom); query += ` AND p.week_start >= $${params.length}::date`; }
+  if (dateTo) { params.push(dateTo); query += ` AND p.week_start <= $${params.length}::date`; }
+
+  const dataParams = [...params, limit, offset];
+  query += ` ${nameOrder} LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`;
+  const result = await pool.query(query, dataParams);
+  return result.rows;
+};
+
+const getEmployeeForPayroll = async (employeeId, supportsWeekendDays) => {
+  const emp = supportsWeekendDays
+    ? await pool.query('SELECT id, name, salary, weekend_days, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId])
+    : await pool.query('SELECT id, name, salary, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE id = $1', [employeeId]);
+  return emp.rows[0] || null;
+};
+
+const getActiveEmployeesForPayroll = async (supportsWeekendDays) => {
+  const query = supportsWeekendDays
+    ? 'SELECT id, name, salary, weekend_days, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id'
+    : 'SELECT id, name, salary, shift, shift_start, shift_end, hire_date, termination_date, status FROM employees WHERE COALESCE(status, \'active\') = \'active\' ORDER BY id';
+  const result = await pool.query(query);
+  return result.rows;
+};
+
+/**
+ * Retrieves all employees eligible for a specific payroll week:
+ * 1. Hired on or before weekEnd (or hire_date IS NULL)
+ * 2. Not terminated before weekStart (termination_date IS NULL OR termination_date >= weekStart)
+ * 3. And either currently active, terminated during/after this week, or having attendance in this week.
+ */
+const getEmployeesForPayrollWeek = async ({ weekStart, weekEnd, supportsWeekendDays }) => {
+  const weekendCol = supportsWeekendDays ? 'e.weekend_days, ' : '';
+  const query = `
+    SELECT e.id, e.name, e.salary, ${weekendCol} e.shift, e.shift_start, e.shift_end, e.hire_date, e.termination_date, e.status
+    FROM employees e
+    WHERE (e.hire_date IS NULL OR e.hire_date <= $2::date)
+      AND (e.termination_date IS NULL OR e.termination_date >= $1::date)
+      AND (
+        COALESCE(e.status, 'active') = 'active'
+        OR e.termination_date >= $1::date
+        OR EXISTS (
+          SELECT 1 FROM attendance a
+          WHERE a.employee_id = e.id AND a.date >= $1::date AND a.date <= $2::date
+        )
+      )
+    ORDER BY e.id
+  `;
+  const result = await pool.query(query, [weekStart, weekEnd]);
+  return result.rows;
+};
+
+const getApprovedLeavesForPayroll = async (employeeId, startDate, endDate) => {
+  if (!employeeId || !startDate || !endDate) return [];
+  const result = await pool.query(
+    `SELECT leave_type, start_date::text AS start_date, end_date::text AS end_date
+     FROM hr_leave_requests
+     WHERE employee_id = $1
+       AND status = 'approved'
+       AND end_date >= $2::date
+       AND start_date <= $3::date`,
+    [employeeId, startDate, endDate]
+  );
+  return result.rows;
+};
+
+const getAttendanceForPayroll = async (employeeId, weekStart, weekEnd, effectiveMonth, effectiveYear) => {
+  if (weekStart) {
+    const result = await pool.query(
+      `SELECT
+         a.date::text AS date,
+         COALESCE(a.late_minutes, 0)::int AS late_minutes,
+         COALESCE(a.early_leave_minutes, 0)::int AS early_leave_minutes,
+         COALESCE(a.overtime_minutes, 0)::int AS overtime_minutes,
+         CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
+         CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
+       FROM attendance a
+       LEFT JOIN employees e ON a.employee_id = e.id
+       WHERE a.employee_id = $1
+         AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+         AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+         AND a.date >= $2::date
+         AND a.date <= $3::date
+       ORDER BY a.date ASC`,
+      [employeeId, weekStart, weekEnd]
+    );
+    return result.rows;
+  }
+  
+  const result = await pool.query(
+    `SELECT
+       a.date::text AS date,
+       COALESCE(a.late_minutes, 0)::int AS late_minutes,
+       COALESCE(a.early_leave_minutes, 0)::int AS early_leave_minutes,
+       COALESCE(a.overtime_minutes, 0)::int AS overtime_minutes,
+       CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
+       CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
+     FROM attendance a
+     LEFT JOIN employees e ON a.employee_id = e.id
+     WHERE a.employee_id = $1
+       AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+       AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+       AND EXTRACT(MONTH FROM a.date) = $2
+       AND EXTRACT(YEAR FROM a.date) = $3
+     ORDER BY a.date ASC`,
+    [employeeId, effectiveMonth, effectiveYear]
+  );
+  return result.rows;
+};
+
+const getAttendanceBatchForPayroll = async (employeeIds, minDate, maxDate) => {
+  if (!employeeIds || employeeIds.length === 0 || !minDate || !maxDate) return new Map();
+  const result = await pool.query(
+    `SELECT
+       a.employee_id,
+       a.date::text AS date,
+       COALESCE(a.late_minutes, 0)::int AS late_minutes,
+       COALESCE(a.early_leave_minutes, 0)::int AS early_leave_minutes,
+       COALESCE(a.overtime_minutes, 0)::int AS overtime_minutes,
+       CASE WHEN a.status='absent' THEN 1 ELSE 0 END AS absent_days,
+       CASE WHEN a.status='half-day' THEN 1 ELSE 0 END AS half_days
+     FROM attendance a
+     LEFT JOIN employees e ON a.employee_id = e.id
+     WHERE a.employee_id = ANY($1::int[])
+       AND a.date >= $2::date
+       AND a.date <= $3::date
+       AND (e.hire_date IS NULL OR a.date >= e.hire_date)
+       AND (e.termination_date IS NULL OR a.date <= e.termination_date)
+     ORDER BY a.date ASC`,
+    [employeeIds, minDate, maxDate]
+  );
+  const map = new Map();
+  for (const r of result.rows) {
+    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
+    map.get(r.employee_id).push(r);
+  }
+  return map;
+};
+
+const getApprovedLeavesBatchForPayroll = async (employeeIds, minDate, maxDate) => {
+  if (!employeeIds || employeeIds.length === 0 || !minDate || !maxDate) return new Map();
+  const result = await pool.query(
+    `SELECT employee_id, leave_type, start_date::text AS start_date, end_date::text AS end_date
+     FROM hr_leave_requests
+     WHERE employee_id = ANY($1::int[])
+       AND status = 'approved'
+       AND end_date >= $2::date
+       AND start_date <= $3::date`,
+    [employeeIds, minDate, maxDate]
+  );
+  const map = new Map();
+  for (const r of result.rows) {
+    if (!map.has(r.employee_id)) map.set(r.employee_id, []);
+    map.get(r.employee_id).push(r);
+  }
+  return map;
+};
+
+const upsertPayroll = async (data) => {
+  const supportsEmployeeName = await hasEmployeeNameColumn();
+  const supportsSnapshots = await hasSnapshotColumns();
+  const {
+    employee_id, employee_name, effectiveMonth, effectiveYear, weekStart, weekEnd, base_salary,
+    finalBonus, finalDeductions, net_salary,
+    loan_deduction = 0, manual_bonus = 0, manual_deductions = 0,
+    auto_bonus = 0, auto_deductions = 0,
+    hr_bonus = 0, hr_penalty = 0, hr_overtime = 0,
+    snapshot_salary, snapshot_shift, snapshot_shift_start, snapshot_shift_end,
+    snapshot_weekend_days, snapshot_hire_date, snapshot_termination_date
+  } = data;
+
+  const snapVals = [
+    snapshot_salary ?? null, snapshot_shift ?? null,
+    snapshot_shift_start ?? null, snapshot_shift_end ?? null,
+    snapshot_weekend_days ?? null, snapshot_hire_date ?? null,
+    snapshot_termination_date ?? null,
+  ];
+
+  if (weekStart) {
+    const existing = await pool.query(
+      'SELECT id, status FROM payroll WHERE employee_id = $1 AND week_start = $2',
+      [employee_id, weekStart]
+    );
+    if (existing.rows.length > 0) {
+      if (existing.rows[0].status === 'paid') {
+        const lockedRecord = await pool.query('SELECT * FROM payroll WHERE id = $1', [existing.rows[0].id]);
+        return lockedRecord.rows[0];
+      }
+      if (supportsSnapshots) {
+        const result = supportsEmployeeName
+          ? await pool.query(
+              `UPDATE payroll SET 
+                week_end = $1, month = $2, year = $3, base_salary = $4, bonus = $5, deductions = $6, net_salary = $7,
+                loan_deduction = $8, manual_bonus = $9, manual_deductions = $10,
+                auto_bonus = $11, auto_deductions = $12,
+                hr_bonus = $13, hr_penalty = $14, hr_overtime = $15,
+                employee_name = COALESCE($16, employee_name),
+                snapshot_salary = COALESCE($17, snapshot_salary),
+                snapshot_shift = COALESCE($18, snapshot_shift),
+                snapshot_shift_start = COALESCE($19, snapshot_shift_start),
+                snapshot_shift_end = COALESCE($20, snapshot_shift_end),
+                snapshot_weekend_days = COALESCE($21, snapshot_weekend_days),
+                snapshot_hire_date = COALESCE($22, snapshot_hire_date),
+                snapshot_termination_date = $23
+               WHERE id = $24 RETURNING *`,
+              [
+                weekEnd, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime,
+                employee_name || null,
+                ...snapVals,
+                existing.rows[0].id
+              ]
+            )
+          : await pool.query(
+              `UPDATE payroll SET 
+                week_end = $1, month = $2, year = $3, base_salary = $4, bonus = $5, deductions = $6, net_salary = $7,
+                loan_deduction = $8, manual_bonus = $9, manual_deductions = $10,
+                auto_bonus = $11, auto_deductions = $12,
+                hr_bonus = $13, hr_penalty = $14, hr_overtime = $15,
+                snapshot_salary = COALESCE($16, snapshot_salary),
+                snapshot_shift = COALESCE($17, snapshot_shift),
+                snapshot_shift_start = COALESCE($18, snapshot_shift_start),
+                snapshot_shift_end = COALESCE($19, snapshot_shift_end),
+                snapshot_weekend_days = COALESCE($20, snapshot_weekend_days),
+                snapshot_hire_date = COALESCE($21, snapshot_hire_date),
+                snapshot_termination_date = $22
+               WHERE id = $23 RETURNING *`,
+              [
+                weekEnd, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime,
+                ...snapVals,
+                existing.rows[0].id
+              ]
+            );
+        return result.rows[0];
+      } else {
+        const result = supportsEmployeeName
+          ? await pool.query(
+              `UPDATE payroll SET 
+                week_end = $1, month = $2, year = $3, base_salary = $4, bonus = $5, deductions = $6, net_salary = $7,
+                loan_deduction = $8, manual_bonus = $9, manual_deductions = $10,
+                auto_bonus = $11, auto_deductions = $12,
+                hr_bonus = $13, hr_penalty = $14, hr_overtime = $15,
+                employee_name = COALESCE($16, employee_name)
+               WHERE id = $17 RETURNING *`,
+              [
+                weekEnd, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime,
+                employee_name || null,
+                existing.rows[0].id
+              ]
+            )
+          : await pool.query(
+              `UPDATE payroll SET 
+                week_end = $1, month = $2, year = $3, base_salary = $4, bonus = $5, deductions = $6, net_salary = $7,
+                loan_deduction = $8, manual_bonus = $9, manual_deductions = $10,
+                auto_bonus = $11, auto_deductions = $12,
+                hr_bonus = $13, hr_penalty = $14, hr_overtime = $15
+               WHERE id = $16 RETURNING *`,
+              [
+                weekEnd, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime,
+                existing.rows[0].id
+              ]
+            );
+        return result.rows[0];
+      }
+    } else {
+      if (supportsSnapshots) {
+        const result = supportsEmployeeName
+          ? await pool.query(
+              `INSERT INTO payroll (
+                employee_id, month, year, week_start, week_end, base_salary, bonus, deductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime, employee_name,
+                snapshot_salary, snapshot_shift, snapshot_shift_start, snapshot_shift_end,
+                snapshot_weekend_days, snapshot_hire_date, snapshot_termination_date
+               )
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING *`,
+              [
+                employee_id, effectiveMonth, effectiveYear, weekStart, weekEnd, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime, employee_name || null,
+                ...snapVals
+              ]
+            )
+          : await pool.query(
+              `INSERT INTO payroll (
+                employee_id, month, year, week_start, week_end, base_salary, bonus, deductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime,
+                snapshot_salary, snapshot_shift, snapshot_shift_start, snapshot_shift_end,
+                snapshot_weekend_days, snapshot_hire_date, snapshot_termination_date
+               )
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
+              [
+                employee_id, effectiveMonth, effectiveYear, weekStart, weekEnd, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime,
+                ...snapVals
+              ]
+            );
+        return result.rows[0];
+      } else {
+        const result = supportsEmployeeName
+          ? await pool.query(
+              `INSERT INTO payroll (
+                employee_id, month, year, week_start, week_end, base_salary, bonus, deductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime, employee_name
+               )
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+              [
+                employee_id, effectiveMonth, effectiveYear, weekStart, weekEnd, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime, employee_name || null
+              ]
+            )
+          : await pool.query(
+              `INSERT INTO payroll (
+                employee_id, month, year, week_start, week_end, base_salary, bonus, deductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime
+               )
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+              [
+                employee_id, effectiveMonth, effectiveYear, weekStart, weekEnd, base_salary, finalBonus, finalDeductions, net_salary,
+                loan_deduction, manual_bonus, manual_deductions,
+                auto_bonus, auto_deductions,
+                hr_bonus, hr_penalty, hr_overtime
+              ]
+            );
+        return result.rows[0];
+      }
+    }
+  }
+  
+  const existing = await pool.query(
+    'SELECT id, status FROM payroll WHERE employee_id = $1 AND month = $2 AND year = $3 AND week_start IS NULL',
+    [employee_id, effectiveMonth, effectiveYear]
+  );
+  if (existing.rows.length > 0) {
+    if (existing.rows[0].status === 'paid') {
+      const lockedRecord = await pool.query('SELECT * FROM payroll WHERE id = $1', [existing.rows[0].id]);
+      return lockedRecord.rows[0];
+    }
+    if (supportsSnapshots) {
+      const result = supportsEmployeeName
+        ? await pool.query(
+            `UPDATE payroll SET 
+              base_salary=$1, bonus=$2, deductions=$3, net_salary=$4,
+              loan_deduction = $5, manual_bonus = $6, manual_deductions = $7,
+              auto_bonus = $8, auto_deductions = $9,
+              hr_bonus = $10, hr_penalty = $11, hr_overtime = $12,
+              employee_name = COALESCE($13, employee_name),
+              snapshot_salary = COALESCE($14, snapshot_salary),
+              snapshot_shift = COALESCE($15, snapshot_shift),
+              snapshot_shift_start = COALESCE($16, snapshot_shift_start),
+              snapshot_shift_end = COALESCE($17, snapshot_shift_end),
+              snapshot_weekend_days = COALESCE($18, snapshot_weekend_days),
+              snapshot_hire_date = COALESCE($19, snapshot_hire_date),
+              snapshot_termination_date = $20
+             WHERE id=$21 RETURNING *`,
+            [
+              base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime,
+              employee_name || null,
+              ...snapVals,
+              existing.rows[0].id
+            ]
+          )
+        : await pool.query(
+            `UPDATE payroll SET 
+              base_salary=$1, bonus=$2, deductions=$3, net_salary=$4,
+              loan_deduction = $5, manual_bonus = $6, manual_deductions = $7,
+              auto_bonus = $8, auto_deductions = $9,
+              hr_bonus = $10, hr_penalty = $11, hr_overtime = $12,
+              snapshot_salary = COALESCE($13, snapshot_salary),
+              snapshot_shift = COALESCE($14, snapshot_shift),
+              snapshot_shift_start = COALESCE($15, snapshot_shift_start),
+              snapshot_shift_end = COALESCE($16, snapshot_shift_end),
+              snapshot_weekend_days = COALESCE($17, snapshot_weekend_days),
+              snapshot_hire_date = COALESCE($18, snapshot_hire_date),
+              snapshot_termination_date = $19
+             WHERE id=$20 RETURNING *`,
+            [
+              base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime,
+              ...snapVals,
+              existing.rows[0].id
+            ]
+          );
+      return result.rows[0];
+    } else {
+      const result = supportsEmployeeName
+        ? await pool.query(
+            `UPDATE payroll SET 
+              base_salary=$1, bonus=$2, deductions=$3, net_salary=$4,
+              loan_deduction = $5, manual_bonus = $6, manual_deductions = $7,
+              auto_bonus = $8, auto_deductions = $9,
+              hr_bonus = $10, hr_penalty = $11, hr_overtime = $12,
+              employee_name = COALESCE($13, employee_name)
+             WHERE id=$14 RETURNING *`,
+            [
+              base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime,
+              employee_name || null,
+              existing.rows[0].id
+            ]
+          )
+        : await pool.query(
+            `UPDATE payroll SET 
+              base_salary=$1, bonus=$2, deductions=$3, net_salary=$4,
+              loan_deduction = $5, manual_bonus = $6, manual_deductions = $7,
+              auto_bonus = $8, auto_deductions = $9,
+              hr_bonus = $10, hr_penalty = $11, hr_overtime = $12
+             WHERE id=$13 RETURNING *`,
+            [
+              base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime,
+              existing.rows[0].id
+            ]
+          );
+      return result.rows[0];
+    }
+  } else {
+    if (supportsSnapshots) {
+      const result = supportsEmployeeName
+        ? await pool.query(
+            `INSERT INTO payroll (
+              employee_id, month, year, base_salary, bonus, deductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime, employee_name,
+              snapshot_salary, snapshot_shift, snapshot_shift_start, snapshot_shift_end,
+              snapshot_weekend_days, snapshot_hire_date, snapshot_termination_date
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+            [
+              employee_id, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime, employee_name || null,
+              ...snapVals
+            ]
+          )
+        : await pool.query(
+            `INSERT INTO payroll (
+              employee_id, month, year, base_salary, bonus, deductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime,
+              snapshot_salary, snapshot_shift, snapshot_shift_start, snapshot_shift_end,
+              snapshot_weekend_days, snapshot_hire_date, snapshot_termination_date
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING *`,
+            [
+              employee_id, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime,
+              ...snapVals
+            ]
+          );
+      return result.rows[0];
+    } else {
+      const result = supportsEmployeeName
+        ? await pool.query(
+            `INSERT INTO payroll (
+              employee_id, month, year, base_salary, bonus, deductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime, employee_name
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+            [
+              employee_id, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime, employee_name || null
+            ]
+          )
+        : await pool.query(
+            `INSERT INTO payroll (
+              employee_id, month, year, base_salary, bonus, deductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime
+             )
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+            [
+              employee_id, effectiveMonth, effectiveYear, base_salary, finalBonus, finalDeductions, net_salary,
+              loan_deduction, manual_bonus, manual_deductions,
+              auto_bonus, auto_deductions,
+              hr_bonus, hr_penalty, hr_overtime
+            ]
+          );
+      return result.rows[0];
+    }
+  }
+};
+
+const updatePayrollPaid = async (id) => {
+  const result = await pool.query(
+    `UPDATE payroll SET status='paid', paid_at=NOW() WHERE id=$1 RETURNING *`,
+    [id]
+  );
+  return result.rows[0] || null;
+};
+
+const getPayrollById = async (id) => {
+  const result = await pool.query(
+    'SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end FROM payroll p WHERE p.id = $1',
+    [id]
+  );
+  return result.rows[0] || null;
+};
+
+const updateManualAdjustments = async (id, {
+  manualBonus,
+  manualDeductions,
+  autoBonus = null,
+  autoDeductions = null,
+  finalBonus,
+  finalDeductions,
+  netSalary,
+}) => {
+  const result = await pool.query(
+    `UPDATE payroll SET
+       manual_bonus = $2,
+       manual_deductions = $3,
+       auto_bonus = COALESCE($4, auto_bonus),
+       auto_deductions = COALESCE($5, auto_deductions),
+       bonus = $6,
+       deductions = $7,
+       net_salary = $8
+     WHERE id = $1
+     RETURNING *`,
+    [id, manualBonus, manualDeductions, autoBonus, autoDeductions, finalBonus, finalDeductions, netSalary]
+  );
+  return result.rows[0] || null;
+};
+
+const getActiveLoansForPayroll = async (employeeId) => {
+  const result = await pool.query(
+    `SELECT id, remaining_amount, monthly_installment
+     FROM hr_loans
+     WHERE employee_id = $1
+       AND status = 'active'
+       AND remaining_amount > 0
+     ORDER BY created_at ASC`,
+    [employeeId]
+  );
+
+  return result.rows.map((loan) => ({
+    id: loan.id,
+    remaining_amount: Number(loan.remaining_amount || 0),
+    monthly_installment: Number(loan.monthly_installment || 0),
+  }));
+};
+
+const getPayrollIdByWeek = async (employeeId, weekStart) => {
+  if (!employeeId || !weekStart) return null;
+  const result = await pool.query(
+    'SELECT id FROM payroll WHERE employee_id = $1 AND week_start = $2',
+    [employeeId, weekStart]
+  );
+  return result.rows[0]?.id || null;
+};
+
+const getLoanDeductionsForPayroll = async (payrollId) => {
+  if (!payrollId) return [];
+  const result = await pool.query(
+    'SELECT loan_id, amount FROM payroll_loan_deductions WHERE payroll_id = $1',
+    [payrollId]
+  );
+  return result.rows.map((r) => ({ loan_id: Number(r.loan_id), amount: Number(r.amount || 0) }));
+};
+
+/**
+ * Apply loan installments for a payroll record idempotently. The ledger's
+ * UNIQUE(payroll_id, loan_id) constraint guarantees a loan is only ever debited
+ * once per payroll record — a conflicting insert means it was already applied,
+ * so the balance is left untouched.
+ */
+const applyLoanDeductions = async (payrollId, payments) => {
+  if (!payrollId || !payments || !payments.length) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const payment of payments) {
+      const inserted = await client.query(
+        `INSERT INTO payroll_loan_deductions (payroll_id, loan_id, amount)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (payroll_id, loan_id) DO NOTHING`,
+        [payrollId, payment.id, payment.amount]
+      );
+      if (inserted.rowCount > 0) {
+        await client.query(
+          `UPDATE hr_loans
+           SET remaining_amount = GREATEST(remaining_amount - $1, 0),
+               status = CASE WHEN GREATEST(remaining_amount - $1, 0) = 0 THEN 'closed' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [payment.amount, payment.id]
+        );
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Reverse the exact loan amounts recorded in the ledger for each payroll record
+ * and delete the records — atomically. Ledger rows cascade-delete with the
+ * payroll rows. A reversed loan that had been closed is reopened to 'active'.
+ */
+const reverseLoanDeductionsAndDeleteRecords = async (payrollIds) => {
+  if (!payrollIds || !payrollIds.length) return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const payrollId of payrollIds) {
+      const ledger = await client.query(
+        'SELECT loan_id, amount FROM payroll_loan_deductions WHERE payroll_id = $1',
+        [payrollId]
+      );
+      for (const row of ledger.rows) {
+        await client.query(
+          `UPDATE hr_loans
+           SET remaining_amount = LEAST(remaining_amount + $1, principal_amount),
+               status = CASE WHEN LEAST(remaining_amount + $1, principal_amount) > 0 THEN 'active' ELSE status END,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [Number(row.amount || 0), row.loan_id]
+        );
+      }
+      await client.query('DELETE FROM payroll WHERE id = $1', [payrollId]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+const getHrDataForWeeklyPayroll = async (employeeId, weekStart, weekEnd) => {
+  const transactions = await pool.query(
+    `SELECT t.transaction_type, SUM(t.amount) as total_amount
+     FROM hr_transactions t
+     LEFT JOIN employees e ON t.employee_id = e.id
+     WHERE t.employee_id = $1 
+       AND t.transaction_date >= $2
+       AND t.transaction_date <= $3
+       AND (e.hire_date IS NULL OR t.transaction_date >= e.hire_date)
+       AND (e.termination_date IS NULL OR t.transaction_date <= e.termination_date)
+     GROUP BY t.transaction_type`,
+    [employeeId, weekStart, weekEnd]
+  );
+  
+  const loans = await getActiveLoansForPayroll(employeeId);
+
+  return {
+    transactions: transactions.rows,
+    loans,
+  };
+};
+
+const getPayrollRecordsForWeek = async (weekStart) => {
+  const result = await pool.query(
+    'SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end FROM payroll p WHERE p.week_start = $1',
+    [weekStart]
+  );
+  return result.rows;
+};
+
+const getPendingPayrollRecordsForWeek = async (weekStart, client = pool) => {
+  const result = await client.query(
+    `SELECT p.*, p.week_start::text AS week_start, p.week_end::text AS week_end,
+            COALESCE(p.employee_name, e.name) AS name
+     FROM payroll p
+     LEFT JOIN employees e ON p.employee_id = e.id
+     WHERE p.week_start = $1::date AND p.status = 'pending'
+     ORDER BY p.id ASC`,
+    [weekStart]
+  );
+  return result.rows;
+};
+
+const deletePayrollRecord = async (id) => {
+  await pool.query('DELETE FROM payroll WHERE id = $1', [id]);
+};
+
+const isDatePayrollPaid = async (date, employeeId = null, dbClient = pool) => {
+  if (!date) return false;
+  let query = `
+    SELECT 1 FROM payroll
+    WHERE status = 'paid'
+      AND (
+        (week_start IS NOT NULL AND $1::date >= week_start AND $1::date <= COALESCE(week_end, (week_start::date + INTERVAL '6 days')::date))
+        OR
+        (week_start IS NULL AND EXTRACT(MONTH FROM $1::date) = month AND EXTRACT(YEAR FROM $1::date) = year)
+      )
+  `;
+  const params = [date];
+  if (employeeId) {
+    params.push(employeeId);
+    query += ` AND employee_id = $${params.length}`;
+  }
+  query += ' LIMIT 1';
+  const result = await dbClient.query(query, params);
+  return Boolean(result.rows.length > 0);
+};
+
+module.exports = {
+  hasWeekendDaysColumn,
+  getPayrollRecordsCount,
+  getPayrollRecords,
+  getEmployeeForPayroll,
+  getActiveEmployeesForPayroll,
+  getEmployeesForPayrollWeek,
+  getApprovedLeavesForPayroll,
+  getApprovedLeavesBatchForPayroll,
+  getAttendanceForPayroll,
+  getAttendanceBatchForPayroll,
+  getActiveLoansForPayroll,
+  getPayrollIdByWeek,
+  getLoanDeductionsForPayroll,
+  applyLoanDeductions,
+  reverseLoanDeductionsAndDeleteRecords,
+  getHrDataForWeeklyPayroll,
+  upsertPayroll,
+  updatePayrollPaid,
+  getPayrollById,
+  updateManualAdjustments,
+  getPayrollRecordsForWeek,
+  getPendingPayrollRecordsForWeek,
+  deletePayrollRecord,
+  isDatePayrollPaid,
+};

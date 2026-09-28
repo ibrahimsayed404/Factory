@@ -1,5 +1,5 @@
 require('dotenv').config();
-const productionTrackingService = require('../src/services/productionTrackingService');
+const productionTrackingService = require('../src/modules/productionTracking/productionTracking.service');
 const pool = require('../src/db/pool');
 
 (async () => {

@@ -1,4 +1,4 @@
-const { calculateInferredAbsentDays } = require('../../src/services/payrollService');
+const { calculateInferredAbsentDays } = require('../../src/modules/payroll/payroll.service');
 
 describe('Inferred Absence Calculation Unit Tests', () => {
   const fridayWeekend = new Set([5]); // Friday = 5

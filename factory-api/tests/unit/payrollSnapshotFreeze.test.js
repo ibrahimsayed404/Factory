@@ -11,14 +11,14 @@ const {
   computeLivePayrollFigures,
   getRates,
   resolveShiftHours,
-} = require('../../src/services/payrollService');
+} = require('../../src/modules/payroll/payroll.service');
 
 // Silence shift-resolution warnings during tests
 beforeAll(() => { jest.spyOn(console, 'warn').mockImplementation(() => {}); });
 afterAll(() => { console.warn.mockRestore(); });
 
 // Mock payrollRepository so computeLivePayrollFigures doesn't hit the DB
-jest.mock('../../src/repositories/payrollRepository', () => ({
+jest.mock('../../src/modules/payroll/payroll.repository', () => ({
   getAttendanceForPayroll: jest.fn().mockResolvedValue([]),
   getApprovedLeavesForPayroll: jest.fn().mockResolvedValue([]),
 }));

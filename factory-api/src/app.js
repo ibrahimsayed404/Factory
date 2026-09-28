@@ -38,7 +38,7 @@ const swaggerDefinition = {
 
 const swaggerOptions = {
   swaggerDefinition,
-  apis: ['./src/routes/*.js', './src/controllers/*.js'], // Scan for JSDoc
+  apis: ['./src/routes/*.js', './src/modules/**/*.js'], // Scan for JSDoc
 };
 
 const app = express();
@@ -67,10 +67,18 @@ const allowedOrigins = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim())
   : true;
 
+// Desktop app: serve the built client from the same origin as the API, before
+// helmet, so the page behaves exactly like the statically hosted website.
+if (process.env.CLIENT_BUILD_DIR) {
+  app.use(express.static(process.env.CLIENT_BUILD_DIR));
+}
+
 // Security middleware
 app.use(helmet());
 app.use(i18n);
-const shouldEnableRateLimit = (isProduction || process.env.ENABLE_RATE_LIMIT_IN_DEV === 'true') && !isVercel;
+const shouldEnableRateLimit = (isProduction || process.env.ENABLE_RATE_LIMIT_IN_DEV === 'true')
+  && !isVercel
+  && process.env.DISABLE_RATE_LIMIT !== 'true'; // single-user desktop app
 if (shouldEnableRateLimit) {
   app.use(
     rateLimit({

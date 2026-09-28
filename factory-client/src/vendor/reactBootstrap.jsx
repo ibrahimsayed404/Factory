@@ -209,3 +209,15 @@ Form.Select = ({ children, className = '', style, ...props }) => (
     {children}
   </select>
 );
+
+// Named for React DevTools and error messages.
+Card.Header.displayName = 'Card.Header';
+Card.Body.displayName = 'Card.Body';
+Modal.Header.displayName = 'Modal.Header';
+Modal.Title.displayName = 'Modal.Title';
+Modal.Body.displayName = 'Modal.Body';
+Modal.Footer.displayName = 'Modal.Footer';
+Form.Group.displayName = 'Form.Group';
+Form.Label.displayName = 'Form.Label';
+Form.Control.displayName = 'Form.Control';
+Form.Select.displayName = 'Form.Select';

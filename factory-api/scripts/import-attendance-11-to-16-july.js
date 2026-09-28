@@ -1,6 +1,6 @@
 require('dotenv').config();
 const pool = require('../src/db/pool');
-const { logAttendance } = require('../src/services/employeeService');
+const { logAttendance } = require('../src/modules/employees/employee.service');
 
 const records = [
   // 1. ام يوسف (ID 4)

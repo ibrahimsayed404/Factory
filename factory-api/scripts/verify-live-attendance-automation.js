@@ -1,6 +1,6 @@
 require('dotenv').config();
 const pool = require('../src/db/pool');
-const { runAutoAttendanceJobs, runAutoAbsence12PM, runAutoCheckoutShiftBased } = require('../src/services/autoAttendanceScheduler');
+const { runAutoAttendanceJobs, runAutoAbsence12PM, runAutoCheckoutShiftBased } = require('../src/modules/employees/autoAttendance.scheduler');
 
 (async () => {
   try {

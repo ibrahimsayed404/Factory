@@ -12,6 +12,7 @@ const dotenv = require('dotenv');
 // Load .env.test if it exists, otherwise fallback to default .env / process.env
 dotenv.config({ path: path.join(__dirname, '../../.env.test') });
 dotenv.config({ path: path.join(__dirname, '../../.env') });
+require('./dbSafetyGuard');
 
 const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
 const missing = requiredEnvVars.filter(v => !process.env[v]);
@@ -20,8 +21,8 @@ if (missing.length > 0) {
 }
 
 const pool = require('../../src/db/pool');
-const salesService = require('../../src/services/salesService');
-const productionTrackingService = require('../../src/services/productionTrackingService');
+const salesService = require('../../src/modules/sales/sales.service');
+const productionTrackingService = require('../../src/modules/productionTracking/productionTracking.service');
 
 const TEST_MARKER = '__ATOMICITY_INTEG_TEST__';
 

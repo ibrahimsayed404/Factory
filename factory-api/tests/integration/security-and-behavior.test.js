@@ -1,14 +1,12 @@
 /* eslint-env jest */
 require('dotenv').config();
-if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
-  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
-}
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_value';
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 process.env.DEVICE_INGEST_API_KEY = process.env.DEVICE_INGEST_API_KEY || 'test_device_ingest_key';
 process.env.REGISTER_INVITE_CODE = process.env.REGISTER_INVITE_CODE || 'test-invite-code';
 process.env.DB_NAME = process.env.TEST_DB_NAME || process.env.DB_NAME || 'factory_test_db';
+require('./dbSafetyGuard');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -180,7 +178,8 @@ describe('Attendance upsert behavior', () => {
     const list = await agent.get(`/api/employees/${employeeId}/attendance?month=3&year=2026`);
     expect(list.status).toBe(200);
     expect(list.body).toHaveLength(1);
-    expect(list.body[0].status).toBe('present');
+    // Leaving 60 min early marks the day 'late' (early leave counts like lateness).
+    expect(list.body[0].status).toBe('late');
     expect(Number(list.body[0].hours_worked)).toBe(7);
     expect(Number(list.body[0].late_minutes || 0)).toBe(0);
     expect(Number(list.body[0].early_leave_minutes || 0)).toBe(60);
@@ -393,7 +392,7 @@ describe('Payroll auto-adjustments', () => {
     await pool.query("UPDATE employees SET hire_date = '2020-01-01', termination_date = NULL WHERE id = $1", [employeeId]);
 
     const attendanceRows = [
-      { date: '2026-07-05', check_in: '09:30', check_out: '17:00', status: 'present' }, // Sun: 30 - 10 grace = 20 late
+      { date: '2026-07-05', check_in: '09:30', check_out: '17:00', status: 'present' }, // Sun: 30 late (> 10 grace, so counted in full)
       { date: '2026-07-06', check_in: '09:00', check_out: '17:00', status: 'absent' },  // Mon: absent
       { date: '2026-07-07', check_in: '09:00', check_out: '18:00', status: 'present' }, // Tue: 60 overtime
       { date: '2026-07-08', check_in: '09:00', check_out: '17:00', status: 'half-day' }, // Wed: half-day (metrics zeroed)
@@ -413,7 +412,7 @@ describe('Payroll auto-adjustments', () => {
 
     expect(payroll.status).toBe(201);
     expect(payroll.body.payroll_breakdown).toBeDefined();
-    expect(payroll.body.payroll_breakdown.late_minutes).toBe(20);
+    expect(payroll.body.payroll_breakdown.late_minutes).toBe(30);
     expect(payroll.body.payroll_breakdown.overtime_minutes).toBe(60);
     expect(payroll.body.payroll_breakdown.regular_overtime_minutes).toBe(60);
     expect(payroll.body.payroll_breakdown.weekend_overtime_minutes).toBe(0);
@@ -421,23 +420,23 @@ describe('Payroll auto-adjustments', () => {
     expect(payroll.body.payroll_breakdown.half_days).toBe(1);
 
     // weekly salary=3000, 5 working days => daily=600, minute=1.25
-    // one day late 20 (>10) => weighted 20*1.5 = 30
-    // auto deductions = late(30m)*1.25=37.5 + absent(1d)=600 + half-day(0.5d)=300 => 937.5
+    // one day late 30 (>10) => weighted 30*1.5 = 45
+    // auto deductions = late(45m)*1.25=56.25 + absent(1d)=600 + half-day(0.5d)=300 => 956.25
     // auto bonus = overtime(60m)*1.25*1.5 => 112.5
     // final bonus = 112.5 + 10(manual) => 122.5
-    // final deductions = 937.5 + 5(manual) => 942.5
-    // net = 3000 + 122.5 - 942.5 => 2180
+    // final deductions = 956.25 + 5(manual) => 961.25
+    // net = 3000 + 122.5 - 961.25 => 2161.25
     expect(Number(payroll.body.bonus)).toBeCloseTo(122.5, 2);
-    expect(Number(payroll.body.deductions)).toBeCloseTo(942.5, 2);
-    expect(Number(payroll.body.net_salary)).toBeCloseTo(2180, 2);
-    expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(30, 2);
+    expect(Number(payroll.body.deductions)).toBeCloseTo(961.25, 2);
+    expect(Number(payroll.body.net_salary)).toBeCloseTo(2161.25, 2);
+    expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(45, 2);
 
     const list = await agent.get('/api/payroll?week_start=2026-07-04');
     expect(list.status).toBe(200);
     expect(list.body.data).toHaveLength(1);
     expect(list.body.data[0].payroll_breakdown).toBeDefined();
     expect(Number(list.body.data[0].payroll_breakdown.auto_bonus)).toBeCloseTo(112.5, 2);
-    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(937.5, 2);
+    expect(Number(list.body.data[0].payroll_breakdown.auto_deductions)).toBeCloseTo(956.25, 2);
   });
 
   test('weights late minutes per day, not on the weekly total', async () => {
@@ -456,10 +455,11 @@ describe('Payroll auto-adjustments', () => {
     expect(emp.status).toBe(201);
     const employeeId = emp.body.id;
 
-    // Saturday 5 late (<=10 => x1), Sunday 40 late (>10 => x1.5) => 5 + 60 = 65
+    // Grace is a threshold: lateness above 10 min counts in full.
+    // Saturday 15 late (>10 => x1.5 = 22.5), Sunday 50 late (>10 => x1.5 = 75) => 97.5
     for (const row of [
-      { date: '2026-07-04', check_in: '09:15', check_out: '17:00', status: 'present' }, // after 10 grace => 5 late
-      { date: '2026-07-05', check_in: '09:50', check_out: '17:00', status: 'present' }, // after 10 grace => 40 late
+      { date: '2026-07-04', check_in: '09:15', check_out: '17:00', status: 'present' }, // 15 late
+      { date: '2026-07-05', check_in: '09:50', check_out: '17:00', status: 'present' }, // 50 late
     ]) {
       const resp = await agent.post(`/api/employees/${employeeId}/attendance`).send(row);
       expect([200, 201]).toContain(resp.status);
@@ -470,8 +470,8 @@ describe('Payroll auto-adjustments', () => {
       .send({ employee_id: employeeId, week_start: '2026-07-04', bonus: 0, deductions: 0 });
 
     expect(payroll.status).toBe(201);
-    expect(Number(payroll.body.payroll_breakdown.late_minutes)).toBe(45);
-    expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(65, 2);
+    expect(Number(payroll.body.payroll_breakdown.late_minutes)).toBe(65);
+    expect(Number(payroll.body.payroll_breakdown.late_weighted_minutes)).toBeCloseTo(97.5, 2);
   });
 
   test('generates payroll for all active employees when week_start is provided and no employee selected', async () => {
@@ -762,7 +762,7 @@ describe('Device punch ingestion', () => {
     expect(list.status).toBe(200);
     expect(list.body).toHaveLength(1);
     expect(list.body[0].status).toBe('late');
-    expect(Number(list.body[0].late_minutes)).toBe(20);
+    expect(Number(list.body[0].late_minutes)).toBe(30);
     expect(Number(list.body[0].overtime_minutes)).toBe(45);
   });
 
@@ -817,6 +817,69 @@ describe('Device punch ingestion', () => {
     expect(Number(list.body[0].late_minutes)).toBe(0);
     expect(Number(list.body[0].early_leave_minutes)).toBe(0);
     expect(Number(list.body[0].overtime_minutes)).toBe(480);
+  });
+  const createDeviceWorker = async (agent, deviceUserId) => {
+    const emp = await agent.post('/api/employees').send({
+      name: `Device Worker ${deviceUserId}`,
+      email: `${deviceUserId.toLowerCase()}@test.com`,
+      role: 'Operator',
+      shift: 'morning',
+      shift_start: '09:00',
+      shift_end: '17:00',
+      weekend_days: '5,6',
+      device_user_id: deviceUserId,
+      salary: 2000,
+    });
+    expect(emp.status).toBe(201);
+    return emp.body.id;
+  };
+
+  const punch = (events) => request(app)
+    .post('/api/device/punch-events')
+    .set('x-device-api-key', process.env.DEVICE_INGEST_API_KEY)
+    .send({ events });
+
+  test('a lone punch after shift end is recorded as check-out, not a 9-hour-late check-in', async () => {
+    const agent = await createAdminAndLogin();
+    const employeeId = await createDeviceWorker(agent, 'DVC-LONE');
+
+    const ingest = await punch([
+      { external_event_id: 'lone-1', device_id: 'scanner-a', device_user_id: 'DVC-LONE', punched_at: '2026-03-16T17:45:00' },
+    ]);
+    expect(ingest.status).toBe(207);
+
+    const list = await agent.get(`/api/employees/${employeeId}/attendance?month=3&year=2026`);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].check_in).toBeNull();
+    expect(list.body[0].check_out).toMatch(/^17:45/);
+    expect(Number(list.body[0].late_minutes)).toBe(0);
+    expect(list.body[0].status).toBe('present');
+    expect(list.body[0].notes).toContain('missing check-in punch');
+  });
+
+  test('device punches never rewrite a day inside a paid payroll week', async () => {
+    const agent = await createAdminAndLogin();
+    const employeeId = await createDeviceWorker(agent, 'DVC-PAID');
+
+    await punch([
+      { external_event_id: 'paid-in', device_id: 'scanner-a', device_user_id: 'DVC-PAID', punched_at: '2026-03-16T09:00:00' },
+      { external_event_id: 'paid-out', device_id: 'scanner-a', device_user_id: 'DVC-PAID', punched_at: '2026-03-16T17:00:00' },
+    ]);
+    await pool.query(
+      "INSERT INTO payroll (employee_id, month, year, base_salary, net_salary, status, week_start, week_end) VALUES ($1, 3, 2026, 2000, 2000, 'paid', '2026-03-14', '2026-03-20')",
+      [employeeId]
+    );
+
+    // A late re-sync of the device sends an earlier punch for the same, already paid day.
+    const resync = await punch([
+      { external_event_id: 'paid-resync', device_id: 'scanner-a', device_user_id: 'DVC-PAID', punched_at: '2026-03-16T08:10:00' },
+    ]);
+    expect(resync.status).toBe(207);
+    expect(resync.body.results[0].skipped).toBe('paid_payroll_period');
+
+    const list = await agent.get(`/api/employees/${employeeId}/attendance?month=3&year=2026`);
+    expect(list.body[0].check_in).toMatch(/^09:00/);
+    expect(list.body[0].check_out).toMatch(/^17:00/);
   });
 });
 

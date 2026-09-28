@@ -1,0 +1,1050 @@
+const pool = require('../../db/pool');
+const payrollRepository = require('./payroll.repository');
+const accountingService = require('../accounting/accounting.service');
+const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
+const ApiError = require('../../utils/ApiError');
+const { SHIFT_SCHEDULES, toMinutes } = require('../../utils/attendanceMetrics');
+
+const round2 = (n) => Number(Number(n || 0).toFixed(2));
+
+/**
+ * Late weighting is applied per attendance day (not on the weekly total):
+ * - day late ≤ 10 min → ×1 (e.g. Saturday 5 → 5)
+ * - day late > 10 min → full day late ×1.5 (e.g. Sunday 40 → 60)
+ * Example week: 5 + (40 * 1.5) = 65 charged minutes.
+ * NOTE: `late_minutes` has already passed the attendance grace
+ * (attendanceLateGraceMinutes) at logging time: lateness at or under the grace
+ * is stored as 0, anything above it is stored in full (not reduced by the grace).
+ * This 10-minute weighting threshold is an independent payroll rule.
+ */
+const weightedLateMinutesForDay = (lateMinutes) => {
+  const total = Math.max(0, Number(lateMinutes || 0));
+  if (total <= 10) return total;
+  return total * 1.5;
+};
+
+const sumWeightedLateMinutes = (attendanceRows = []) => (
+  attendanceRows.reduce((sum, row) => sum + weightedLateMinutesForDay(row.late_minutes), 0)
+);
+
+/** Early leave (left before shift end): always ×1 — same rate as ≤10 late minutes. */
+const earlyLeaveChargeMinutes = (earlyLeaveMinutes) => Math.max(0, Number(earlyLeaveMinutes || 0));
+
+const normalizeToUtcDate = (value) => {
+  const text = String(value || '').slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return null;
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+};
+
+const toSaturdayUtc = (date) => {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const diffToSaturday = (d.getUTCDay() - 6 + 7) % 7;
+  d.setUTCDate(d.getUTCDate() - diffToSaturday);
+  return d;
+};
+
+const currentWeekSaturdayUtc = () => toSaturdayUtc(new Date());
+
+const toIsoDate = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+// Weekly payroll periods run Saturday → Friday (7 calendar days). The weekend day
+// (Friday by default) IS included in the period so that work performed on the
+// weekend day is captured for weekend-overtime detection.
+const WEEK_LENGTH_DAYS = 6; // offset from Saturday to Friday inclusive
+
+const nextUtcDay = (cursor) => new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), cursor.getUTCDate() + 1));
+
+const weekendSetFrom = (weekendDays) => {
+  const raw = String(weekendDays || process.env.PAYROLL_WEEKEND_DAYS || '5');
+  return new Set(
+    raw
+      .split(',')
+      .map((x) => Number(String(x).trim()))
+      .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+  );
+};
+
+const toIsoDateString = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(value.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(String(value));
+  return match ? match[1] : null;
+};
+
+const getPayrollPeriodRange = ({ weekStart, weekEnd, effectiveMonth, effectiveYear }) => {
+  if (weekStart) {
+    const start = toIsoDateString(weekStart);
+    let end;
+    if (weekEnd) {
+      end = toIsoDateString(weekEnd);
+    } else {
+      const startDate = normalizeToUtcDate(start);
+      const endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate() + WEEK_LENGTH_DAYS));
+      end = toIsoDate(endDate);
+    }
+    return { periodStart: start, periodEnd: end };
+  } else if (effectiveMonth && effectiveYear) {
+    const m = Number(effectiveMonth);
+    const y = Number(effectiveYear);
+    const start = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { periodStart: start, periodEnd: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}` };
+  }
+  return { periodStart: null, periodEnd: null };
+};
+
+const getBusinessTodayIso = () => {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Africa/Cairo' });
+};
+
+/**
+ * Build the set of dates covered by approved leave that should be EXCLUDED from
+ * absence penalties. Unpaid leave is intentionally NOT excluded — an unpaid-leave
+ * day is treated like an absence (the employee is not paid for it).
+ */
+const buildApprovedLeaveDatesSet = (leaveRows = []) => {
+  const approvedSet = new Set();
+  for (const row of leaveRows) {
+    if (String(row.leave_type || '').toLowerCase() === 'unpaid') continue;
+    const startStr = toIsoDateString(row.start_date);
+    const endStr = toIsoDateString(row.end_date);
+    if (!startStr || !endStr) continue;
+
+    let cursor = normalizeToUtcDate(startStr);
+    const endDate = normalizeToUtcDate(endStr);
+    while (cursor <= endDate) {
+      approvedSet.add(toIsoDate(cursor));
+      cursor = nextUtcDay(cursor);
+    }
+  }
+  return approvedSet;
+};
+
+const calculateInferredAbsentDays = (records = [], weekendSet, periodStart, periodEnd, employee = {}, approvedLeaveDates = new Set()) => {
+  const startIso = toIsoDateString(periodStart);
+  const periodEndIso = toIsoDateString(periodEnd);
+  if (!startIso || !periodEndIso) return 0;
+
+  // Cap end date at Egypt business date so future, unoccurred days in open periods are not marked absent
+  const todayIso = getBusinessTodayIso();
+  const endIso = (todayIso && periodEndIso > todayIso) ? todayIso : periodEndIso;
+
+  const hireIso = toIsoDateString(employee?.hire_date);
+  const terminationIso = toIsoDateString(employee?.termination_date);
+
+  const recordedDates = new Set(
+    records
+      .filter((r) => r && r.status !== null)
+      .map((r) => toIsoDateString(r.date))
+      .filter(Boolean)
+  );
+
+  let inferred = 0;
+  let cursor = normalizeToUtcDate(startIso);
+  const endDate = normalizeToUtcDate(endIso);
+
+  while (cursor <= endDate) {
+    const dateStr = toIsoDate(cursor);
+    const day = cursor.getUTCDay();
+
+    const isWeekend = weekendSet.has(day);
+    const hasRecord = recordedDates.has(dateStr);
+    const beforeHire = hireIso ? dateStr < hireIso : false;
+    const afterTermination = terminationIso ? dateStr > terminationIso : false;
+    const isApprovedLeave = approvedLeaveDates ? approvedLeaveDates.has(dateStr) : false;
+
+    if (!isWeekend && !hasRecord && !beforeHire && !afterTermination && !isApprovedLeave) {
+      inferred += 1;
+    }
+
+    cursor = nextUtcDay(cursor);
+  }
+
+  return inferred;
+};
+
+
+/**
+ * Count working (non-weekend) days in [periodStart, periodEnd] and how many of
+ * them the employee was actually employed for (between hire and termination).
+ * Used to prorate base salary for partial weeks around hire/termination.
+ */
+const countEmployedWorkDays = (periodStart, periodEnd, weekendSet, employee = {}) => {
+  const startIso = toIsoDateString(periodStart);
+  const endIso = toIsoDateString(periodEnd);
+  if (!startIso || !endIso) return { employed: 0, total: 0 };
+
+  const hireIso = toIsoDateString(employee?.hire_date);
+  const terminationIso = toIsoDateString(employee?.termination_date);
+
+  let employed = 0;
+  let total = 0;
+  let cursor = normalizeToUtcDate(startIso);
+  const endDate = normalizeToUtcDate(endIso);
+  while (cursor <= endDate) {
+    const day = cursor.getUTCDay();
+    if (!weekendSet.has(day)) {
+      total += 1;
+      const dateStr = toIsoDate(cursor);
+      const beforeHire = hireIso ? dateStr < hireIso : false;
+      const afterTermination = terminationIso ? dateStr > terminationIso : false;
+      if (!beforeHire && !afterTermination) employed += 1;
+    }
+    cursor = nextUtcDay(cursor);
+  }
+  return { employed, total };
+};
+
+const isWeekendAttendanceDate = (dateValue, weekendSet) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue || '').slice(0, 10));
+  if (!match) return false;
+  const day = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))).getUTCDay();
+  return weekendSet.has(day);
+};
+
+const getPayrollPolicy = async () => {
+  const settings = await getAttendancePayrollPolicy();
+
+  return {
+    workHoursPerDay: Number(process.env.PAYROLL_WORK_HOURS_PER_DAY || 8),
+    workingDaysPerMonth: Number(process.env.PAYROLL_WORKING_DAYS_PER_MONTH || 30),
+    overtimeMultiplier: Number(settings.payrollOvertimeMultiplier || 1.5),
+    vacationOvertimeMultiplier: Number(settings.payrollVacationOvertimeMultiplier || 1),
+    weeksPerMonth: Number(settings.payrollWeeksPerMonth || 4),
+  };
+};
+
+const getWeeklyWorkDays = (weekendSet) => {
+  const weekDays = 7 - weekendSet.size;
+  return weekDays > 0 ? weekDays : 5;
+};
+
+/**
+ * Resolves an employee's daily shift duration in hours.
+ * Checks explicit properties (shift_hours, work_hours_per_day) first,
+ * then computes the duration between shift_start and shift_end (or SHIFT_SCHEDULES defaults).
+ * If genuinely missing or unresolvable, logs a warning and returns fallbackHours (default 8).
+ */
+const resolveShiftHours = (employee, fallbackHours = 8) => {
+  if (employee) {
+    if (Number.isFinite(Number(employee.shift_hours)) && Number(employee.shift_hours) > 0) {
+      return Number(employee.shift_hours);
+    }
+    if (Number.isFinite(Number(employee.work_hours_per_day)) && Number(employee.work_hours_per_day) > 0) {
+      return Number(employee.work_hours_per_day);
+    }
+    const schedule = SHIFT_SCHEDULES[employee.shift] || SHIFT_SCHEDULES.morning;
+    const startStr = employee.shift_start || schedule?.start;
+    const endStr = employee.shift_end || schedule?.end;
+    const startMin = toMinutes(startStr);
+    const endMin = toMinutes(endStr);
+    if (startMin !== null && endMin !== null) {
+      let end = endMin;
+      if (end <= startMin) end += 24 * 60; // handle overnight shift
+      const hours = (end - startMin) / 60;
+      if (hours > 0) return hours;
+    }
+  }
+
+  console.warn(`[Payroll] Missing or unresolvable shift duration for employee ID ${employee?.id || employee?.employee_id || 'unknown'} (${employee?.name || employee?.employee_name || 'unknown'}), falling back to ${fallbackHours} hours default.`);
+  return fallbackHours;
+};
+
+const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => {
+  const dailyRate = useWeeklySalary
+    ? baseSalary / getWeeklyWorkDays(weekendSet)
+    : baseSalary / policy.workingDaysPerMonth;
+  const shiftHours = resolveShiftHours(employee, policy.workHoursPerDay || 8);
+  const minuteRate = dailyRate / (shiftHours * 60);
+  return { dailyRate, minuteRate, shiftHours };
+};
+
+/**
+ * SINGLE SOURCE OF TRUTH FOR PAYROLL CALCULATIONS
+ * 
+ * Computes live payroll figures and breakdown for a given payroll row,
+ * employee, and policy settings. Must not be duplicated elsewhere.
+ */
+const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttendance = null, preFetchedLeaves = null) => {
+  const isPaid = row.status === 'paid';
+  // For paid records the stored base_salary is authoritative.
+  // For pending records, prefer the snapshot_salary frozen at generation time.
+  const fullBaseSalary = isPaid
+    ? Number(row.base_salary ?? row.snapshot_salary ?? employee?.salary ?? row.employee_salary ?? 0)
+    : Number(row.snapshot_salary ?? row.base_salary ?? employee?.salary ?? row.employee_salary ?? 0);
+
+  // Prefer snapshot values for shift/weekend/dates; fall back to live employee
+  // data only when snapshots are absent (legacy pre-migration records).
+  const weekendSet = weekendSetFrom(row.snapshot_weekend_days ?? employee?.weekend_days ?? row.weekend_days);
+  const useWeeklySalary = Boolean(row.week_start);
+
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: row.week_start,
+    weekEnd: row.week_end,
+    effectiveMonth: row.month,
+    effectiveYear: row.year,
+  });
+
+  const empObj = {
+    hire_date: row.snapshot_hire_date ?? employee?.hire_date ?? row.hire_date,
+    termination_date: row.snapshot_termination_date ?? employee?.termination_date ?? row.termination_date,
+  };
+
+  // Build a synthetic employee-like object for resolveShiftHours, preferring
+  // snapshot values so that rate calculations use the generation-time shift.
+  const shiftSource = {
+    shift: row.snapshot_shift ?? employee?.shift ?? row.shift,
+    shift_start: row.snapshot_shift_start ?? employee?.shift_start ?? row.shift_start,
+    shift_end: row.snapshot_shift_end ?? employee?.shift_end ?? row.shift_end,
+    id: row.employee_id,
+  };
+
+  // For existing payroll rows (both pending and paid), row.snapshot_salary and
+  // row.base_salary already store the correct generation-time base salary (prorated
+  // if hired/terminated mid-period). Do NOT re-apply countEmployedWorkDays proration,
+  // which would multiply the already-prorated base salary a second time.
+  const baseSalary = fullBaseSalary;
+
+  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, shiftSource);
+
+  let attendanceRecords = [];
+  let approvedLeaveDates = new Set();
+
+  if (periodStart && periodEnd) {
+    attendanceRecords = preFetchedAttendance !== null
+      ? preFetchedAttendance.filter((r) => {
+          const dStr = toIsoDateString(r.date);
+          return dStr >= periodStart && dStr <= periodEnd;
+        })
+      : await payrollRepository.getAttendanceForPayroll(
+          row.employee_id,
+          row.week_start ? periodStart : null,
+          row.week_start ? periodEnd : null,
+          row.month,
+          row.year
+        );
+    const leaveRows = preFetchedLeaves !== null
+      ? preFetchedLeaves.filter((r) => {
+          const sStr = toIsoDateString(r.start_date);
+          const eStr = toIsoDateString(r.end_date);
+          return eStr >= periodStart && sStr <= periodEnd;
+        })
+      : await payrollRepository.getApprovedLeavesForPayroll(row.employee_id, periodStart, periodEnd);
+    approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+  }
+
+  const lateWeighted = row.late_weighted_minutes !== undefined
+    ? Number(row.late_weighted_minutes || 0)
+    : sumWeightedLateMinutes(attendanceRecords);
+
+  const earlyLeaveMinutes = row.early_leave_minutes !== undefined
+    ? earlyLeaveChargeMinutes(row.early_leave_minutes)
+    : earlyLeaveChargeMinutes(attendanceRecords.reduce((sum, r) => sum + Number(r.early_leave_minutes || 0), 0));
+
+  const absentDaysExplicit = row.absent_days !== undefined
+    ? Number(row.absent_days || 0)
+    : attendanceRecords.reduce((sum, r) => {
+        const dStr = toIsoDateString(r.date);
+        const hIso = toIsoDateString(empObj.hire_date);
+        const tIso = toIsoDateString(empObj.termination_date);
+        if (hIso && dStr < hIso) return sum;
+        if (tIso && dStr > tIso) return sum;
+        return sum + Number(r.absent_days || 0);
+      }, 0);
+
+  const halfDays = row.half_days !== undefined
+    ? Number(row.half_days || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.half_days || 0), 0);
+
+  const inferredAbsentDays = (periodStart && periodEnd)
+    ? calculateInferredAbsentDays(
+        attendanceRecords,
+        weekendSet,
+        periodStart,
+        periodEnd,
+        empObj,
+        approvedLeaveDates
+      )
+    : 0;
+
+  const { employed: employedDaysLimit } = (periodStart && periodEnd)
+    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj)
+    : { employed: 6 };
+
+  const absentDays = Math.min(employedDaysLimit, absentDaysExplicit + inferredAbsentDays);
+
+  const lateDeductionAmount = lateWeighted * minuteRate;
+  const earlyLeaveDeductionAmount = earlyLeaveMinutes * minuteRate;
+  const absentDeductionAmount = absentDays * dailyRate;
+  const halfDayDeductionAmount = halfDays * (dailyRate / 2);
+  const autoDeductions = lateDeductionAmount + earlyLeaveDeductionAmount + absentDeductionAmount + halfDayDeductionAmount;
+
+  const totalOvertimeMinutes = row.overtime_minutes !== undefined
+    ? Number(row.overtime_minutes || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.overtime_minutes || 0), 0);
+
+  const weekendOvertimeMinutes = row.weekend_overtime_minutes !== undefined
+    ? Number(row.weekend_overtime_minutes || 0)
+    : attendanceRecords.reduce((sum, r) => sum + (isWeekendAttendanceDate(r.date, weekendSet) ? Number(r.overtime_minutes || 0) : 0), 0);
+
+  const regularOvertimeMinutes = Math.max(0, totalOvertimeMinutes - weekendOvertimeMinutes);
+  const regularOvertimeAmount = regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier;
+  const weekendOvertimeAmount = weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier;
+  const autoBonus = regularOvertimeAmount + weekendOvertimeAmount;
+
+  const hrBonus = Number(row.hr_bonus || 0);
+  const hrPenalty = Number(row.hr_penalty || 0);
+  const hrOvertime = Number(row.hr_overtime || 0);
+  const loanDeduction = Number(row.loan_deduction || 0);
+  const computedAutoBonus = round2(autoBonus);
+  const computedAutoDeductions = round2(autoDeductions);
+  const storedManualBonus = Number(row.manual_bonus || 0);
+  const storedManualDeductions = Number(row.manual_deductions || 0);
+
+  const recomputedBonus = round2(computedAutoBonus + storedManualBonus + hrBonus + hrOvertime);
+  const recomputedDeductions = round2(computedAutoDeductions + storedManualDeductions + hrPenalty + loanDeduction);
+  const recomputedNet = Math.max(0, round2(baseSalary + recomputedBonus - recomputedDeductions));
+
+  const weeklyPaymentEstimate = row.week_start
+    ? recomputedNet
+    : (recomputedNet / Math.max(1, policy.weeksPerMonth));
+
+  const rawLateMinutes = row.late_minutes !== undefined
+    ? Number(row.late_minutes || 0)
+    : attendanceRecords.reduce((sum, r) => sum + Number(r.late_minutes || 0), 0);
+
+  const breakdown = {
+    manual_bonus: round2(storedManualBonus),
+    manual_deductions: round2(storedManualDeductions),
+    auto_bonus: computedAutoBonus,
+    auto_deductions: computedAutoDeductions,
+    hr_bonus: hrBonus,
+    hr_penalty: hrPenalty,
+    hr_overtime_bonus: hrOvertime,
+    loan_deduction: loanDeduction,
+    late_minutes: rawLateMinutes,
+    early_leave_minutes: earlyLeaveMinutes,
+    overtime_minutes: totalOvertimeMinutes,
+    regular_overtime_minutes: regularOvertimeMinutes,
+    weekend_overtime_minutes: weekendOvertimeMinutes,
+    absent_days: absentDays,
+    half_days: halfDays,
+    inferred_absent_days: inferredAbsentDays,
+    late_weighted_minutes: round2(lateWeighted),
+    regular_overtime_weighted_minutes: round2(regularOvertimeMinutes * policy.overtimeMultiplier),
+    weekend_overtime_weighted_minutes: round2(weekendOvertimeMinutes * policy.vacationOvertimeMultiplier),
+    late_deduction: round2(lateDeductionAmount),
+    early_leave_deduction: round2(earlyLeaveDeductionAmount),
+    absent_deduction: round2(absentDeductionAmount),
+    half_day_deduction: round2(halfDayDeductionAmount),
+    regular_overtime_bonus: round2(regularOvertimeAmount),
+    weekend_overtime_bonus: round2(weekendOvertimeAmount),
+    weekly_payment_estimate: round2(weeklyPaymentEstimate),
+  };
+
+  return {
+    baseSalary,
+    autoBonus: computedAutoBonus,
+    autoDeductions: computedAutoDeductions,
+    recomputedBonus,
+    recomputedDeductions,
+    recomputedNet,
+    breakdown,
+  };
+};
+
+const getPayroll = async ({ weekStartInput, month, year, status, dateFrom, dateTo, page, limit, useBatching = true }) => {
+  const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
+  if (weekStartInput && !normalizedWeekStartDate) {
+    throw new ApiError(400, 'Invalid week_start date format');
+  }
+  const weekStart = normalizedWeekStartDate ? toIsoDate(toSaturdayUtc(normalizedWeekStartDate)) : null;
+  // Optional week_start range filter (bounds the fetch so the list never
+  // silently truncates). Snap to the enclosing Saturday for consistency.
+  const from = dateFrom && normalizeToUtcDate(dateFrom) ? toIsoDate(toSaturdayUtc(normalizeToUtcDate(dateFrom))) : null;
+  const to = dateTo && normalizeToUtcDate(dateTo) ? toIsoDate(toSaturdayUtc(normalizeToUtcDate(dateTo))) : null;
+  const pageNum = Math.max(1, Number.parseInt(page, 10) || 1);
+  const pageSize = Math.min(2000, Math.max(1, Number.parseInt(limit, 10) || 50));
+  const offset = (pageNum - 1) * pageSize;
+
+  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
+  const weekendDaysExpr = supportsWeekendDays ? "COALESCE(e.weekend_days, '5')" : "'5'";
+
+  const total = await payrollRepository.getPayrollRecordsCount({ weekStart, month, year, status, dateFrom: from, dateTo: to });
+  const rows = await payrollRepository.getPayrollRecords({
+    weekStart, month, year, status, dateFrom: from, dateTo: to, limit: pageSize, offset, weekendDaysExpr, supportsWeekendDays
+  });
+
+  const policy = await getPayrollPolicy();
+  const enriched = [];
+
+  // Batch pre-fetch attendance and approved leaves for all employees in this page to prevent N+1 per-row queries
+  const employeeIds = [...new Set(rows.map(r => r.employee_id).filter(Boolean))];
+  const { minDate, maxDate } = rows.reduce((acc, r) => {
+    const { periodStart, periodEnd } = getPayrollPeriodRange({
+      weekStart: r.week_start,
+      weekEnd: r.week_end,
+      effectiveMonth: r.month,
+      effectiveYear: r.year,
+    });
+    if (periodStart && (!acc.minDate || periodStart < acc.minDate)) acc.minDate = periodStart;
+    if (periodEnd && (!acc.maxDate || periodEnd > acc.maxDate)) acc.maxDate = periodEnd;
+    return acc;
+  }, { minDate: null, maxDate: null });
+
+  let attendanceBatchMap = new Map();
+  let leavesBatchMap = new Map();
+
+  if (useBatching && employeeIds.length > 0 && minDate && maxDate) {
+    [attendanceBatchMap, leavesBatchMap] = await Promise.all([
+      payrollRepository.getAttendanceBatchForPayroll(employeeIds, minDate, maxDate),
+      payrollRepository.getApprovedLeavesBatchForPayroll(employeeIds, minDate, maxDate),
+    ]);
+  }
+
+  for (const row of rows) {
+    const isPaid = row.status === 'paid';
+    const empAtt = useBatching ? (attendanceBatchMap.get(row.employee_id) || []) : null;
+    const empLeaves = useBatching ? (leavesBatchMap.get(row.employee_id) || []) : null;
+    const computed = await computeLivePayrollFigures(row, null, policy, empAtt, empLeaves);
+
+    // Stored figures represent the authoritative generated payroll amounts.
+    // We always display the stored net salary, bonus, and deductions, while flagging
+    // hasRecalcDrift if live recalculation differs from stored amounts.
+    const storedNet = round2(Number(row.net_salary || 0));
+    const hasRecalcDrift = !isPaid && Math.abs(computed.recomputedNet - storedNet) >= 0.01;
+    const displayBonus = round2(Number(row.bonus || 0));
+    const displayDeductions = round2(Number(row.deductions || 0));
+    const displayNet = storedNet;
+    const weeklyPaymentEstimate = row.week_start
+      ? displayNet
+      : (displayNet / Math.max(1, policy.weeksPerMonth));
+
+    enriched.push({
+      ...row,
+      base_salary: computed.baseSalary,
+      bonus: displayBonus,
+      deductions: displayDeductions,
+      net_salary: displayNet,
+      recomputed_net_salary: computed.recomputedNet,
+      has_recalc_drift: hasRecalcDrift,
+      payroll_breakdown: {
+        ...computed.breakdown,
+        weekly_payment_estimate: round2(weeklyPaymentEstimate),
+      },
+    });
+  }
+
+  return { data: enriched, total, page: pageNum, limit: pageSize };
+};
+
+const calculatePayrollForEmployee = async (employee, options) => {
+  const { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy } = options;
+  const fullBaseSalary = Number(employee.salary || 0);
+  const weekendSet = weekendSetFrom(employee.weekend_days);
+  const useWeeklySalary = Boolean(weekStart);
+
+  const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
+    employee.id, weekStart, weekEnd, effectiveMonth, effectiveYear
+  );
+
+  const { periodStart, periodEnd } = getPayrollPeriodRange({ weekStart, weekEnd, effectiveMonth, effectiveYear });
+  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(employee.id, periodStart, periodEnd);
+  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
+  // Prorate base salary for partial employment (hire/termination mid-period).
+  const { employed, total } = countEmployedWorkDays(periodStart, periodEnd, weekendSet, employee);
+  const base_salary = (useWeeklySalary && total > 0 && employed < total)
+    ? round2(fullBaseSalary * (employed / total))
+    : fullBaseSalary;
+
+  // Compute rates from the prorated base_salary so that deductions and the
+  // salary they are subtracted from are on the same basis.
+  const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary, employee);
+
+  const totals = attendanceRecords.reduce((acc, row) => {
+    const dStr = toIsoDateString(row.date);
+    const hIso = toIsoDateString(employee.hire_date);
+    const tIso = toIsoDateString(employee.termination_date);
+    const isOutside = (hIso && dStr < hIso) || (tIso && dStr > tIso);
+    return {
+      late_minutes: acc.late_minutes + (isOutside ? 0 : Number(row.late_minutes || 0)),
+      early_leave_minutes: acc.early_leave_minutes + (isOutside ? 0 : Number(row.early_leave_minutes || 0)),
+      overtime_minutes: acc.overtime_minutes + (isOutside ? 0 : Number(row.overtime_minutes || 0)),
+      weekend_overtime_minutes: acc.weekend_overtime_minutes + (!isOutside && isWeekendAttendanceDate(row.date, weekendSet) ? Number(row.overtime_minutes || 0) : 0),
+      absent_days: acc.absent_days + (isOutside ? 0 : Number(row.absent_days || 0)),
+      half_days: acc.half_days + (isOutside ? 0 : Number(row.half_days || 0)),
+    };
+  }, {
+    late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0,
+    weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
+  });
+
+  const inferredAbsentDays = calculateInferredAbsentDays(
+    attendanceRecords,
+    weekendSet,
+    periodStart,
+    periodEnd,
+    employee,
+    approvedLeaveDates
+  );
+
+  const { employed: employedWorkDays } = countEmployedWorkDays(weekStart, weekEnd, weekendSet, employee);
+
+  const overtimeMinutes = totals.overtime_minutes;
+  const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
+  const regularOvertimeMinutes = Math.max(0, overtimeMinutes - weekendOvertimeMinutes);
+  const absentDays = Math.min(employedWorkDays, totals.absent_days + inferredAbsentDays);
+  const halfDays = totals.half_days;
+  const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
+  const earlyLeaveMinutes = earlyLeaveChargeMinutes(totals.early_leave_minutes);
+
+  const autoDeductions =
+    ((lateWeighted + earlyLeaveMinutes) * minuteRate) +
+    (absentDays * dailyRate) +
+    (halfDays * (dailyRate / 2));
+  const autoBonus =
+    (regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier) +
+    (weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier);
+
+  let hrBonus = 0;
+  let hrPenalty = 0;
+  let hrOvertime = 0;
+  let loanDeduction = 0;
+  // Loan payments that still need to be applied to hr_loans for this payroll
+  // record (i.e. not yet recorded in the payroll_loan_deductions ledger).
+  let loanPaymentsToApply = [];
+
+  if (useWeeklySalary) {
+    const hrData = await payrollRepository.getHrDataForWeeklyPayroll(employee.id, weekStart, weekEnd);
+    const activeLoans = hrData.loans;
+    // Loan policy: the full installment (hr_loans.monthly_installment, despite
+    // the column name) is deducted from every weekly payroll until the loan is
+    // repaid. It is intentionally not prorated across the month.
+
+    // Reconcile against what has already been deducted for this exact payroll
+    // record so regeneration never double-charges a loan.
+    const existingPayrollId = await payrollRepository.getPayrollIdByWeek(employee.id, weekStart);
+    const existingLedger = existingPayrollId
+      ? await payrollRepository.getLoanDeductionsForPayroll(existingPayrollId)
+      : [];
+    const ledgerByLoan = new Map(existingLedger.map((r) => [Number(r.loan_id), Number(r.amount)]));
+
+    const activeLoanIds = new Set();
+    for (const loan of activeLoans) {
+      activeLoanIds.add(loan.id);
+      if (ledgerByLoan.has(loan.id)) {
+        // Already deducted for this record — keep the same amount, do not re-apply.
+        loanDeduction += ledgerByLoan.get(loan.id);
+      } else {
+        const installment = round2(Number(loan.monthly_installment || 0));
+        const amount = round2(Math.min(installment, Number(loan.remaining_amount || 0)));
+        if (amount > 0) {
+          loanDeduction += amount;
+          loanPaymentsToApply.push({ id: loan.id, amount });
+        }
+      }
+    }
+    // Ledger entries for loans already closed by this record's earlier run still
+    // count toward this record's loan_deduction.
+    for (const [loanId, amount] of ledgerByLoan) {
+      if (!activeLoanIds.has(loanId)) loanDeduction += amount;
+    }
+    loanDeduction = round2(loanDeduction);
+
+    hrData.transactions.forEach((t) => {
+      if (t.transaction_type === 'bonus') hrBonus += Number(t.total_amount);
+      if (t.transaction_type === 'penalty') hrPenalty += Number(t.total_amount);
+      if (t.transaction_type === 'overtime') hrOvertime += Number(t.total_amount);
+    });
+  }
+
+  const finalBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
+  const finalDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
+  const net_salary = Math.max(0, round2(base_salary + finalBonus - finalDeductions));
+
+  const savedRecord = await payrollRepository.upsertPayroll({
+    employee_id: employee.id,
+    employee_name: employee.name,
+    effectiveMonth,
+    effectiveYear,
+    weekStart,
+    weekEnd,
+    base_salary,
+    finalBonus,
+    finalDeductions,
+    net_salary,
+    loan_deduction: loanDeduction,
+    manual_bonus: manualBonus,
+    manual_deductions: manualDeductions,
+    auto_bonus: autoBonus,
+    auto_deductions: autoDeductions,
+    hr_bonus: hrBonus,
+    hr_penalty: hrPenalty,
+    hr_overtime: hrOvertime,
+    // Snapshot employee data at generation time so that subsequent reads
+    // use these frozen values instead of live-joining the employee table.
+    snapshot_salary: base_salary,
+    snapshot_shift: employee.shift || null,
+    snapshot_shift_start: employee.shift_start || null,
+    snapshot_shift_end: employee.shift_end || null,
+    snapshot_weekend_days: employee.weekend_days || '5',
+    snapshot_hire_date: employee.hire_date || null,
+    snapshot_termination_date: employee.termination_date || null,
+  });
+
+  // Apply loan payments idempotently: the ledger uniqueness constraint on
+  // (payroll_id, loan_id) guarantees a loan is only ever debited once per record.
+  if (useWeeklySalary && loanPaymentsToApply.length) {
+    await payrollRepository.applyLoanDeductions(savedRecord.id, loanPaymentsToApply);
+  }
+
+  // Post/reconcile the accounting accrual (adjusts the ledger if net_salary changed
+  // on regeneration instead of silently keeping the stale amount).
+  await accountingService.reconcilePayrollAccrual(savedRecord);
+
+  return {
+    ...savedRecord,
+    base_salary: Number(savedRecord.base_salary || 0),
+    bonus: Number(savedRecord.bonus || 0),
+    deductions: Number(savedRecord.deductions || 0),
+    net_salary: Number(savedRecord.net_salary || 0),
+    payroll_breakdown: {
+      manual_bonus: round2(manualBonus),
+      manual_deductions: round2(manualDeductions),
+      hr_bonus: round2(hrBonus),
+      hr_penalty: round2(hrPenalty),
+      hr_overtime_bonus: round2(hrOvertime),
+      loan_deduction: round2(loanDeduction),
+      auto_bonus: round2(autoBonus),
+      auto_deductions: round2(autoDeductions),
+      late_minutes: Number(totals.late_minutes),
+      late_weighted_minutes: round2(lateWeighted),
+      early_leave_minutes: earlyLeaveMinutes,
+      overtime_minutes: Number(totals.overtime_minutes),
+      regular_overtime_minutes: regularOvertimeMinutes,
+      weekend_overtime_minutes: weekendOvertimeMinutes,
+      absent_days: absentDays,
+      inferred_absent_days: inferredAbsentDays,
+      half_days: halfDays,
+      weekly_payment_estimate: round2(useWeeklySalary ? net_salary : (net_salary / Math.max(1, policy.weeksPerMonth))),
+    },
+  };
+};
+
+const generatePayroll = async (data) => {
+  const { employee_id, week_start: weekStartInput, bonus = 0, deductions = 0 } = data;
+  // Manual bonus/deductions are clamped non-negative (a negative here would
+  // silently invert into the opposite adjustment).
+  const manualBonus = Math.max(0, Number(bonus || 0));
+  const manualDeductions = Math.max(0, Number(deductions || 0));
+
+  const weekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
+  if (weekStartInput && !weekStartDate) {
+    throw new ApiError(400, 'Invalid week_start date format');
+  }
+
+  const effectiveWeekStartDate = weekStartDate ? toSaturdayUtc(weekStartDate) : currentWeekSaturdayUtc();
+  const weekStart = toIsoDate(effectiveWeekStartDate);
+  const weekEndDate = new Date(effectiveWeekStartDate);
+  weekEndDate.setUTCDate(weekEndDate.getUTCDate() + WEEK_LENGTH_DAYS);
+  const weekEnd = toIsoDate(weekEndDate);
+  const effectiveMonth = effectiveWeekStartDate.getUTCMonth() + 1;
+  const effectiveYear = effectiveWeekStartDate.getUTCFullYear();
+
+  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
+  const policy = await getPayrollPolicy();
+  const useWeeklySalary = Boolean(weekStart);
+
+  const commonOptions = { weekStart, weekEnd, effectiveMonth, effectiveYear, manualBonus, manualDeductions, policy };
+
+  if (useWeeklySalary && weekStart) {
+    const existingRecords = await payrollRepository.getPayrollRecordsForWeek(weekStart);
+    if (existingRecords.length > 0 && existingRecords.every(r => r.status === 'paid')) {
+      throw new ApiError(400, `Cannot regenerate payroll: all records for week ${weekStart} are already marked as paid and locked.`);
+    }
+  }
+
+  if (employee_id) {
+    if (useWeeklySalary && weekStart) {
+      const existingRecords = await payrollRepository.getPayrollRecordsForWeek(weekStart);
+      const target = existingRecords.find(r => r.employee_id === Number(employee_id));
+      if (target && target.status === 'paid') {
+        throw new ApiError(400, 'Cannot recalculate payroll for an employee whose record is already marked as paid.');
+      }
+    }
+    const employee = await payrollRepository.getEmployeeForPayroll(employee_id, supportsWeekendDays);
+    if (!employee) throw new ApiError(404, 'Employee not found');
+    return calculatePayrollForEmployee(employee, commonOptions);
+  }
+
+  // Bulk generation: for weekly payroll, select all active employees, employees terminated during/after
+  // this week, or any employee with attendance in this week so that no worked days are dropped.
+  const employees = (useWeeklySalary && weekStart && weekEnd)
+    ? await payrollRepository.getEmployeesForPayrollWeek({ weekStart, weekEnd, supportsWeekendDays })
+    : await payrollRepository.getActiveEmployeesForPayroll(supportsWeekendDays);
+
+  const generated = [];
+  const failed = [];
+  for (const employee of employees) {
+    if (!employee) continue;
+    try {
+      generated.push(await calculatePayrollForEmployee(employee, commonOptions));
+    } catch (err) {
+      failed.push({ employee_id: employee.id, error: err?.message || 'Unknown error' });
+    }
+  }
+  return { generated, failed, week_start: weekStart };
+};
+
+const markPaid = async (id) => {
+  const record = await payrollRepository.getPayrollById(id);
+  if (!record) throw new ApiError(404, 'Record not found');
+  if (record.status === 'paid') throw new ApiError(400, 'Record is already paid');
+
+  const result = await payrollRepository.updatePayrollPaid(id);
+  if (!result) throw new ApiError(404, 'Record not found');
+  await accountingService.postPayrollPayment(result);
+  return result;
+};
+
+
+const updateManualAdjustments = async (id, data = {}) => {
+  const record = await payrollRepository.getPayrollById(id);
+  if (!record) throw new ApiError(404, 'Payroll record not found');
+  if (record.status === 'paid') {
+    throw new ApiError(400, 'Cannot adjust a paid payroll record');
+  }
+
+  const manualBonus = Math.max(0, Number(data.bonus ?? data.manual_bonus ?? 0));
+  const manualDeductions = Math.max(0, Number(data.deductions ?? data.manual_deductions ?? 0));
+  if (!Number.isFinite(manualBonus) || !Number.isFinite(manualDeductions)) {
+    throw new ApiError(400, 'bonus and deductions must be numeric');
+  }
+
+  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
+  const employee = await payrollRepository.getEmployeeForPayroll(record.employee_id, supportsWeekendDays);
+  if (!employee) throw new ApiError(404, 'Employee not found');
+
+  const policy = await getPayrollPolicy();
+  // Prefer snapshot values from the payroll record; fall back to live
+  // employee data only for legacy records that predate the snapshot migration.
+  const weekendSet = weekendSetFrom(record.snapshot_weekend_days ?? employee.weekend_days);
+  const useWeeklySalary = Boolean(record.week_start);
+
+  // Build a shift-source object preferring snapshot values for rate calculation.
+  const shiftSource = {
+    shift: record.snapshot_shift ?? employee.shift,
+    shift_start: record.snapshot_shift_start ?? employee.shift_start,
+    shift_end: record.snapshot_shift_end ?? employee.shift_end,
+    id: record.employee_id,
+  };
+  const empObj = {
+    hire_date: record.snapshot_hire_date ?? employee.hire_date,
+    termination_date: record.snapshot_termination_date ?? employee.termination_date,
+  };
+
+  // Use the canonical period range (timezone-safe, correct Sat→Fri length) for
+  // both the attendance query and the inferred-absence/leave window.
+  const { periodStart, periodEnd } = getPayrollPeriodRange({
+    weekStart: record.week_start,
+    weekEnd: record.week_end,
+    effectiveMonth: record.month,
+    effectiveYear: record.year,
+  });
+  const weekStart = record.week_start ? periodStart : null;
+  const weekEnd = record.week_start ? periodEnd : null;
+  // Use the stored prorated base_salary (not the live employee.salary) so
+  // deduction rates match the base they are subtracted from.
+  const { dailyRate, minuteRate } = getRates(Number(record.base_salary || 0), weekendSet, policy, useWeeklySalary, shiftSource);
+
+  const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
+    record.employee_id,
+    weekStart,
+    weekEnd,
+    record.month,
+    record.year
+  );
+
+  const leaveRows = await payrollRepository.getApprovedLeavesForPayroll(record.employee_id, periodStart, periodEnd);
+  const approvedLeaveDates = buildApprovedLeaveDatesSet(leaveRows);
+
+  const totals = attendanceRecords.reduce((acc, row) => ({
+    late_minutes: acc.late_minutes + Number(row.late_minutes || 0),
+    early_leave_minutes: acc.early_leave_minutes + Number(row.early_leave_minutes || 0),
+    overtime_minutes: acc.overtime_minutes + Number(row.overtime_minutes || 0),
+    weekend_overtime_minutes: acc.weekend_overtime_minutes + (isWeekendAttendanceDate(row.date, weekendSet) ? Number(row.overtime_minutes || 0) : 0),
+    absent_days: acc.absent_days + Number(row.absent_days || 0),
+    half_days: acc.half_days + Number(row.half_days || 0),
+  }), {
+    late_minutes: 0, early_leave_minutes: 0, overtime_minutes: 0,
+    weekend_overtime_minutes: 0, absent_days: 0, half_days: 0,
+  });
+
+  const inferredAbsentDays = calculateInferredAbsentDays(
+    attendanceRecords,
+    weekendSet,
+    periodStart,
+    periodEnd,
+    empObj,
+    approvedLeaveDates
+  );
+  const weekendOvertimeMinutes = totals.weekend_overtime_minutes;
+  const regularOvertimeMinutes = Math.max(0, totals.overtime_minutes - weekendOvertimeMinutes);
+  const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
+  const earlyLeaveMinutes = earlyLeaveChargeMinutes(totals.early_leave_minutes);
+  const absentDays = totals.absent_days + inferredAbsentDays;
+
+  const autoDeductions = round2(
+    ((lateWeighted + earlyLeaveMinutes) * minuteRate) +
+    (absentDays * dailyRate) +
+    (totals.half_days * (dailyRate / 2))
+  );
+  const autoBonus = round2(
+    (regularOvertimeMinutes * minuteRate * policy.overtimeMultiplier) +
+    (weekendOvertimeMinutes * minuteRate * policy.vacationOvertimeMultiplier)
+  );
+
+  const hrBonus = Number(record.hr_bonus || 0);
+  const hrPenalty = Number(record.hr_penalty || 0);
+  const hrOvertime = Number(record.hr_overtime || 0);
+  const loanDeduction = Number(record.loan_deduction || 0);
+  const baseSalary = Number(record.base_salary || 0);
+
+  const finalBonus = round2(autoBonus + manualBonus + hrBonus + hrOvertime);
+  const finalDeductions = round2(autoDeductions + manualDeductions + hrPenalty + loanDeduction);
+  const netSalary = Math.max(0, round2(baseSalary + finalBonus - finalDeductions));
+
+  const saved = await payrollRepository.updateManualAdjustments(id, {
+    manualBonus: round2(manualBonus),
+    manualDeductions: round2(manualDeductions),
+    autoBonus,
+    autoDeductions,
+    finalBonus,
+    finalDeductions,
+    netSalary,
+  });
+
+  // Keep the accounting accrual in sync with the adjusted net salary.
+  await accountingService.reconcilePayrollAccrual(saved);
+
+  return {
+    ...saved,
+    base_salary: Number(saved.base_salary || 0),
+    bonus: Number(saved.bonus || 0),
+    deductions: Number(saved.deductions || 0),
+    net_salary: Number(saved.net_salary || 0),
+    payroll_breakdown: {
+      manual_bonus: round2(manualBonus),
+      manual_deductions: round2(manualDeductions),
+      auto_bonus: autoBonus,
+      auto_deductions: autoDeductions,
+      hr_bonus: round2(hrBonus),
+      hr_penalty: round2(hrPenalty),
+      hr_overtime_bonus: round2(hrOvertime),
+      loan_deduction: round2(loanDeduction),
+      late_minutes: totals.late_minutes,
+      late_weighted_minutes: round2(lateWeighted),
+      early_leave_minutes: earlyLeaveMinutes,
+      weekly_payment_estimate: round2(saved.week_start ? netSalary : (netSalary / Math.max(1, policy.weeksPerMonth))),
+    },
+  };
+};
+
+const deletePayrollWeek = async (weekStartInput) => {
+  const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
+  if (weekStartInput && !normalizedWeekStartDate) {
+    throw new ApiError(400, 'Invalid week_start date format');
+  }
+  if (!normalizedWeekStartDate) {
+    throw new ApiError(400, 'week_start is required to delete weekly payroll');
+  }
+
+  const exactDate = toIsoDate(normalizedWeekStartDate);
+  let records = await payrollRepository.getPayrollRecordsForWeek(exactDate);
+
+  if (records.length === 0) {
+    const saturdayDate = toIsoDate(toSaturdayUtc(normalizedWeekStartDate));
+    records = await payrollRepository.getPayrollRecordsForWeek(saturdayDate);
+  }
+
+  for (const record of records) {
+    if (record.status !== 'pending') {
+      throw new ApiError(400, 'Cannot delete week payroll: some records are already marked as paid');
+    }
+  }
+
+  // Reverse the exact loan amounts recorded in the ledger for each record, then
+  // delete the records — all within a single transaction. The ledger rows are
+  // removed automatically via ON DELETE CASCADE.
+  await payrollRepository.reverseLoanDeductionsAndDeleteRecords(records.map((r) => r.id));
+
+  return { success: true, message: 'Payroll week deleted successfully', deleted: records.length };
+};
+
+const markWeekPaid = async (weekStartInput) => {
+  const normalizedWeekStartDate = weekStartInput ? normalizeToUtcDate(weekStartInput) : null;
+  if (!normalizedWeekStartDate) throw new ApiError(400, 'Invalid week_start date format');
+  const weekStart = toIsoDate(toSaturdayUtc(normalizedWeekStartDate));
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pendingRows = await payrollRepository.getPendingPayrollRecordsForWeek(weekStart, client);
+    if (pendingRows.length === 0) {
+      await client.query('COMMIT');
+      return { success: true, message: 'No pending records to pay for this week', paid_count: 0 };
+    }
+
+    const updatedRes = await client.query(
+      `UPDATE payroll p
+       SET status = 'paid',
+           paid_at = NOW(),
+           employee_name = COALESCE(p.employee_name, e.name)
+       FROM employees e
+       WHERE p.employee_id = e.id
+         AND p.week_start = $1::date
+         AND p.status = 'pending'
+       RETURNING p.*`,
+      [weekStart]
+    );
+
+    for (const row of updatedRes.rows) {
+      await accountingService.postPayrollPayment(row, client);
+    }
+
+    await client.query('COMMIT');
+    return {
+      success: true,
+      message: `Successfully marked ${updatedRes.rows.length} records as paid for week ${weekStart}`,
+      paid_count: updatedRes.rows.length,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = {
+  getPayroll,
+  generatePayroll,
+  markPaid,
+  markWeekPaid,
+  updateManualAdjustments,
+  deletePayrollWeek,
+  calculateInferredAbsentDays,
+  countEmployedWorkDays,
+  buildApprovedLeaveDatesSet,
+  getRates,
+  resolveShiftHours,
+  computeLivePayrollFigures,
+};

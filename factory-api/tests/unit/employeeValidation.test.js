@@ -1,7 +1,7 @@
 const express = require('express');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
-const employeeRoutes = require('../../src/routes/employee.routes');
+const employeeRoutes = require('../../src/modules/employees/employee.routes');
 
 const secret = process.env.JWT_SECRET || 'factory-jwt-secret-key-2026';
 const adminToken = jwt.sign({ id: 1, role: 'admin' }, secret);

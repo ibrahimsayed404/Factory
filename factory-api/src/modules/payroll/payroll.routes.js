@@ -1,0 +1,20 @@
+const express = require('express');
+const router = express.Router();
+const { authenticate, authorizeAdmin, authorizeCronOrAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
+
+const payroll = require('./payroll.controller');
+
+router.get('/payroll', authenticate, authorizeAdmin, payroll.getAll);
+router.post('/payroll', authenticate, authorizeAdmin, v.payrollCreate, payroll.create);
+router.put('/payroll/:id/pay', authenticate, authorizeAdmin, v.idParam, payroll.markPaid);
+router.put('/payroll/week/:weekStart/pay', authenticate, authorizeAdmin, v.payrollDeleteWeek, payroll.markWeekPaid);
+router.put('/payroll/:id/manual', authenticate, authorizeAdmin, v.payrollUpdateManual, payroll.updateManual);
+router.delete('/payroll/week/:weekStart', authenticate, authorizeAdmin, v.payrollDeleteWeek, payroll.deleteWeek);
+
+// Auto-run triggers full-company payroll generation (a financial side effect), so
+// it must never be reachable anonymously. It accepts the Vercel Cron secret
+// (Authorization: Bearer <CRON_SECRET>) or an authenticated admin.
+router.get('/payroll/auto-run', authorizeCronOrAdmin, payroll.autoRun);
+
+module.exports = router;

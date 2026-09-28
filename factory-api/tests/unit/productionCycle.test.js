@@ -1,5 +1,5 @@
-const productionCycleService = require('../../src/services/productionCycleService');
-const salesRepository = require('../../src/repositories/salesRepository');
+const productionCycleService = require('../../src/modules/productionCycle/productionCycle.service');
+const salesRepository = require('../../src/modules/sales/sales.repository');
 const pool = require('../../src/db/pool');
 
 describe('Production Cycle Unit Tests', () => {

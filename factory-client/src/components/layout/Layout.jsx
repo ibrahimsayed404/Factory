@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTheme } from '../../context/ThemeContext';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { apiRequestState } from '../../api';
+import { apiRequestState } from '../../api/client';
 import { ErrorMsg } from '../ui';
 import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 import { useLanguage } from '../../context/LanguageContext';

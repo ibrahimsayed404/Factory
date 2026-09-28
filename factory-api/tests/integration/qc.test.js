@@ -1,7 +1,5 @@
 require('dotenv').config();
-if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
-  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
-}
+require('./dbSafetyGuard');
 const request = require('supertest');
 const app = require('../../src/app');
 const pool = require('../../src/db/pool');
@@ -93,5 +91,12 @@ describe('Quality Control API Integration Tests', () => {
 
     // Clean up
     await pool.query('DELETE FROM qc_inspections WHERE id = $1', [inspectionId]);
+  });
+
+  it('should block non-admin users from QC reports', async () => {
+    const res = await request(app)
+      .get('/api/qc/reports')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

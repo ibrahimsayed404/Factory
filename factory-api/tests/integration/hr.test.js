@@ -1,7 +1,5 @@
 require('dotenv').config();
-if (process.env.DB_HOST && (process.env.DB_HOST.includes('supabase') || process.env.DB_HOST.includes('pooler'))) {
-  throw new Error('SAFETY BLOCK: Integration tests are disabled on cloud Supabase DB to prevent data deletion.');
-}
+require('./dbSafetyGuard');
 const request = require('supertest');
 const app = require('../../src/app');
 const pool = require('../../src/db/pool');
@@ -91,11 +89,12 @@ describe('HR & Weekly Payroll Integration', () => {
       .send({ employee_id: employeeId, week_start: WEEK_START });
 
     expect(res.status).toBe(201);
-    expect(Number(res.body.net_salary)).toBe(6275);
+    // Regenerating returns the same payroll: loan still deducted once.
+    expect(Number(res.body.net_salary)).toBe(6200);
 
     // Remaining must be unchanged after re-running the same week.
     const loan = await pool.query('SELECT remaining_amount FROM hr_loans WHERE employee_id = $1', [employeeId]);
-    expect(Number(loan.rows[0].remaining_amount)).toBe(975);
+    expect(Number(loan.rows[0].remaining_amount)).toBe(900);
   });
 
   it('restores the exact loan amount when the week is deleted', async () => {

@@ -562,5 +562,4 @@ The route index mounts the following groups:
 
 ## Legacy Compatibility Notes
 
-- `factory-api/src/routes/inventoryRoutes.js` remains in the repo as a legacy compatibility route file.
-- The active route index uses `inventory.routes.js`.
+- Each feature lives in `factory-api/src/modules/<feature>/` (`*.routes.js`, `*.controller.js`, `*.service.js`, `*.repository.js`); `src/routes/index.js` mounts every module's routes. Inventory routes are in `src/modules/inventory/inventory.routes.js`.
