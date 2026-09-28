@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
-const { deviceAuthenticate } = require('../middleware/deviceAuth');
-const v = require('../middleware/validation');
+const { authenticate } = require('../../middleware/auth');
+const { deviceAuthenticate } = require('../../middleware/deviceAuth');
+const v = require('../../middleware/validation');
 
-const auth = require('../controllers/authController');
-const device = require('../controllers/deviceController');
+const auth = require('./auth.controller');
+const device = require('../../controllers/deviceController');
 
 // Device ingestion (API-key protected)
 router.post('/device/punch-events', deviceAuthenticate, device.ingestPunchEvents);

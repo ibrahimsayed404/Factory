@@ -1,8 +1,8 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
-const pool = require('../db/pool');
-const ApiError = require('../utils/ApiError');
+const pool = require('../../db/pool');
+const ApiError = require('../../utils/ApiError');
 
 // SECURITY: bcrypt cost factor 12 (OWASP recommendation)
 const BCRYPT_ROUNDS = 12;
