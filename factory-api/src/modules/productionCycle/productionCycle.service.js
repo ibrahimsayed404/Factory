@@ -6,8 +6,23 @@ const salesRepository = require('../sales/sales.repository');
 const STAGE_CUTTING = 'cutting';
 const STAGE_SORTING = 'sorting';
 const STAGE_PRINTING = 'printing';
+const STAGE_MACHINES = 'machines';
 const STAGE_READY_FOR_DELIVERY = 'ready_for_delivery';
 const STAGE_DELIVERED = 'delivered';
+
+// Pieces entering the machines stage for a color: what came back from the print
+// shop, else what was sorted, else what was cut.
+const stageInputQuantity = (c) => {
+  if (c.print_received_quantity !== null && c.print_received_quantity !== undefined) return Number(c.print_received_quantity);
+  if (c.sorted_quantity !== null && c.sorted_quantity !== undefined) return Number(c.sorted_quantity);
+  return Number(c.cut_quantity || 0);
+};
+
+// Pieces delivered to the customer: the machines output, else the stage input
+// (orders finished before the machines stage existed).
+const deliverableQuantity = (c) => (
+  c.machine_quantity !== null && c.machine_quantity !== undefined ? Number(c.machine_quantity) : stageInputQuantity(c)
+);
 
 /**
  * 1. Create Cutting Order (Stage 1)
@@ -152,6 +167,8 @@ const listProductionOrders = async (filters = {}, clientOrPool = pool) => {
             'print_sent_quantity', poc.print_sent_quantity,
             'print_received_quantity', poc.print_received_quantity,
             'print_note', poc.print_note,
+            'machine_quantity', poc.machine_quantity,
+            'machine_note', poc.machine_note,
             'delivered_quantity', poc.delivered_quantity
           ) ORDER BY poc.id
         ) FILTER (WHERE poc.id IS NOT NULL), '[]'::json
@@ -224,8 +241,9 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
     );
     totalSortedQty = Number.parseInt(sumRes.rows[0].total_sorted, 10) || 0;
 
-    // Determine next stage: if next_action is 'delivery' (plain order), jump to ready_for_delivery, else printing
-    const nextStage = next_action === 'delivery' ? STAGE_READY_FOR_DELIVERY : STAGE_PRINTING;
+    // Next stage: a plain order (next_action 'delivery' = no printing) goes straight
+    // to the machines; otherwise to the print shop.
+    const nextStage = next_action === 'delivery' ? STAGE_MACHINES : STAGE_PRINTING;
 
     await client.query(
       `UPDATE production_orders
@@ -393,7 +411,7 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
            current_stage = $4,
            updated_at = NOW()
        WHERE id = $5`,
-      [totalPrintReceived, received_at || null, print_notes || null, STAGE_READY_FOR_DELIVERY, orderId]
+      [totalPrintReceived, received_at || null, print_notes || null, STAGE_MACHINES, orderId]
     );
 
     await client.query('COMMIT');
@@ -415,7 +433,7 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
 };
 
 /**
- * 7. Skip Print directly to Ready For Delivery
+ * 7. Skip Print: go straight to the machines stage
  */
 const skipPrint = async (orderId) => {
   const client = await pool.connect();
@@ -430,7 +448,7 @@ const skipPrint = async (orderId) => {
        SET current_stage = $1,
            updated_at = NOW()
        WHERE id = $2`,
-      [STAGE_READY_FOR_DELIVERY, orderId]
+      [STAGE_MACHINES, orderId]
     );
 
     await client.query('COMMIT');
@@ -452,7 +470,98 @@ const skipPrint = async (orderId) => {
 };
 
 /**
- * 8. Deliver to Customer (Stage 4)
+ * 8. Submit Machines Phase (المكن) — mandatory in-house stage after printing.
+ * Records, per color, how many pieces came out of the machines. Output can be
+ * lower than what went in (damage) but never higher. Moves the order to
+ * ready_for_delivery.
+ * @param {number} orderId
+ * @param {Object} data - { colors: [{ id, machine_quantity, machine_note }], machine_notes, completed_at }
+ */
+const submitMachinesPhase = async (orderId, { colors, machine_notes, completed_at }) => {
+  if (!Array.isArray(colors) || colors.length === 0) {
+    throw new ApiError(400, 'بيانات كميات المكن مطلوبة');
+  }
+
+  const client = await pool.connect();
+  let committed = false;
+  try {
+    await client.query('BEGIN');
+
+    const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
+    if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
+    if (orderRes.rows[0].current_stage !== STAGE_MACHINES) {
+      throw new ApiError(400, 'أمر الإنتاج ليس في مرحلة المكن');
+    }
+
+    const colorRows = await client.query('SELECT * FROM production_order_colors WHERE order_id = $1', [orderId]);
+    const byId = new Map(colorRows.rows.map((c) => [Number(c.id), c]));
+    const submittedIds = new Set(colors.map((c) => Number(c.id)));
+    if (colorRows.rows.some((c) => !submittedIds.has(Number(c.id)))) {
+      throw new ApiError(400, 'يجب إدخال كمية المكن لكل الألوان');
+    }
+
+    for (const c of colors) {
+      const row = byId.get(Number(c.id));
+      if (!row) throw new ApiError(400, 'لون غير موجود في أمر الإنتاج');
+
+      const qty = Number(c.machine_quantity);
+      if (!Number.isInteger(qty) || qty < 0) {
+        throw new ApiError(400, 'كمية المكن يجب أن تكون رقم صحيح أكبر من أو يساوي صفر');
+      }
+      const inputQty = stageInputQuantity(row);
+      if (qty > inputQty) {
+        throw new ApiError(400, `كمية المكن للون "${row.color}" (${qty}) أكبر من الكمية الداخلة (${inputQty})`);
+      }
+
+      await client.query(
+        `UPDATE production_order_colors
+         SET machine_quantity = $1,
+             machine_note = $2,
+             updated_at = NOW()
+         WHERE id = $3 AND order_id = $4`,
+        [qty, c.machine_note || null, row.id, orderId]
+      );
+    }
+
+    const sumRes = await client.query(
+      `SELECT COALESCE(SUM(machine_quantity), 0) AS total_machine
+       FROM production_order_colors
+       WHERE order_id = $1`,
+      [orderId]
+    );
+    const totalMachine = Number.parseInt(sumRes.rows[0].total_machine, 10) || 0;
+
+    await client.query(
+      `UPDATE production_orders
+       SET total_machine_quantity = $1,
+           machine_notes = $2,
+           machines_completed_at = COALESCE($3, NOW()),
+           current_stage = $4,
+           updated_at = NOW()
+       WHERE id = $5`,
+      [totalMachine, machine_notes || null, completed_at || null, STAGE_READY_FOR_DELIVERY, orderId]
+    );
+
+    await client.query('COMMIT');
+    committed = true;
+  } catch (err) {
+    if (!committed) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rbErr) {
+        console.error('Rollback error:', rbErr.message);
+      }
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return await getProductionOrderById(orderId);
+};
+
+/**
+ * 9. Deliver to Customer (final stage)
  * Assigns customer, unit price, charges customer balance/creates sales order, marks delivered.
  * @param {number} orderId
  * @param {Object} data - { customer_id, unit_price, delivery_notes, delivered_at }
@@ -472,16 +581,16 @@ const deliverToCustomer = async (orderId, { customer_id, unit_price, delivery_no
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
     const order = orderRes.rows[0];
+    if (order.current_stage !== STAGE_READY_FOR_DELIVERY) {
+      throw new ApiError(400, 'أمر الإنتاج غير جاهز للتسليم (لازم يعدي على المكن الأول)');
+    }
 
-    // Determine final delivered pieces:
-    // If received from print > 0 use it, else sorted > 0 use it, else cut
+    // Final delivered pieces per color: the machines output.
     const colorRows = await client.query('SELECT * FROM production_order_colors WHERE order_id = $1', [orderId]);
     let totalDeliveredQty = 0;
 
     for (const c of colorRows.rows) {
-      const deliveredQty = c.print_received_quantity !== null
-        ? c.print_received_quantity
-        : (c.sorted_quantity !== null ? c.sorted_quantity : c.cut_quantity);
+      const deliveredQty = deliverableQuantity(c);
       totalDeliveredQty += deliveredQty;
 
       await client.query(
@@ -516,9 +625,7 @@ const deliverToCustomer = async (orderId, { customer_id, unit_price, delivery_no
 
     // Insert sales order items for each color
     for (const c of colorRows.rows) {
-      const deliveredQty = c.print_received_quantity !== null
-        ? c.print_received_quantity
-        : (c.sorted_quantity !== null ? c.sorted_quantity : c.cut_quantity);
+      const deliveredQty = deliverableQuantity(c);
 
       await salesRepository.insertSalesOrderItem(client, {
         sales_order_id: salesOrder.id,
@@ -591,7 +698,7 @@ const deliverToCustomer = async (orderId, { customer_id, unit_price, delivery_no
 };
 
 /**
- * 9. Delete Production Order
+ * 10. Delete Production Order
  */
 const deleteProductionOrder = async (orderId) => {
   const client = await pool.connect();
@@ -637,7 +744,7 @@ const deleteProductionOrder = async (orderId) => {
 };
 
 /**
- * 10. Get Production KPIs Summary
+ * 11. Get Production KPIs Summary
  */
 const getProductionKPIs = async () => {
   const result = await pool.query(`
@@ -648,8 +755,15 @@ const getProductionKPIs = async () => {
       COALESCE(SUM(total_cut_quantity) FILTER (WHERE current_stage = 'sorting'), 0) AS sorting_pieces,
       COUNT(*) FILTER (WHERE current_stage = 'printing') AS printing_orders,
       COALESCE(SUM(total_print_sent_quantity) FILTER (WHERE current_stage = 'printing'), 0) AS printing_pieces,
+      COUNT(*) FILTER (WHERE current_stage = 'machines') AS machines_orders,
+      COALESCE(SUM(CASE WHEN print_received_at IS NOT NULL THEN total_print_received_quantity
+                        ELSE COALESCE(total_sorted_quantity, total_cut_quantity) END)
+               FILTER (WHERE current_stage = 'machines'), 0) AS machines_pieces,
       COUNT(*) FILTER (WHERE current_stage = 'ready_for_delivery') AS ready_delivery_orders,
-      COALESCE(SUM(COALESCE(total_print_received_quantity, total_sorted_quantity, total_cut_quantity)) FILTER (WHERE current_stage = 'ready_for_delivery'), 0) AS ready_delivery_pieces,
+      COALESCE(SUM(COALESCE(total_machine_quantity,
+                            CASE WHEN print_received_at IS NOT NULL THEN total_print_received_quantity END,
+                            total_sorted_quantity, total_cut_quantity))
+               FILTER (WHERE current_stage = 'ready_for_delivery'), 0) AS ready_delivery_pieces,
       COUNT(*) FILTER (WHERE current_stage = 'delivered') AS delivered_orders,
       COALESCE(SUM(total_delivered_quantity) FILTER (WHERE current_stage = 'delivered'), 0) AS delivered_pieces,
       COALESCE(SUM(total_price) FILTER (WHERE current_stage = 'delivered'), 0) AS delivered_revenue
@@ -663,6 +777,7 @@ module.exports = {
   STAGE_CUTTING,
   STAGE_SORTING,
   STAGE_PRINTING,
+  STAGE_MACHINES,
   STAGE_READY_FOR_DELIVERY,
   STAGE_DELIVERED,
   createCuttingOrder,
@@ -672,6 +787,7 @@ module.exports = {
   sendToPrintShop,
   receiveFromPrintShop,
   skipPrint,
+  submitMachinesPhase,
   deliverToCustomer,
   deleteProductionOrder,
   getProductionKPIs,

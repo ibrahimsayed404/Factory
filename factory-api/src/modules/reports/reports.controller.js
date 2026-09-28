@@ -297,6 +297,7 @@ const productionOverview = async (req, res, next) => {
           COALESCE(SUM(total_sorted_quantity), 0)::int AS total_sorted_units,
           COALESCE(SUM(total_print_sent_quantity), 0)::int AS total_print_sent_units,
           COALESCE(SUM(total_print_received_quantity), 0)::int AS total_print_received_units,
+          COALESCE(SUM(total_machine_quantity), 0)::int AS total_machine_units,
           COALESCE(SUM(total_delivered_quantity), 0)::int AS total_delivered_units,
           COALESCE(SUM(total_price), 0)::float AS total_delivered_revenue
         FROM production_orders
@@ -308,7 +309,7 @@ const productionOverview = async (req, res, next) => {
         SELECT
           current_stage AS stage,
           COUNT(*)::int AS orders,
-          COALESCE(SUM(COALESCE(total_delivered_quantity, total_print_received_quantity, total_sorted_quantity, total_cut_quantity, quantity, 0)), 0)::int AS units
+          COALESCE(SUM(COALESCE(total_delivered_quantity, total_machine_quantity, total_print_received_quantity, total_sorted_quantity, total_cut_quantity, quantity, 0)), 0)::int AS units
         FROM production_orders
         WHERE created_at >= $1::date AND created_at < ($2::date + interval '1 day')
         GROUP BY current_stage

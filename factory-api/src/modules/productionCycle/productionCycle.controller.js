@@ -77,6 +77,20 @@ const receiveFromPrint = async (req, res, next) => {
   }
 };
 
+const submitMachinesPhase = async (req, res, next) => {
+  try {
+    const { colors, machine_notes, completed_at } = req.body;
+    const order = await productionCycleService.submitMachinesPhase(req.params.id, {
+      colors,
+      machine_notes,
+      completed_at,
+    });
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const skipPrint = async (req, res, next) => {
   try {
     const order = await productionCycleService.skipPrint(req.params.id);
@@ -128,6 +142,7 @@ module.exports = {
   sendToPrint,
   receiveFromPrint,
   skipPrint,
+  submitMachinesPhase,
   deliverToCustomer,
   deleteOrder,
   getKPIs,

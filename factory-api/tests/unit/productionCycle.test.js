@@ -5,9 +5,16 @@ const pool = require('../../src/db/pool');
 describe('Production Cycle Unit Tests', () => {
   let mockClient;
   let queryLog;
+  let orderStage;
+  let colorRows;
 
   beforeEach(() => {
     queryLog = [];
+    orderStage = 'cutting';
+    colorRows = [
+      { id: 201, order_id: 101, color: 'أسود', cut_quantity: 200, sorted_quantity: 198, print_received_quantity: null, machine_quantity: null },
+      { id: 202, order_id: 101, color: 'أبيض', cut_quantity: 300, sorted_quantity: 300, print_received_quantity: null, machine_quantity: null },
+    ];
     mockClient = {
       query: jest.fn(async (sql, params) => {
         const rawStr = typeof sql === 'string' ? sql : (sql?.text || '');
@@ -51,7 +58,7 @@ describe('Production Cycle Unit Tests', () => {
               model_number: '6201',
               order_name: 'بيزك',
               total_cut_quantity: 500,
-              current_stage: 'cutting',
+              current_stage: orderStage,
               status: 'cutting',
             }],
           };
@@ -74,12 +81,11 @@ describe('Production Cycle Unit Tests', () => {
         }
 
         if (queryStr.includes('SELECT * FROM production_order_colors WHERE order_id = $1')) {
-          return {
-            rows: [
-              { id: 201, order_id: 101, color: 'أسود', cut_quantity: 200, sorted_quantity: 198, print_received_quantity: null },
-              { id: 202, order_id: 101, color: 'أبيض', cut_quantity: 300, sorted_quantity: 300, print_received_quantity: null },
-            ],
-          };
+          return { rows: colorRows };
+        }
+
+        if (queryStr.includes('SELECT COALESCE(SUM(machine_quantity)')) {
+          return { rows: [{ total_machine: 490 }] };
         }
 
         if (queryStr.includes('SELECT COALESCE(SUM(sorted_quantity)')) {
@@ -192,6 +198,7 @@ describe('Production Cycle Unit Tests', () => {
   });
 
   test('deliverToCustomer charges customer and updates balance', async () => {
+    orderStage = 'ready_for_delivery';
     jest.spyOn(salesRepository, 'createSalesOrderRecord').mockResolvedValue({ id: 55, order_number: 'SO-6201-1234' });
     jest.spyOn(salesRepository, 'insertSalesOrderItem').mockResolvedValue({ id: 1 });
     jest.spyOn(salesRepository, 'getCustomerPayments').mockResolvedValue(100000);
@@ -232,6 +239,7 @@ describe('Production Cycle Unit Tests', () => {
   });
 
   test('deliverToCustomer rejects non-positive unit price', async () => {
+    orderStage = 'ready_for_delivery';
     await expect(productionCycleService.deliverToCustomer(101, {
       customer_id: 10,
       unit_price: 0,
@@ -243,10 +251,105 @@ describe('Production Cycle Unit Tests', () => {
     })).rejects.toThrow('سعر القطعة يجب أن يكون أكبر من صفر');
   });
 
-  test('skipPrint transitions current_stage to ready_for_delivery', async () => {
+  test('skipPrint sends the order to the machines stage', async () => {
     const result = await productionCycleService.skipPrint(101);
     expect(result).toBeDefined();
-    const updateLogged = queryLog.some(q => q.sql.includes('UPDATE production_orders') && q.params.includes('ready_for_delivery'));
+    const updateLogged = queryLog.some(q => q.sql.includes('UPDATE production_orders') && q.params.includes('machines'));
     expect(updateLogged).toBe(true);
+  });
+
+  test('sorting a plain order (no printing) sends it to the machines stage', async () => {
+    await productionCycleService.submitSortingPhase(101, {
+      colors: [{ id: 201, sorted_quantity: 198 }, { id: 202, sorted_quantity: 300 }],
+      next_action: 'delivery',
+    });
+    const update = queryLog.find((q) => q.sql.includes('UPDATE production_orders') && q.sql.includes('sorted_at'));
+    expect(update.params[2]).toBe('machines');
+  });
+
+  test('receiving from the print shop sends the order to the machines stage', async () => {
+    await productionCycleService.receiveFromPrintShop(101, {
+      colors: [{ id: 201, print_received_quantity: 195 }, { id: 202, print_received_quantity: 300 }],
+    });
+    const update = queryLog.find((q) => q.sql.includes('UPDATE production_orders') && q.sql.includes('print_received_at'));
+    expect(update.params[3]).toBe('machines');
+  });
+
+  describe('submitMachinesPhase', () => {
+    const allColors = [
+      { id: 201, machine_quantity: 190, machine_note: '8 تالف' },
+      { id: 202, machine_quantity: 300 },
+    ];
+
+    test('rejects an order that is not in the machines stage', async () => {
+      orderStage = 'printing';
+      await expect(productionCycleService.submitMachinesPhase(101, { colors: allColors }))
+        .rejects.toThrow('أمر الإنتاج ليس في مرحلة المكن');
+    });
+
+    test('requires a quantity for every color', async () => {
+      orderStage = 'machines';
+      await expect(productionCycleService.submitMachinesPhase(101, { colors: [allColors[0]] }))
+        .rejects.toThrow('يجب إدخال كمية المكن لكل الألوان');
+    });
+
+    test('rejects more pieces out than went in', async () => {
+      orderStage = 'machines';
+      await expect(productionCycleService.submitMachinesPhase(101, {
+        colors: [{ id: 201, machine_quantity: 199 }, { id: 202, machine_quantity: 300 }],
+      })).rejects.toThrow('أكبر من الكمية الداخلة (198)');
+    });
+
+    test('rejects negative or fractional quantities', async () => {
+      orderStage = 'machines';
+      await expect(productionCycleService.submitMachinesPhase(101, {
+        colors: [{ id: 201, machine_quantity: -1 }, { id: 202, machine_quantity: 300 }],
+      })).rejects.toThrow('كمية المكن يجب أن تكون رقم صحيح');
+      await expect(productionCycleService.submitMachinesPhase(101, {
+        colors: [{ id: 201, machine_quantity: 10.5 }, { id: 202, machine_quantity: 300 }],
+      })).rejects.toThrow('كمية المكن يجب أن تكون رقم صحيح');
+    });
+
+    test('uses the print-shop output as the input when the order was printed', async () => {
+      orderStage = 'machines';
+      colorRows[0].print_received_quantity = 150;
+      await expect(productionCycleService.submitMachinesPhase(101, {
+        colors: [{ id: 201, machine_quantity: 151 }, { id: 202, machine_quantity: 300 }],
+      })).rejects.toThrow('أكبر من الكمية الداخلة (150)');
+    });
+
+    test('records quantities and moves the order to ready_for_delivery', async () => {
+      orderStage = 'machines';
+      await productionCycleService.submitMachinesPhase(101, { colors: allColors, machine_notes: 'تم' });
+
+      const colorUpdates = queryLog.filter((q) => q.sql.includes('UPDATE production_order_colors') && q.sql.includes('machine_quantity'));
+      expect(colorUpdates.map((q) => q.params[0])).toEqual([190, 300]);
+      const orderUpdate = queryLog.find((q) => q.sql.includes('total_machine_quantity'));
+      expect(orderUpdate.params[0]).toBe(490);
+      expect(orderUpdate.params[3]).toBe('ready_for_delivery');
+      expect(queryLog.some((q) => q.sql === 'COMMIT')).toBe(true);
+    });
+  });
+
+  test('deliverToCustomer refuses an order that has not been through the machines', async () => {
+    orderStage = 'machines';
+    await expect(productionCycleService.deliverToCustomer(101, { customer_id: 10, unit_price: 100 }))
+      .rejects.toThrow('غير جاهز للتسليم');
+  });
+
+  test('deliverToCustomer delivers the machines output', async () => {
+    orderStage = 'ready_for_delivery';
+    colorRows[0].machine_quantity = 190;
+    colorRows[1].machine_quantity = 300;
+    jest.spyOn(salesRepository, 'createSalesOrderRecord').mockResolvedValue({ id: 55 });
+    jest.spyOn(salesRepository, 'insertSalesOrderItem').mockResolvedValue({ id: 1 });
+    jest.spyOn(salesRepository, 'getCustomerPayments').mockResolvedValue(0);
+    jest.spyOn(salesRepository, 'getCustomerOrders').mockResolvedValue([]);
+
+    await productionCycleService.deliverToCustomer(101, { customer_id: 10, unit_price: 10 });
+
+    const items = salesRepository.insertSalesOrderItem.mock.calls.map(([, item]) => item.quantity);
+    expect(items).toEqual([190, 300]);
+    expect(salesRepository.createSalesOrderRecord.mock.calls[0][1].total_amount).toBe(4900);
   });
 });
