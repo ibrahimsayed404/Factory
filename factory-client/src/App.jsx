@@ -10,7 +10,7 @@ import { Spinner } from './components/ui';
 import { FEATURE_FLAGS } from './config/featureFlags';
 
 const Login      = lazy(() => import('./features/auth/Login'));
-const Dashboard  = lazy(() => import('./pages/Dashboard'));
+const Dashboard  = lazy(() => import('./features/dashboard/Dashboard'));
 const Inventory  = lazy(() => import('./pages/Inventory'));
 const Employees  = lazy(() => import('./pages/Employees'));
 const Payroll    = lazy(() => import('./pages/Payroll'));
