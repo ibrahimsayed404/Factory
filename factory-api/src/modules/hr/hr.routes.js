@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const hrController = require('../controllers/hrController');
-const { authenticate, authorize } = require('../middleware/auth');
-const upload = require('../middleware/upload');
+const hrController = require('./hr.controller');
+const { authenticate, authorize } = require('../../middleware/auth');
+const upload = require('../../middleware/upload');
 
 const path = require('node:path');
 const fsPromises = require('node:fs').promises;
-const storageService = require('../services/storageService');
+const storageService = require('../../services/storageService');
 
 router.use(authenticate);
 
@@ -44,7 +44,7 @@ router.get('/uploads/hr-documents/:filename', authorize('admin', 'hr'), async (r
     if (!filename || /[/\\]/.test(filename) || filename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
-    const filePath = path.join(__dirname, '..', '..', 'uploads', 'hr-documents', filename);
+    const filePath = path.join(__dirname, '..', '..', '..', 'uploads', 'hr-documents', filename);
     try {
       await fsPromises.access(filePath);
       return res.sendFile(filePath);

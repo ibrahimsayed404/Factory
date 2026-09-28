@@ -1,6 +1,6 @@
-const pool = require('../db/pool');
-const ApiError = require('../utils/ApiError');
-const { normalizeLoanPayload, normalizeLoanUpdatePayload } = require('../utils/loanUtils');
+const pool = require('../../db/pool');
+const ApiError = require('../../utils/ApiError');
+const { normalizeLoanPayload, normalizeLoanUpdatePayload } = require('../../utils/loanUtils');
 
 // Positions
 exports.getPositions = async () => {

@@ -1,5 +1,5 @@
-const hrService = require('../services/hrService');
-const storageService = require('../services/storageService');
+const hrService = require('./hr.service');
+const storageService = require('../../services/storageService');
 
 exports.getPositions = async (req, res, next) => {
   try {
