@@ -170,6 +170,19 @@ describe('autoAttendanceScheduler Unit Tests', () => {
       expect(updateParams[0]).toBe('17:00'); // closed at shift end
       expect(updateParams[7]).toBe(5);
     });
+    test('5. Never auto-closes a lone punch at or after shift end (would record ~24h)', async () => {
+      const mockOverrideDate = new Date('2026-09-28T08:30:00+03:00');
+      pool.query.mockResolvedValueOnce({
+        rows: [
+          { id: 7, employee_id: 11, date: '2026-09-27', check_in: '17:07', notes: null, shift: 'morning', shift_start: '08:00', shift_end: '17:00', weekend_days: '5' },
+          { id: 8, employee_id: 12, date: '2026-09-27', check_in: '20:03', notes: null, shift: 'morning', shift_start: '08:00', shift_end: '17:00', weekend_days: '5' },
+        ],
+      });
+
+      const updatedCount = await runAutoCheckoutShiftBased(mockOverrideDate);
+      expect(updatedCount).toBe(0);
+      expect(pool.query).toHaveBeenCalledTimes(1); // SELECT only, no UPDATE
+    });
   });
 
   describe('runAutoAbsence12PM', () => {

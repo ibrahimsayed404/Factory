@@ -4,6 +4,7 @@ const {
   calculateHoursWorked,
   calculateShiftMetrics,
   isWeekendDate,
+  toMinutes,
 } = require('../../utils/attendanceMetrics');
 const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
@@ -78,6 +79,15 @@ const runAutoCheckoutShiftBased = async (overrideDate = null) => {
 
     if (shiftEnd === null || overnightShift) {
       // Skip incomplete or overnight shifts for default 1h-buffer checkout
+      continue;
+    }
+
+    // A lone punch at/after shift end (e.g. only the evening punch reached the
+    // device) is not a real check-in. Closing it at shift end would wrap past
+    // midnight and record ~24h worked plus a full day of overtime, so leave it
+    // open for manual review.
+    const checkInMin = toMinutes(row.check_in);
+    if (checkInMin === null || checkInMin >= shiftEnd) {
       continue;
     }
 
