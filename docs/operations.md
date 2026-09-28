@@ -17,19 +17,11 @@
 2. Optionally set `VITE_API_URL`
 3. Start the frontend with `npm start`
 
-### Desktop
-
-- `factory-desktop/main.js` runs the Electron shell
-
 ## Scripts
 
 ### Root
 
 - `run-factory-all.bat` - launch full stack on Windows
-- `run-factory-desktop.ps1` - launch desktop wrapper
-- `setup-factory-all.ps1` - install and prepare all packages
-- `setup-factory-api-service.ps1` - configure API as a service
-- `setup-factory-client-service.ps1` - configure client as a service
 
 ### API
 

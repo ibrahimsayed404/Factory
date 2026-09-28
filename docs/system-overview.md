@@ -7,7 +7,6 @@ It combines operations, finance, HR, inventory, production, purchasing, QC, and 
 
 - Backend: Node.js, Express, PostgreSQL
 - Frontend: React, React Router, Vite
-- Desktop shell: Electron-based wrapper in `factory-desktop`
 - Shared communication: JSON REST API under `/api`
 - Authentication: JWT access tokens plus refresh tokens and `httpOnly` cookie support
 
@@ -50,7 +49,6 @@ It combines operations, finance, HR, inventory, production, purchasing, QC, and 
 - Backend app: `factory-api/src/index.js`
 - Express app: `factory-api/src/app.js`
 - Frontend app: `factory-client/src/App.jsx`
-- Desktop launcher: `factory-desktop/main.js`
 
 ## Role Model
 
