@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { inventoryApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg, SearchInput } from '../components/ui';
-import { useLanguage } from '../context/LanguageContext';
+import { inventoryApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg, SearchInput } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
 
 const emptyForm = { name: '', category: '', unit: '', color: '', quantity: '', min_quantity: '', cost_per_unit: '', supplier: '' };
 
