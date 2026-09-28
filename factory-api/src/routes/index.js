@@ -3,7 +3,7 @@ const router = express.Router();
 
 const authRoutes = require('./auth.routes');
 const dashboardRoutes = require('../modules/dashboard/dashboard.routes');
-const reportsRoutes = require('./reports.routes');
+const reportsRoutes = require('../modules/reports/reports.routes');
 const inventoryRoutes = require('./inventory.routes');
 const employeeRoutes = require('./employee.routes');
 const payrollRoutes = require('./payroll.routes');

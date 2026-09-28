@@ -1,4 +1,4 @@
-const pool = require('../db/pool');
+const pool = require('../../db/pool');
 
 const PRODUCTION_COMPLETED_STATUSES = "('done','shipped','completed')";
 
