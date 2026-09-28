@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { employeeApi } from '../api';
-import { useLanguage } from '../context/LanguageContext';
-import { useFetch } from '../hooks/useFetch';
+import { employeeApi } from '../../api';
+import { useLanguage } from '../../context/LanguageContext';
+import { useFetch } from '../../hooks/useFetch';
 import {
   PageHeader, Card, Table, Badge, Btn,
   Modal, Input, Select, Spinner, MetricCard, SearchInput
-} from '../components/ui';
+} from '../../components/ui';
 
 const STATUS_OPTS = ['present', 'absent', 'late', 'half-day'];
 

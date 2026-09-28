@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { settingsApi } from '../api';
-import { Btn, Card, ErrorMsg, Input, PageHeader, Spinner } from '../components/ui';
-import { useLanguage } from '../context/LanguageContext';
+import { settingsApi } from '../../api';
+import { Btn, Card, ErrorMsg, Input, PageHeader, Spinner } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
 
 const emptyForm = {
   attendance_late_grace_minutes: '10',

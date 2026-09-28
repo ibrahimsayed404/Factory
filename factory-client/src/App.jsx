@@ -31,7 +31,7 @@ const ProductionPrintingPhase = lazy(() => import('./pages/ProductionPrintingPha
 const ProductionDeliveryPhase = lazy(() => import('./pages/ProductionDeliveryPhase'));
 const PrintShops = lazy(() => import('./pages/PrintShops'));
 const ProductionTrackingBoard = lazy(() => import('./pages/ProductionTrackingBoard'));
-const Attendance = lazy(() => import('./pages/Attendance'));
+const Attendance = lazy(() => import('./features/attendance/Attendance'));
 const Reports    = lazy(() => import('./pages/Reports'));
 const Accounting = lazy(() => import('./pages/Accounting'));
 const Products   = lazy(() => import('./pages/Products'));
