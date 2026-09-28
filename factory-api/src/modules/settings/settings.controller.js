@@ -1,8 +1,8 @@
-const ApiError = require('../utils/ApiError');
+const ApiError = require('../../utils/ApiError');
 const {
   getAttendancePayrollPolicy,
   updateAttendancePayrollPolicy,
-} = require('../utils/policySettings');
+} = require('../../utils/policySettings');
 
 const getAttendancePayroll = async (_req, res, next) => {
   try {
