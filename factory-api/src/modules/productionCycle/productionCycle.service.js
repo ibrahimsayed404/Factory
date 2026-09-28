@@ -251,6 +251,7 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
            sorting_notes = $2,
            current_stage = $3,
            sorted_at = NOW(),
+           stage_entered_at = NOW(),
            updated_at = NOW()
        WHERE id = $4
        RETURNING *`,
@@ -336,6 +337,7 @@ const sendToPrintShop = async (orderId, { print_shop_id, colors, print_notes, se
        SET print_shop_id = $1,
            total_print_sent_quantity = $2,
            print_sent_at = COALESCE($3, NOW()),
+           stage_entered_at = COALESCE($3, NOW()),
            print_notes = $4,
            current_stage = $5,
            updated_at = NOW()
@@ -407,6 +409,7 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
       `UPDATE production_orders
        SET total_print_received_quantity = $1,
            print_received_at = COALESCE($2, NOW()),
+           stage_entered_at = NOW(),
            print_notes = COALESCE($3, print_notes),
            current_stage = $4,
            updated_at = NOW()
@@ -446,6 +449,7 @@ const skipPrint = async (orderId) => {
     await client.query(
       `UPDATE production_orders
        SET current_stage = $1,
+           stage_entered_at = NOW(),
            updated_at = NOW()
        WHERE id = $2`,
       [STAGE_MACHINES, orderId]
@@ -536,6 +540,7 @@ const submitMachinesPhase = async (orderId, { colors, machine_notes, completed_a
        SET total_machine_quantity = $1,
            machine_notes = $2,
            machines_completed_at = COALESCE($3, NOW()),
+           stage_entered_at = NOW(),
            current_stage = $4,
            updated_at = NOW()
        WHERE id = $5`,
@@ -662,6 +667,7 @@ const deliverToCustomer = async (orderId, { customer_id, unit_price, delivery_no
            current_stage = $6,
            status = $7,
            delivered_at = COALESCE($8, NOW()),
+           stage_entered_at = NOW(),
            delivery_notes = $9,
            updated_at = NOW()
        WHERE id = $10`,
