@@ -1,6 +1,6 @@
 const pool = require('../db/pool');
 const payrollRepository = require('../repositories/payrollRepository');
-const accountingService = require('./accountingService');
+const accountingService = require('../modules/accounting/accounting.service');
 const { getAttendancePayrollPolicy } = require('../utils/policySettings');
 const ApiError = require('../utils/ApiError');
 const { SHIFT_SCHEDULES, toMinutes } = require('../utils/attendanceMetrics');

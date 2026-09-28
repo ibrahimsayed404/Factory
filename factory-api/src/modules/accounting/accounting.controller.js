@@ -1,4 +1,4 @@
-const accountingService = require('../services/accountingService');
+const accountingService = require('./accounting.service');
 
 const listAccounts = async (req, res, next) => {
   try {

@@ -47,7 +47,7 @@ jest.mock('../../src/repositories/payrollRepository', () => ({
   getPayrollRecords: jest.fn(),
 }));
 
-jest.mock('../../src/services/accountingService', () => ({
+jest.mock('../../src/modules/accounting/accounting.service', () => ({
   reconcilePayrollAccrual: jest.fn().mockResolvedValue(),
   postPayrollPayment: jest.fn().mockResolvedValue(),
 }));

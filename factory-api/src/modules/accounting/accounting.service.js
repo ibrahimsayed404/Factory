@@ -1,7 +1,7 @@
 const { randomBytes } = require('node:crypto');
-const pool = require('../db/pool');
-const accountingRepository = require('../repositories/accountingRepository');
-const ApiError = require('../utils/ApiError');
+const pool = require('../../db/pool');
+const accountingRepository = require('./accounting.repository');
+const ApiError = require('../../utils/ApiError');
 
 const ACCOUNTS = {
   cash: '1000',

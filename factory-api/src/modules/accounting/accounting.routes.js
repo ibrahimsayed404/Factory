@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const accounting = require('../controllers/accountingController');
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const v = require('../middleware/validation');
+const accounting = require('./accounting.controller');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
 
 router.get('/accounts', authenticate, accounting.listAccounts);
 router.post('/accounts', authenticate, authorizeAdmin, v.accountCreate, accounting.createAccount);

@@ -1,4 +1,4 @@
-const pool = require('../db/pool');
+const pool = require('../../db/pool');
 
 const normalizeDateFilters = ({ date_from, date_to } = {}) => {
   const filters = [];
