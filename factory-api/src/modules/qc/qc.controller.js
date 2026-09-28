@@ -1,4 +1,4 @@
-const qcService = require('../services/qcService');
+const qcService = require('./qc.service');
 
 exports.getDefectCategories = async (req, res, next) => {
   try {
@@ -35,7 +35,7 @@ exports.getById = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const pool = require('../db/pool');
+    const pool = require('../../db/pool');
     const userRes = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id]);
     let inspectorId = null;
     if (userRes.rows[0]) {

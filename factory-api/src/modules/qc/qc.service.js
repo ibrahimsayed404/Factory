@@ -1,5 +1,5 @@
-const pool = require('../db/pool');
-const storageService = require('./storageService');
+const pool = require('../../db/pool');
+const storageService = require('../../services/storageService');
 
 class QCService {
   async getDefectCategories() {

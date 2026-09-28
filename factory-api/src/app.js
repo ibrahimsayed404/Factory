@@ -38,7 +38,7 @@ const swaggerDefinition = {
 
 const swaggerOptions = {
   swaggerDefinition,
-  apis: ['./src/routes/*.js', './src/controllers/*.js'], // Scan for JSDoc
+  apis: ['./src/routes/*.js', './src/controllers/*.js', './src/modules/**/*.js'], // Scan for JSDoc
 };
 
 const app = express();
