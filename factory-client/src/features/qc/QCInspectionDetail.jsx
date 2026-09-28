@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { qcApi, resolveApiAssetUrl } from '../api';
+import { qcApi, resolveApiAssetUrl } from '../../api';
 import { toast } from 'react-toastify';
 import { Card, Form, Button, Row, Col, Table, Badge } from 'react-bootstrap';
-import { FEATURE_FLAGS } from '../config/featureFlags';
+import { FEATURE_FLAGS } from '../../config/featureFlags';
 
 export default function QCInspectionDetail() {
   const { id } = useParams();

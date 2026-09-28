@@ -38,9 +38,9 @@ const Products   = lazy(() => import('./features/products/Products'));
 const Purchasing = lazy(() => import('./features/purchasing/Purchasing'));
 const Bom        = lazy(() => import('./features/manufacturing/BOM'));
 const Routings   = lazy(() => import('./features/manufacturing/Routings'));
-const QCInspections = lazy(() => import('./pages/QCInspections'));
-const QCInspectionDetail = lazy(() => import('./pages/QCInspectionDetail'));
-const QCReports = lazy(() => import('./pages/QCReports'));
+const QCInspections = lazy(() => import('./features/qc/QCInspections'));
+const QCInspectionDetail = lazy(() => import('./features/qc/QCInspectionDetail'));
+const QCReports = lazy(() => import('./features/qc/QCReports'));
 
 const Protected = ({ children }) => {
   const { user, loading } = useAuth();

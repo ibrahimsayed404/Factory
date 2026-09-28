@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { qcApi } from '../api';
+import { qcApi } from '../../api';
 import { toast } from 'react-toastify';
 import { Table, Button, Badge, Modal, Form } from 'react-bootstrap';
 import { FaPlus, FaEye } from 'react-icons/fa';
-import { FEATURE_FLAGS } from '../config/featureFlags';
+import { FEATURE_FLAGS } from '../../config/featureFlags';
 
 export default function QCInspections() {
   const [inspections, setInspections] = useState([]);
