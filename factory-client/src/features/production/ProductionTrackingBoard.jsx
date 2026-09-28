@@ -4,6 +4,16 @@ import { productionCycleApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Btn, Spinner, Modal } from '../../components/ui';
 import { PrintableOrderSlip } from './PrintableOrderSlip';
+import {
+  STAGE_STEPS,
+  stageStepIndex,
+  colorStageQty,
+  orderStageQty,
+  orderCutQty,
+  daysInStage,
+  STAGE_AGE_WARN_DAYS,
+  STAGE_AGE_LATE_DAYS,
+} from './orderStage';
 
 export default function ProductionTrackingBoard() {
   const navigate = useNavigate();
@@ -101,14 +111,7 @@ export default function ProductionTrackingBoard() {
     }
   };
 
-  const getPiecesCount = (o) => {
-    if (o.current_stage === 'delivered') return o.total_delivered_quantity || o.quantity;
-    if (o.current_stage === 'ready_for_delivery') return o.total_machine_quantity ?? (o.total_print_received_quantity || o.total_sorted_quantity || o.total_cut_quantity);
-    if (o.current_stage === 'machines') return (o.print_received_at ? o.total_print_received_quantity : null) || o.total_sorted_quantity || o.total_cut_quantity;
-    if (o.current_stage === 'printing') return o.total_print_sent_quantity || o.total_sorted_quantity || o.total_cut_quantity;
-    if (o.current_stage === 'sorting') return o.total_sorted_quantity || o.total_cut_quantity;
-    return o.total_cut_quantity || o.quantity || 0;
-  };
+  const getPiecesCount = (o) => orderStageQty(o);
 
   const getStageBadge = (stage) => {
     switch (stage) {
@@ -1148,225 +1151,190 @@ export default function ProductionTrackingBoard() {
 }
 
 // Subcomponent: Order Kanban Card
-function OrderKanbanCard({ order, density = 'compact', onOpenDetails, onAction, actionText }) {
-  const pieces = order.total_cut_quantity || order.quantity || 0;
-
-  if (density === 'compact') {
-    return (
-      <div style={{
-        background: 'var(--bg-base)',
-        border: '1px solid var(--border)',
-        borderRadius: 6,
-        padding: '8px 10px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        transition: 'all 0.15s ease',
-      }}>
-        {/* Top line: Model & Count */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--accent)' }}>
-              {order.model_number || order.order_number}
-            </span>
-            <span style={{
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: 110,
+function StageStepsBar({ stage }) {
+  const current = stageStepIndex(stage);
+  const done = stage === 'delivered';
+  return (
+    <div style={{ display: 'flex', gap: 3 }} title={STAGE_STEPS.map(s => s.label).join(' ← ')}>
+      {STAGE_STEPS.map((step, i) => {
+        const reached = i < current || done;
+        const isCurrent = i === current && !done;
+        return (
+          <div key={step.key} style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{
+              height: 4,
+              borderRadius: 2,
+              background: reached ? '#059669' : isCurrent ? step.color : 'var(--border)',
+            }} />
+            <div style={{
+              fontSize: 9,
+              marginTop: 2,
+              fontWeight: isCurrent ? 800 : 500,
+              color: isCurrent ? step.color : 'var(--text-muted)',
             }}>
-              {order.order_name || order.product_name}
-            </span>
+              {step.label}
+            </div>
           </div>
-          <span style={{
-            fontSize: 11,
-            fontWeight: 800,
-            background: 'var(--bg-hover)',
-            color: 'var(--text-secondary)',
-            padding: '2px 6px',
-            borderRadius: 4,
-            whiteSpace: 'nowrap',
-          }}>
-            {pieces} ق
-          </span>
-        </div>
+        );
+      })}
+    </div>
+  );
+}
 
-        {/* Sub-status label */}
-        <div style={{ fontSize: 11, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            {order.current_stage === 'printing' && (
-              <span style={{ color: order.print_sent_at ? '#7c3aed' : '#d97706' }}>
-                {order.print_sent_at ? `🖨️ ${order.print_shop_name || 'مطبعة'}` : '⏳ بانتظار الخروج'}
-              </span>
-            )}
-            {order.current_stage === 'ready_for_delivery' && (
-              <span style={{ color: '#059669' }}>🚚 جاهز للتسليم</span>
-            )}
-            {order.current_stage === 'delivered' && (
-              <span style={{ color: '#047857' }}>
-                ✓ مسلم {order.total_price ? `(${Number(order.total_price).toLocaleString()} ج)` : ''}
-              </span>
-            )}
-            {order.current_stage === 'cutting' && (
-              <span style={{ color: '#0284c7' }}>✂️ بانتظار الفرز</span>
-            )}
-            {order.current_stage === 'sorting' && (
-              <span style={{ color: '#d97706' }}>🗂️ قيد الفرز</span>
-            )}
-          </div>
-
-          {order.customer_name && order.current_stage !== 'delivered' && (
-            <span style={{ color: '#0284c7', fontSize: 10, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              👤 {order.customer_name}
-            </span>
-          )}
-        </div>
-
-        {/* Action footer */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingTop: 4,
-          borderTop: '1px solid var(--border)',
-        }}>
-          <button
-            type="button"
-            onClick={onOpenDetails}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: 11,
-              padding: '2px 4px',
-            }}
-            title="عرض التفاصيل والأذونات"
-          >
-            🔍 تفاصيل
-          </button>
-
-          <Btn
-            variant="primary"
-            size="sm"
-            onClick={onAction}
-            style={{ fontSize: 11, padding: '3px 8px' }}
-          >
-            {actionText}
-          </Btn>
-        </div>
-      </div>
-    );
+function StageAge({ order }) {
+  if (order.current_stage === 'delivered') {
+    const at = order.delivered_at ? new Date(order.delivered_at).toLocaleDateString('ar-EG') : null;
+    return at ? <span style={{ color: '#047857', fontSize: 11, fontWeight: 700 }}>✓ اتسلم {at}</span> : null;
   }
+  const days = daysInStage(order);
+  if (days === null) return null;
+  let color = 'var(--text-muted)';
+  let bg = 'var(--bg-hover)';
+  if (days >= STAGE_AGE_LATE_DAYS) { color = '#dc2626'; bg = 'rgba(220, 38, 38, 0.1)'; }
+  else if (days >= STAGE_AGE_WARN_DAYS) { color = '#d97706'; bg = 'rgba(217, 119, 6, 0.1)'; }
+  return (
+    <span
+      title="بقاله كام يوم في المرحلة الحالية"
+      style={{ color, background: bg, fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}
+    >
+      ⏱ {days === 0 ? 'النهارده' : `${days} يوم`}
+    </span>
+  );
+}
 
-  // Detailed Card View
+function StageStatus({ order }) {
+  switch (order.current_stage) {
+    case 'cutting':
+      return <span style={{ color: '#0284c7' }}>✂️ بانتظار الفرز</span>;
+    case 'sorting':
+      return <span style={{ color: '#d97706' }}>🗂️ قيد الفرز</span>;
+    case 'printing':
+      return order.print_sent_at
+        ? <span style={{ color: '#7c3aed' }}>🖨️ {order.print_shop_name || 'في المطبعة'}</span>
+        : <span style={{ color: '#d97706' }}>⏳ بانتظار الإرسال للمطبعة</span>;
+    case 'machines':
+      return <span style={{ color: '#4f46e5' }}>⚙️ في المكن</span>;
+    case 'ready_for_delivery':
+      return <span style={{ color: '#059669' }}>🚚 جاهز للتسليم</span>;
+    case 'delivered':
+      return (
+        <span style={{ color: '#047857' }}>
+          👤 {order.customer_name || 'مسلم'}{order.total_price ? ` · ${Number(order.total_price).toLocaleString()} ج` : ''}
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
+function OrderKanbanCard({ order, density = 'compact', onOpenDetails, onAction, actionText }) {
+  const compact = density === 'compact';
+  const current = orderStageQty(order);
+  const cut = orderCutQty(order);
+  const loss = Math.max(0, cut - current);
+  const colors = Array.isArray(order.colors) ? order.colors : [];
+  const maxColors = compact ? 3 : 6;
+
   return (
     <div style={{
       background: 'var(--bg-base)',
       border: '1px solid var(--border)',
-      borderRadius: 8,
-      padding: 14,
-      boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+      borderRadius: compact ? 6 : 8,
+      padding: compact ? '8px 10px' : 14,
+      boxShadow: compact ? '0 1px 3px rgba(0,0,0,0.06)' : '0 2px 6px rgba(0,0,0,0.08)',
       display: 'flex',
       flexDirection: 'column',
-      gap: 10,
+      gap: compact ? 6 : 9,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--accent)' }}>
+      {/* Model, name, current pieces and loss */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <span style={{ fontSize: compact ? 14 : 16, fontWeight: 800, color: 'var(--accent)' }}>
             {order.model_number || order.order_number}
           </span>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginTop: 2 }}>
+          <div style={{
+            fontSize: compact ? 11 : 13,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
             {order.order_name || order.product_name}
           </div>
         </div>
-        <span style={{
-          fontSize: 13,
-          fontWeight: 800,
-          background: 'var(--bg-hover)',
-          color: 'var(--text-secondary)',
-          padding: '2px 8px',
-          borderRadius: 6,
-        }}>
-          {pieces} ق
-        </span>
+        <div style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>
+          <div style={{
+            fontSize: compact ? 12 : 13,
+            fontWeight: 800,
+            background: 'var(--bg-hover)',
+            color: 'var(--text-primary)',
+            padding: '2px 7px',
+            borderRadius: 4,
+          }}>
+            {current.toLocaleString()} ق
+          </div>
+          {loss > 0 && (
+            <div title={`من ${cut.toLocaleString()} قطعة اتقصت`} style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', marginTop: 2 }}>
+              هالك {loss.toLocaleString()}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Colors Badges */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {(order.colors || []).slice(0, 3).map((col, idx) => (
-          <span
-            key={idx}
-            style={{
-              background: 'var(--bg-elevated)',
-              color: 'var(--text-primary)',
-              padding: '2px 6px',
-              borderRadius: 4,
-              fontSize: 11,
-              border: '1px solid var(--border)',
-            }}
-          >
-            {col.color}: {col.cut_quantity}
-          </span>
-        ))}
-        {(order.colors || []).length > 3 && (
-          <span
-            style={{
-              background: 'var(--bg-hover)',
-              padding: '2px 6px',
-              borderRadius: 4,
-              fontSize: 10,
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            +{order.colors.length - 3} ألوان
-          </span>
-        )}
-      </div>
-
-      {/* Stage Specific Note */}
-      {order.current_stage === 'printing' && (
-        <div style={{ fontSize: 12, fontWeight: 700 }}>
-          {order.print_sent_at ? (
-            <span style={{ color: '#7c3aed' }}>
-              🖨️ في المطبعة: {order.print_shop_name || 'مطبعة مسجلة'}
+      {/* Colors with their current pieces */}
+      {colors.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {colors.slice(0, maxColors).map((col) => (
+            <span
+              key={col.id}
+              style={{
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+                padding: '1px 6px',
+                borderRadius: 4,
+                fontSize: 11,
+                border: '1px solid var(--border)',
+              }}
+            >
+              {col.color}: <strong>{colorStageQty(col, order).toLocaleString()}</strong>
             </span>
-          ) : (
-            <span style={{ color: '#d97706' }}>
-              ⏳ جاهز للإرسال للمطبعة
+          ))}
+          {colors.length > maxColors && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', padding: '1px 4px' }}>
+              +{colors.length - maxColors} ألوان
             </span>
           )}
         </div>
       )}
 
-      {order.current_stage === 'ready_for_delivery' && (
-        <div style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>
-          🚚 جاهز للتسليم للعميل
-        </div>
-      )}
+      <StageStepsBar stage={order.current_stage} />
 
-      {order.customer_name && (
-        <div style={{ fontSize: 12, color: '#0284c7', fontWeight: 600 }}>
-          العميل: {order.customer_name} {order.total_price ? `(${Number(order.total_price).toLocaleString()} ج)` : ''}
+      {/* Where it is, and for how long */}
+      <div style={{ fontSize: compact ? 11 : 12, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <StageStatus order={order} />
         </div>
-      )}
+        <StageAge order={order} />
+      </div>
 
-      {/* Actions Row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTop: '1px solid var(--border)', marginTop: 2 }}>
+      {/* Actions */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: compact ? 4 : 6,
+        borderTop: '1px solid var(--border)',
+      }}>
         <button
           type="button"
           onClick={onOpenDetails}
-          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}
+          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: compact ? 11 : 12, padding: '2px 4px' }}
+          title="عرض التفاصيل والأذونات"
         >
           🔍 تفاصيل
         </button>
-
-        <Btn variant="primary" size="sm" onClick={onAction}>
+        <Btn variant="primary" size="sm" onClick={onAction} style={compact ? { fontSize: 11, padding: '3px 8px' } : undefined}>
           {actionText}
         </Btn>
       </div>

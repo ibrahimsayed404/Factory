@@ -3,13 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { productionCycleApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Btn, Spinner, ErrorMsg } from '../../components/ui';
+import { machineInputQty } from './orderStage';
 
-// Pieces entering the machines for a color: print-shop output, else sorted, else cut.
-const machineInputQty = (c) => {
-  if (c.print_received_quantity !== null && c.print_received_quantity !== undefined) return Number(c.print_received_quantity);
-  if (c.sorted_quantity !== null && c.sorted_quantity !== undefined) return Number(c.sorted_quantity);
-  return Number(c.cut_quantity || 0);
-};
 
 export default function ProductionMachinesPhase() {
   const navigate = useNavigate();
