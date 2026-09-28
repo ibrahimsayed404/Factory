@@ -1,4 +1,4 @@
-const productionCycleService = require('../../src/services/productionCycleService');
+const productionCycleService = require('../../src/modules/productionCycle/productionCycle.service');
 const salesRepository = require('../../src/repositories/salesRepository');
 const pool = require('../../src/db/pool');
 

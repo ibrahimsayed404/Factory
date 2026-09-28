@@ -1,4 +1,4 @@
-const productionCycleService = require('../services/productionCycleService');
+const productionCycleService = require('./productionCycle.service');
 
 const listOrders = async (req, res, next) => {
   try {

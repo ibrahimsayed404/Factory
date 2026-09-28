@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const productionCycle = require('../controllers/productionCycleController');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const productionCycle = require('./productionCycle.controller');
 
 router.get('/production-cycle/orders', authenticate, productionCycle.listOrders);
 router.get('/production-cycle/orders/:id', authenticate, productionCycle.getOrder);
