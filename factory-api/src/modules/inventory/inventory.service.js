@@ -1,8 +1,8 @@
 const crypto = require('crypto');
-const pool = require('../db/pool');
-const inventoryRepository = require('../repositories/inventoryRepository');
-const accountingService = require('../modules/accounting/accounting.service');
-const ApiError = require('../utils/ApiError');
+const pool = require('../../db/pool');
+const inventoryRepository = require('./inventory.repository');
+const accountingService = require('../accounting/accounting.service');
+const ApiError = require('../../utils/ApiError');
 
 const DEFAULT_WAREHOUSE_ID = 1;
 const DEFAULT_LOCATION_ID = 1;

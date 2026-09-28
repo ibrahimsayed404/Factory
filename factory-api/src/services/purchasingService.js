@@ -1,5 +1,5 @@
 const purchasingRepository = require('../repositories/purchasingRepository');
-const inventoryService = require('./inventoryService');
+const inventoryService = require('../modules/inventory/inventory.service');
 const accountingService = require('../modules/accounting/accounting.service');
 const pool = require('../db/pool');
 const ApiError = require('../utils/ApiError');

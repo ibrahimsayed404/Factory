@@ -1,7 +1,7 @@
 const { randomBytes } = require('node:crypto');
 const pool = require('../db/pool');
 const ApiError = require('../utils/ApiError');
-const inventoryService = require('./inventoryService');
+const inventoryService = require('../modules/inventory/inventory.service');
 
 const PHASE_INPUT = 'input';
 const PHASE_SORTING = 'sorting';

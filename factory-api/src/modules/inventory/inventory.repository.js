@@ -1,4 +1,4 @@
-const pool = require('../db/pool');
+const pool = require('../../db/pool');
 
 const createWarehouse = async ({ name, type, location_address }) => {
   const result = await pool.query(

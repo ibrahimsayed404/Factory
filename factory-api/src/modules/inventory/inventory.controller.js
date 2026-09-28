@@ -1,6 +1,6 @@
-const pool = require('../db/pool');
-const inventoryService = require('../services/inventoryService');
-const auditService = require('../services/auditService');
+const pool = require('../../db/pool');
+const inventoryService = require('./inventory.service');
+const auditService = require('../../services/auditService');
 
 let inventorySchemaEnsured = false;
 

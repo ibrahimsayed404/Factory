@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const v = require('../middleware/validation');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
 
-const inventory = require('../controllers/inventoryController');
+const inventory = require('./inventory.controller');
 
 router.get('/inventory', authenticate, inventory.getAll);
 
