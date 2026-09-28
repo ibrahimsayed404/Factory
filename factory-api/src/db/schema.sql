@@ -55,24 +55,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_audit_before_delete_employees ON employees;
-CREATE TRIGGER trg_audit_before_delete_employees
-BEFORE DELETE ON employees
-FOR EACH ROW
-EXECUTE FUNCTION log_before_delete_to_audit_logs();
-
-DROP TRIGGER IF EXISTS trg_audit_before_delete_payroll ON payroll;
-CREATE TRIGGER trg_audit_before_delete_payroll
-BEFORE DELETE ON payroll
-FOR EACH ROW
-EXECUTE FUNCTION log_before_delete_to_audit_logs();
-
-DROP TRIGGER IF EXISTS trg_audit_before_delete_attendance ON attendance;
-CREATE TRIGGER trg_audit_before_delete_attendance
-BEFORE DELETE ON attendance
-FOR EACH ROW
-EXECUTE FUNCTION log_before_delete_to_audit_logs();
-
 -- Trigger function to log BEFORE UPDATE modifications on attendance table
 CREATE OR REPLACE FUNCTION log_before_update_attendance_to_audit_logs()
 RETURNS TRIGGER AS $$
@@ -99,12 +81,6 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_audit_before_update_attendance ON attendance;
-CREATE TRIGGER trg_audit_before_update_attendance
-BEFORE UPDATE ON attendance
-FOR EACH ROW
-EXECUTE FUNCTION log_before_update_attendance_to_audit_logs();
 
 CREATE TABLE IF NOT EXISTS app_settings (
   key VARCHAR(120) PRIMARY KEY,
@@ -1205,3 +1181,28 @@ CREATE TRIGGER trg_inventory_transaction_product
 AFTER INSERT ON inventory_transactions
 FOR EACH ROW
 EXECUTE FUNCTION update_products_quantity_trigger();
+
+-- Audit triggers (must come after employees/payroll/attendance are created)
+DROP TRIGGER IF EXISTS trg_audit_before_delete_employees ON employees;
+CREATE TRIGGER trg_audit_before_delete_employees
+BEFORE DELETE ON employees
+FOR EACH ROW
+EXECUTE FUNCTION log_before_delete_to_audit_logs();
+
+DROP TRIGGER IF EXISTS trg_audit_before_delete_payroll ON payroll;
+CREATE TRIGGER trg_audit_before_delete_payroll
+BEFORE DELETE ON payroll
+FOR EACH ROW
+EXECUTE FUNCTION log_before_delete_to_audit_logs();
+
+DROP TRIGGER IF EXISTS trg_audit_before_delete_attendance ON attendance;
+CREATE TRIGGER trg_audit_before_delete_attendance
+BEFORE DELETE ON attendance
+FOR EACH ROW
+EXECUTE FUNCTION log_before_delete_to_audit_logs();
+
+DROP TRIGGER IF EXISTS trg_audit_before_update_attendance ON attendance;
+CREATE TRIGGER trg_audit_before_update_attendance
+BEFORE UPDATE ON attendance
+FOR EACH ROW
+EXECUTE FUNCTION log_before_update_attendance_to_audit_logs();

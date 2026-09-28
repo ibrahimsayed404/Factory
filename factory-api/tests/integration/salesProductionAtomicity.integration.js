@@ -12,6 +12,7 @@ const dotenv = require('dotenv');
 // Load .env.test if it exists, otherwise fallback to default .env / process.env
 dotenv.config({ path: path.join(__dirname, '../../.env.test') });
 dotenv.config({ path: path.join(__dirname, '../../.env') });
+require('./dbSafetyGuard');
 
 const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
 const missing = requiredEnvVars.filter(v => !process.env[v]);
