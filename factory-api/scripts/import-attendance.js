@@ -1,7 +1,7 @@
 require('dotenv').config();
 const path = require('path');
 const pool = require('../src/db/pool');
-const employeeService = require('../src/services/employeeService');
+const employeeService = require('../src/modules/employees/employee.service');
 
 function normalizeName(name) {
   if (!name) return '';
