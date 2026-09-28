@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { manufacturingApi, productApi, inventoryApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, Select } from '../components/ui';
-import { useLanguage } from '../context/LanguageContext';
+import { manufacturingApi, productApi, inventoryApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, Select } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
 
 const createMaterialRow = () => ({
   client_id: (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
