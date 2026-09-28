@@ -3,7 +3,7 @@ const {
   runAutoCheckoutShiftBased,
   runAutoAbsence12PM,
   minutesToTimeString,
-} = require('../../src/services/autoAttendanceScheduler');
+} = require('../../src/modules/employees/autoAttendance.scheduler');
 
 jest.mock('../../src/db/pool', () => ({
   query: jest.fn(),

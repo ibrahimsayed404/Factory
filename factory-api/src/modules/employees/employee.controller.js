@@ -1,9 +1,9 @@
-const employeeService = require('../services/employeeService');
-const auditService = require('../services/auditService');
+const employeeService = require('./employee.service');
+const auditService = require('../../services/auditService');
 const {
   runAutoAbsence12PM,
   runAutoCheckoutShiftBased,
-} = require('../services/autoAttendanceScheduler');
+} = require('./autoAttendance.scheduler');
 
 const getAll = async (req, res, next) => {
   try {

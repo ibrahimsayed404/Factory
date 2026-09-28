@@ -1,15 +1,15 @@
-const pool = require('../db/pool');
-const employeeRepository = require('../repositories/employeeRepository');
-const payrollRepository = require('../repositories/payrollRepository');
-const auditService = require('./auditService');
-const ApiError = require('../utils/ApiError');
+const pool = require('../../db/pool');
+const employeeRepository = require('./employee.repository');
+const payrollRepository = require('../../repositories/payrollRepository');
+const auditService = require('../../services/auditService');
+const ApiError = require('../../utils/ApiError');
 const {
   calculateHoursWorked,
   calculateShiftMetrics,
   calculateWorkedMinutes,
   isWeekendDate,
-} = require('../utils/attendanceMetrics');
-const { getAttendancePayrollPolicy } = require('../utils/policySettings');
+} = require('../../utils/attendanceMetrics');
+const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
 const WEEKEND_PRESENT_NOTE = 'present vacation';
 

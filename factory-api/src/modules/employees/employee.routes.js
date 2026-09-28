@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin, authorizeCronOrAdmin } = require('../middleware/auth');
-const v = require('../middleware/validation');
+const { authenticate, authorizeAdmin, authorizeCronOrAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
 
-const employees = require('../controllers/employeeController');
+const employees = require('./employee.controller');
 
 router.get('/departments', authenticate, employees.getDepartments);
 
