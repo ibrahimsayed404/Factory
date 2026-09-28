@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { productionCycleApi, salesApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal, Select, Input } from '../components/ui';
-import { PrintableOrderSlip } from '../components/production/PrintableOrderSlip';
+import { productionCycleApi, salesApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal, Select, Input } from '../../components/ui';
+import { PrintableOrderSlip } from './PrintableOrderSlip';
 
 export default function ProductionDeliveryPhase() {
   const navigate = useNavigate();

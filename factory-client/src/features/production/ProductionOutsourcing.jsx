@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { employeeApi, productApi, productionTrackingApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Btn, Input, Select, Spinner, ErrorMsg, OrderDetailsSummary } from '../components/ui';
-import { useLanguage } from '../context/LanguageContext';
-import { buildProductNameLookup, formatOrderOptionLabel } from '../utils/productionOrderDisplay';
+import { employeeApi, productApi, productionTrackingApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Btn, Input, Select, Spinner, ErrorMsg, Modal, OrderDetailsSummary } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
+import { buildProductNameLookup, formatOrderOptionLabel } from './productionOrderDisplay';
 
 const toLocalDatetimeInput = (date) => {
   const d = new Date(date);
@@ -28,15 +28,17 @@ const defaultEnd = () => {
   return toLocalDatetimeInput(end);
 };
 
-export default function ProductionFinal() {
+export default function ProductionOutsourcing() {
   const { t } = useLanguage();
   const { data: orders, loading, error, refetch } = useFetch(productionTrackingApi.list);
   const { data: employees } = useFetch(employeeApi.list);
   const { data: products } = useFetch(productApi.list);
+  const { data: partnerFactories, refetch: refetchFactories } = useFetch(productionTrackingApi.partnerFactories);
   const productNameById = useMemo(() => buildProductNameLookup(products), [products]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [employeeId, setEmployeeId] = useState('');
+  const [partnerFactoryId, setPartnerFactoryId] = useState('');
   const [lossReason, setLossReason] = useState('');
   const [colorRows, setColorRows] = useState([{ id: 'c1', color: '', quantity: '' }]);
   const [startedAt, setStartedAt] = useState(defaultStart());
@@ -44,6 +46,10 @@ export default function ProductionFinal() {
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showAddFactory, setShowAddFactory] = useState(false);
+  const [factoryForm, setFactoryForm] = useState({ name: '', contact_person: '', phone: '' });
+  const [factorySaving, setFactorySaving] = useState(false);
+  const [factoryError, setFactoryError] = useState('');
   const [orderReport, setOrderReport] = useState(null);
 
   const selected = useMemo(
@@ -55,7 +61,7 @@ export default function ProductionFinal() {
   const removeColorRow = (index) => setColorRows((prev) => prev.filter((_, i) => i !== index));
 
   const availableOrders = useMemo(
-    () => (orders || []).filter((o) => o.phases?.outsourcing !== null && o.phases?.final === null),
+    () => (orders || []).filter((o) => o.phases?.sorting !== null && o.phases?.outsourcing === null),
     [orders]
   );
 
@@ -66,6 +72,32 @@ export default function ProductionFinal() {
       setQuantity(String(totalColorQty));
     }
   }, [colorRows]);
+
+  const handleAddFactory = async () => {
+    const name = factoryForm.name.trim();
+    if (!name) {
+      setFactoryError(t('partnerFactoryNameRequired', 'Partner factory name is required.'));
+      return;
+    }
+
+    setFactorySaving(true);
+    setFactoryError('');
+    try {
+      const created = await productionTrackingApi.createPartnerFactory({
+        name,
+        contact_person: factoryForm.contact_person.trim() || null,
+        phone: factoryForm.phone.trim() || null,
+      });
+      await refetchFactories();
+      setPartnerFactoryId(String(created.id));
+      setShowAddFactory(false);
+      setFactoryForm({ name: '', contact_person: '', phone: '' });
+    } catch (e) {
+      setFactoryError(e.message || t('partnerFactoryCreateFailed', 'Failed to add partner factory.'));
+    } finally {
+      setFactorySaving(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setSubmitError('');
@@ -89,31 +121,33 @@ export default function ProductionFinal() {
 
     const q = Number.parseInt(quantity, 10);
     if (!Number.isInteger(q) || q < 0) {
-      setSubmitError(t('qty', 'Final quantity must be a non-negative integer.'));
+      setSubmitError(t('outsourcingQtyError', 'Outsourcing quantity must be a non-negative integer.'));
       return;
     }
 
     setSaving(true);
     try {
-      const report = await productionTrackingApi.addFinal(selectedOrderId, {
+      const report = await productionTrackingApi.addOutsourcing(selectedOrderId, {
         quantity: q,
         color_breakdown: colorRows
           .filter((row) => row.color && row.quantity)
           .map((row) => ({ color: row.color, quantity: Number(row.quantity) })),
         loss_reason: lossReason.trim() || null,
         employee_id: Number(employeeId),
+        partner_factory_id: partnerFactoryId ? Number(partnerFactoryId) : null,
         started_at: started.toISOString(),
         completed_at: completed.toISOString(),
       });
-      setSuccess(`${t('final', 'Final phase saved.')} ${t('totalLoss', 'Total loss')}: ${report.total_loss ?? 0}, ${t('efficiency', 'Efficiency')}: ${report.efficiency ?? 0}%`);
+      setSuccess(`${t('outsourcingSaved', 'Outsourcing phase saved.')} Loss: ${report.outsourcing_loss ?? 0}`);
       setQuantity('');
       setLossReason('');
       setColorRows([{ id: 'c1', color: '', quantity: '' }]);
+      setPartnerFactoryId('');
       setStartedAt(defaultStart());
       setCompletedAt(defaultEnd());
       await refetch();
     } catch (e) {
-      setSubmitError(e.message || t('final', 'Failed to save final phase.'));
+      setSubmitError(e.message || t('outsourcingFailed', 'Failed to save outsourcing phase.'));
     } finally {
       setSaving(false);
     }
@@ -156,7 +190,7 @@ export default function ProductionFinal() {
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      <PageHeader title={t('final', 'Final Production Phase')} subtitle={t('final', 'Record finished quantity and complete order')} />
+      <PageHeader title={t('outsourcing', 'Outsourcing Phase')} subtitle={t('outsourcingSubtitle', 'Send items to an external partner factory for specialized processing')} />
 
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
@@ -171,17 +205,28 @@ export default function ProductionFinal() {
               </option>
             ))}
           </Select>
-          <Input label={t('qty', 'Final Quantity')} type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          <Input label={t('outsourcingQty', 'Outsourcing Quantity')} type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
           <Select label={t('employee', 'Responsible Employee')} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
             <option value="">{t('selectEmployee', 'Select employee')}</option>
             {(employees || []).map((emp) => (
               <option key={emp.id} value={emp.id}>{emp.name}</option>
             ))}
           </Select>
+          <div>
+            <Select label={t('partnerFactory', 'Partner Factory')} value={partnerFactoryId} onChange={(e) => setPartnerFactoryId(e.target.value)}>
+              <option value="">{t('selectPartnerFactory', 'Select partner factory')}</option>
+              {(partnerFactories || []).map((factory) => (
+                <option key={factory.id} value={factory.id}>{factory.name}</option>
+              ))}
+            </Select>
+            <Btn size="sm" onClick={() => { setFactoryError(''); setShowAddFactory(true); }} style={{ marginTop: 8 }}>
+              {t('addPartnerFactory', '+ Add partner factory')}
+            </Btn>
+          </div>
           <Input label={t('startDate', 'Start Time')} type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
           <Input label={t('dueDate', 'End Time')} type="datetime-local" value={completedAt} onChange={(e) => setCompletedAt(e.target.value)} />
           <div style={{ gridColumn: '1/-1' }}>
-            <Input label={t('loss', 'Loss Reason (optional)')} value={lossReason} onChange={(e) => setLossReason(e.target.value)} placeholder="Stitching defects, finishing defects..." />
+            <Input label={t('loss', 'Loss Reason (optional)')} value={lossReason} onChange={(e) => setLossReason(e.target.value)} placeholder="External rejection, quality issues..." />
           </div>
           <div style={{ gridColumn: '1/-1' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -205,16 +250,33 @@ export default function ProductionFinal() {
           orderReport={orderReport}
           t={t}
           productNameById={productNameById}
-          currentPhase="final"
+          currentPhase="outsourcing"
         />
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <Btn variant="primary" onClick={handleSubmit} disabled={saving}>{saving ? t('saving', 'Saving…') : t('final', 'Save Final Phase')}</Btn>
+          <Btn variant="primary" onClick={handleSubmit} disabled={saving}>{saving ? t('saving', 'Saving…') : t('outsourcingSaveBtn', 'Save Outsourcing Phase')}</Btn>
         </div>
 
         {submitError && <div style={{ marginTop: 12 }}><ErrorMsg msg={submitError} /></div>}
         {success && <div style={{ marginTop: 12, color: 'var(--accent)', fontSize: 13 }}>{success}</div>}
       </Card>
+
+      {showAddFactory && (
+        <Modal title={t('addPartnerFactory', 'Add partner factory')} onClose={() => setShowAddFactory(false)} width={420}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Input label={t('partnerFactoryName', 'Factory name')} value={factoryForm.name} onChange={(e) => setFactoryForm({ ...factoryForm, name: e.target.value })} />
+            <Input label={t('contactPerson', 'Contact person')} value={factoryForm.contact_person} onChange={(e) => setFactoryForm({ ...factoryForm, contact_person: e.target.value })} />
+            <Input label={t('phone', 'Phone')} value={factoryForm.phone} onChange={(e) => setFactoryForm({ ...factoryForm, phone: e.target.value })} />
+          </div>
+          {factoryError && <div style={{ marginTop: 12 }}><ErrorMsg msg={factoryError} /></div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+            <Btn onClick={() => setShowAddFactory(false)} disabled={factorySaving}>{t('cancel', 'Cancel')}</Btn>
+            <Btn variant="primary" onClick={handleAddFactory} disabled={factorySaving}>
+              {factorySaving ? t('saving', 'Saving…') : t('save', 'Save')}
+            </Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { productionCycleApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal } from '../components/ui';
-import { PrintableOrderSlip } from '../components/production/PrintableOrderSlip';
+import { productionCycleApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal } from '../../components/ui';
+import { PrintableOrderSlip } from './PrintableOrderSlip';
 
 export default function ProductionTrackingBoard() {
   const navigate = useNavigate();

@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { employeeApi, productApi, productionTrackingApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Btn, Input, Select, Spinner, ErrorMsg, OrderDetailsSummary } from '../components/ui';
-import { useLanguage } from '../context/LanguageContext';
-import { buildProductNameLookup, formatOrderOptionLabel } from '../utils/productionOrderDisplay';
+import { employeeApi, productApi, productionTrackingApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Btn, Input, Select, Spinner, ErrorMsg, OrderDetailsSummary } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
+import { buildProductNameLookup, formatOrderOptionLabel } from './productionOrderDisplay';
 
 const toLocalDatetimeInput = (date) => {
   const d = new Date(date);
@@ -28,16 +28,15 @@ const defaultEnd = () => {
   return toLocalDatetimeInput(end);
 };
 
-export default function ProductionSorting() {
+export default function ProductionFinal() {
   const { t } = useLanguage();
   const { data: orders, loading, error, refetch } = useFetch(productionTrackingApi.list);
   const { data: employees } = useFetch(employeeApi.list);
   const { data: products } = useFetch(productApi.list);
-  const { data: machines } = useFetch(productionTrackingApi.machines);
+  const productNameById = useMemo(() => buildProductNameLookup(products), [products]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [employeeId, setEmployeeId] = useState('');
-  const [machineId, setMachineId] = useState('');
   const [lossReason, setLossReason] = useState('');
   const [colorRows, setColorRows] = useState([{ id: 'c1', color: '', quantity: '' }]);
   const [startedAt, setStartedAt] = useState(defaultStart());
@@ -47,18 +46,16 @@ export default function ProductionSorting() {
   const [success, setSuccess] = useState('');
   const [orderReport, setOrderReport] = useState(null);
 
-  const productNameById = useMemo(() => buildProductNameLookup(products), [products]);
-  const updateColorRow = (index, field, value) => setColorRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
-  const addColorRow = () => setColorRows((prev) => [...prev, { id: `c${Date.now()}-${Math.random()}`, color: '', quantity: '' }]);
-  const removeColorRow = (index) => setColorRows((prev) => prev.filter((_, i) => i !== index));
-
   const selected = useMemo(
     () => (orders || []).find((o) => String(o.id) === String(selectedOrderId)),
     [orders, selectedOrderId]
   );
+  const updateColorRow = (index, field, value) => setColorRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+  const addColorRow = () => setColorRows((prev) => [...prev, { id: `c${Date.now()}-${Math.random()}`, color: '', quantity: '' }]);
+  const removeColorRow = (index) => setColorRows((prev) => prev.filter((_, i) => i !== index));
 
   const availableOrders = useMemo(
-    () => (orders || []).filter((o) => o.phases?.sorting === null),
+    () => (orders || []).filter((o) => o.phases?.outsourcing !== null && o.phases?.final === null),
     [orders]
   );
 
@@ -92,36 +89,31 @@ export default function ProductionSorting() {
 
     const q = Number.parseInt(quantity, 10);
     if (!Number.isInteger(q) || q < 0) {
-      setSubmitError(t('qty', 'Sorting quantity must be a non-negative integer.'));
+      setSubmitError(t('qty', 'Final quantity must be a non-negative integer.'));
       return;
     }
 
     setSaving(true);
     try {
-      const report = await productionTrackingApi.addSorting(selectedOrderId, {
+      const report = await productionTrackingApi.addFinal(selectedOrderId, {
         quantity: q,
         color_breakdown: colorRows
           .filter((row) => row.color && row.quantity)
           .map((row) => ({ color: row.color, quantity: Number(row.quantity) })),
         loss_reason: lossReason.trim() || null,
         employee_id: Number(employeeId),
-        machine_id: machineId ? Number(machineId) : null,
         started_at: started.toISOString(),
         completed_at: completed.toISOString(),
       });
-
-      setSuccess(`${t('sortingSaved', 'Sorting phase saved.')} ${t('exitPermissionInManage', 'Print exit permission from Manage Orders.')} ${t('loss', 'Loss')}: ${report.sorting_loss ?? 0}`);
+      setSuccess(`${t('final', 'Final phase saved.')} ${t('totalLoss', 'Total loss')}: ${report.total_loss ?? 0}, ${t('efficiency', 'Efficiency')}: ${report.efficiency ?? 0}%`);
       setQuantity('');
       setLossReason('');
       setColorRows([{ id: 'c1', color: '', quantity: '' }]);
-      setMachineId('');
-      setSelectedOrderId('');
-      setEmployeeId('');
       setStartedAt(defaultStart());
       setCompletedAt(defaultEnd());
       await refetch();
     } catch (e) {
-      setSubmitError(e.message || t('sorting', 'Failed to save sorting phase.'));
+      setSubmitError(e.message || t('final', 'Failed to save final phase.'));
     } finally {
       setSaving(false);
     }
@@ -164,7 +156,7 @@ export default function ProductionSorting() {
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      <PageHeader title={t('sorting', 'Sorting Phase (فرز)')} subtitle={t('sortingSubtitle', 'Record sorting quantity for each production order')} />
+      <PageHeader title={t('final', 'Final Production Phase')} subtitle={t('final', 'Record finished quantity and complete order')} />
 
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
@@ -179,23 +171,17 @@ export default function ProductionSorting() {
               </option>
             ))}
           </Select>
-          <Input label={t('qty', 'Sorting Quantity')} type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          <Input label={t('qty', 'Final Quantity')} type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
           <Select label={t('employee', 'Responsible Employee')} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
             <option value="">{t('selectEmployee', 'Select employee')}</option>
             {(employees || []).map((emp) => (
               <option key={emp.id} value={emp.id}>{emp.name}</option>
             ))}
           </Select>
-          <Select label={t('machine', 'Machine (optional)')} value={machineId} onChange={(e) => setMachineId(e.target.value)}>
-            <option value="">{t('machine', 'No machine')}</option>
-            {(machines || []).map((machine) => (
-              <option key={machine.id} value={machine.id}>{machine.name}</option>
-            ))}
-          </Select>
           <Input label={t('startDate', 'Start Time')} type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
           <Input label={t('dueDate', 'End Time')} type="datetime-local" value={completedAt} onChange={(e) => setCompletedAt(e.target.value)} />
           <div style={{ gridColumn: '1/-1' }}>
-            <Input label={t('loss', 'Loss Reason (optional)')} value={lossReason} onChange={(e) => setLossReason(e.target.value)} placeholder="Damaged fabric, color mismatch..." />
+            <Input label={t('loss', 'Loss Reason (optional)')} value={lossReason} onChange={(e) => setLossReason(e.target.value)} placeholder="Stitching defects, finishing defects..." />
           </div>
           <div style={{ gridColumn: '1/-1' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -219,11 +205,11 @@ export default function ProductionSorting() {
           orderReport={orderReport}
           t={t}
           productNameById={productNameById}
-          currentPhase="sorting"
+          currentPhase="final"
         />
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-          <Btn variant="primary" onClick={handleSubmit} disabled={saving}>{saving ? t('saving', 'Saving…') : t('sorting', 'Save Sorting Phase')}</Btn>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <Btn variant="primary" onClick={handleSubmit} disabled={saving}>{saving ? t('saving', 'Saving…') : t('final', 'Save Final Phase')}</Btn>
         </div>
 
         {submitError && <div style={{ marginTop: 12 }}><ErrorMsg msg={submitError} /></div>}

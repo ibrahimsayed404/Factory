@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
-import { Btn } from '../ui';
-import BlackFoxLogo from '../brand/BlackFoxLogo';
+import { Btn } from '../../components/ui';
+import BlackFoxLogo from '../../components/brand/BlackFoxLogo';
 
 const formatColorName = (val) => {
   if (!val) return '—';
