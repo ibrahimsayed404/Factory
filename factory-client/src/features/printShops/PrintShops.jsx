@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { printShopApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal, Input } from '../components/ui';
+import { printShopApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal, Input } from '../../components/ui';
 
 export default function PrintShops() {
   const { data: shops, loading, refetch } = useFetch(printShopApi.list);

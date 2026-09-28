@@ -29,7 +29,7 @@ const ProductionCutting = lazy(() => import('./pages/ProductionCutting'));
 const ProductionSortingPhase = lazy(() => import('./pages/ProductionSortingPhase'));
 const ProductionPrintingPhase = lazy(() => import('./pages/ProductionPrintingPhase'));
 const ProductionDeliveryPhase = lazy(() => import('./pages/ProductionDeliveryPhase'));
-const PrintShops = lazy(() => import('./pages/PrintShops'));
+const PrintShops = lazy(() => import('./features/printShops/PrintShops'));
 const ProductionTrackingBoard = lazy(() => import('./pages/ProductionTrackingBoard'));
 const Attendance = lazy(() => import('./features/attendance/Attendance'));
 const Reports    = lazy(() => import('./pages/Reports'));
