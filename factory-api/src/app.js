@@ -67,12 +67,6 @@ const allowedOrigins = process.env.CLIENT_ORIGIN
   ? process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim())
   : true;
 
-// Desktop app: serve the built client from the same origin as the API, before
-// helmet, so the page behaves exactly like the statically hosted website.
-if (process.env.CLIENT_BUILD_DIR) {
-  app.use(express.static(process.env.CLIENT_BUILD_DIR));
-}
-
 // Security middleware
 app.use(helmet());
 app.use(i18n);

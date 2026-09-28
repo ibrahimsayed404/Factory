@@ -43,10 +43,9 @@ Factory is a production-grade, multi-module ERP built to run a real manufacturin
 
 - **Backend:** Node.js — `factory-api`
 - **Frontend:** React — `factory-client`
-- **Desktop:** `factory-desktop` (Windows service-based on-premise deployment)
 - **Database:** PostgreSQL
 - **Hardware Integration:** ZKTeco biometric devices via a dedicated Node.js sync agent
-- **Deployment:** Vercel (cloud) + Windows service scripts (on-premise)
+- **Deployment:** Vercel (pushing `main` deploys production); database on Supabase
 - **CI/CD:** GitHub Actions
 
 ## Project Structure
@@ -55,11 +54,10 @@ Factory is a production-grade, multi-module ERP built to run a real manufacturin
 Factory/
 ├── factory-api/          # Backend REST API
 ├── factory-client/       # React frontend
-├── factory-desktop/      # Desktop/on-premise runner
 ├── docs/                 # Full documentation
 ├── .env.example           # Environment variable template
 ├── docker-compose.yml     # Container orchestration
-└── run-factory-*.ps1/bat  # Local/on-premise setup scripts
+└── run-factory-all.bat    # Start API + client locally on Windows
 ```
 
 ## Documentation
