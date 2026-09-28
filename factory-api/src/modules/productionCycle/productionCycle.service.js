@@ -195,7 +195,6 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
 
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
-    const order = orderRes.rows[0];
 
     let totalSortedQty = 0;
 

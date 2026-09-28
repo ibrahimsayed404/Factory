@@ -12,9 +12,10 @@ const round2 = (n) => Number(Number(n || 0).toFixed(2));
  * - day late ≤ 10 min → ×1 (e.g. Saturday 5 → 5)
  * - day late > 10 min → full day late ×1.5 (e.g. Sunday 40 → 60)
  * Example week: 5 + (40 * 1.5) = 65 charged minutes.
- * NOTE: `late_minutes` here is already net of the configurable attendance grace
- * period (attendanceLateGraceMinutes) applied at logging time; this 10-minute
- * weighting threshold is an independent payroll rule, not the same grace period.
+ * NOTE: `late_minutes` has already passed the attendance grace
+ * (attendanceLateGraceMinutes) at logging time: lateness at or under the grace
+ * is stored as 0, anything above it is stored in full (not reduced by the grace).
+ * This 10-minute weighting threshold is an independent payroll rule.
  */
 const weightedLateMinutesForDay = (lateMinutes) => {
   const total = Math.max(0, Number(lateMinutes || 0));
@@ -169,7 +170,6 @@ const calculateInferredAbsentDays = (records = [], weekendSet, periodStart, peri
   return inferred;
 };
 
-const inferredAbsentDaysBetweenRecords = calculateInferredAbsentDays;
 
 /**
  * Count working (non-weekend) days in [periodStart, periodEnd] and how many of

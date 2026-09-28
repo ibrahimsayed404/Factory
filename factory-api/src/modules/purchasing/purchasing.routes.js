@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const purchasingController = require('./purchasing.controller');
-const { authenticate, authorizeAdmin, authorizeManager } = require('../../middleware/auth');
-const { validateRequest } = require('../../middleware/validation');
+const { authenticate } = require('../../middleware/auth');
 
 const isManagerOrAdmin = (req, res, next) => {
   if (req.user.role === 'admin' || req.user.role === 'manager') {

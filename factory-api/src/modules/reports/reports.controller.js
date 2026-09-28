@@ -1,6 +1,5 @@
 const pool = require('../../db/pool');
 
-const PRODUCTION_COMPLETED_STATUSES = "('done','shipped','completed')";
 
 const toIsoDate = (date) => date.toISOString().slice(0, 10);
 

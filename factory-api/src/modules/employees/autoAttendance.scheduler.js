@@ -4,7 +4,6 @@ const {
   calculateHoursWorked,
   calculateShiftMetrics,
   isWeekendDate,
-  toMinutes,
 } = require('../../utils/attendanceMetrics');
 const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
@@ -75,7 +74,7 @@ const runAutoCheckoutShiftBased = async (overrideDate = null) => {
       weekend_days: row.weekend_days,
     };
 
-    const { shiftStart, shiftEnd, overnightShift } = resolveShiftWindow(empDetails);
+    const { shiftEnd, overnightShift } = resolveShiftWindow(empDetails);
 
     if (shiftEnd === null || overnightShift) {
       // Skip incomplete or overnight shifts for default 1h-buffer checkout

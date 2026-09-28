@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const pool = require('../../db/pool');
-const payrollRepository = require('../payroll/payroll.repository');
 const {
   calculateHoursWorked,
   calculateWorkedMinutes,

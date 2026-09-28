@@ -1,5 +1,4 @@
 const pool = require('../../db/pool');
-const payrollRepository = require('./payroll.repository');
 const { computeLivePayrollFigures } = require('./payroll.service');
 const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
@@ -23,7 +22,6 @@ const getPayrollPolicy = async () => {
  */
 const runPayrollIntegrityCheck = async (client = pool) => {
   const policy = await getPayrollPolicy();
-  const supportsWeekendDays = await payrollRepository.hasWeekendDaysColumn();
 
   const weeksRes = await client.query(`
     SELECT DISTINCT week_start

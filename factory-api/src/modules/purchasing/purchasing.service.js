@@ -118,8 +118,6 @@ const receiveGoods = async (poId, receiptItems, warehouseId, locationId, userId)
       throw new ApiError(400, `Cannot receive goods for PO in status: ${po.status}`);
     }
 
-    let allFullyReceived = true;
-
     for (const receipt of receiptItems) {
       const poItem = po.items.find(i => i.id === receipt.po_item_id);
       if (!poItem) throw new ApiError(400, `Invalid PO item ID: ${receipt.po_item_id}`);
@@ -128,11 +126,7 @@ const receiveGoods = async (poId, receiptItems, warehouseId, locationId, userId)
       if (qty <= 0) continue;
 
       // Update PO Item received quantity
-      const updatedItem = await purchasingRepository.updatePurchaseOrderItemReceived(poItem.id, qty, client);
-
-      if (Number(updatedItem.received_quantity) < Number(updatedItem.ordered_quantity)) {
-        allFullyReceived = false;
-      }
+      await purchasingRepository.updatePurchaseOrderItemReceived(poItem.id, qty, client);
 
       // Automatically update Inventory Ledger
       await inventoryService.receiveStock({
