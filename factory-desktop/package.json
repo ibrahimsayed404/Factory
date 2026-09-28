@@ -1,14 +1,15 @@
 {
   "name": "factory-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "main.js",
   "description": "Factory Management Desktop App (Electron)",
   "author": "Factory Team",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "predist": "npm --prefix ../factory-client run build",
-    "dist": "electron-builder --win portable --publish never"
+    "predist": "npm --prefix ../factory-client run build && node scripts/stage-api.js",
+    "dist": "electron-builder --win nsis --publish never",
+    "prepack": "npm --prefix ../factory-client run build && node scripts/stage-api.js"
   },
   "devDependencies": {
     "electron": "^41.1.0",
@@ -26,15 +27,14 @@
     "files": [
       "main.js",
       "auto-updater.js",
-      "../factory-api/**",
-      "../factory-client/build/**"
+      "build/icon.ico"
     ],
     "directories": {
       "buildResources": "build"
     },
     "extraResources": [
       {
-        "from": "../factory-api",
+        "from": ".stage/factory-api",
         "to": "factory-api"
       },
       {
@@ -46,13 +46,17 @@
       "signAndEditExecutable": false,
       "icon": "build/icon.ico",
       "target": [
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Black Fox Factory"
+    },
+    "afterPack": "scripts/after-pack.js"
   }
 }

@@ -26,3 +26,6 @@ backups/
 *.xlsx
 before-restore-snapshot.txt
 *-output.txt
+
+# desktop packaging staging
+factory-desktop/.stage/
