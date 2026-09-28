@@ -1,4 +1,4 @@
--- 20260409_production_phase_analytics.sql
+-- 20260410_production_phase_analytics.sql (runs after 20260409_production_tracking_phases, which creates production_phases)
 -- Purpose: add advanced production phase analytics metadata and machine tracking.
 
 CREATE TABLE IF NOT EXISTS machines (
