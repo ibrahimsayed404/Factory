@@ -1,5 +1,5 @@
-const pool = require('../db/pool');
-const ApiError = require('../utils/ApiError');
+const pool = require('../../db/pool');
+const ApiError = require('../../utils/ApiError');
 
 const listPrintShops = async () => {
   const query = `

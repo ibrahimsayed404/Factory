@@ -1,4 +1,4 @@
-const printShopService = require('../services/printShopService');
+const printShopService = require('./printShop.service');
 
 const list = async (req, res, next) => {
   try {

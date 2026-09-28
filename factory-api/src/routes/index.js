@@ -17,7 +17,7 @@ const manufacturingRoutes = require('./manufacturing.routes');
 const qcRoutes = require('../modules/qc/qc.routes');
 const hrRoutes = require('./hr.routes');
 const accountingRoutes = require('./accounting.routes');
-const printShopRoutes = require('./printShop.routes');
+const printShopRoutes = require('../modules/printShop/printShop.routes');
 const productionCycleRoutes = require('./productionCycle.routes');
 
 router.use('/', authRoutes);

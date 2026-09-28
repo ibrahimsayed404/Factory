@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const printShop = require('../controllers/printShopController');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const printShop = require('./printShop.controller');
 
 router.get('/print-shops', authenticate, printShop.list);
 router.get('/print-shops/:id', authenticate, printShop.getById);
