@@ -10,6 +10,11 @@ const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
+// Open check-ins from earlier days are closed too (e.g. when the app was not
+// running at shift end), but only this far back so a deploy never rewrites
+// old history in bulk. Covers the current and previous payroll week.
+const AUTO_CHECKOUT_LOOKBACK_DAYS = 14;
+
 const getCairoDateAndMinutes = (overrideDate = null) => {
   const now = overrideDate ? new Date(overrideDate) : new Date();
   const dateStr = now.toLocaleDateString('sv-SE', { timeZone: 'Africa/Cairo' });
@@ -42,11 +47,22 @@ const runAutoCheckoutShiftBased = async (overrideDate = null) => {
      FROM attendance a
      JOIN employees e ON a.employee_id = e.id
      LEFT JOIN hr_shifts s ON e.shift_id = s.id
-     WHERE a.date = $1::date
+     WHERE a.date <= $1::date
+       AND a.date > $1::date - $2::int
        AND a.check_in IS NOT NULL
        AND a.check_out IS NULL
-       AND COALESCE(a.status, '') != 'absent'`,
-    [dateStr]
+       AND COALESCE(a.status, '') != 'absent'
+       AND NOT EXISTS (
+         SELECT 1 FROM payroll p
+         WHERE p.employee_id = a.employee_id
+           AND p.status = 'paid'
+           AND (
+             (p.week_start IS NOT NULL AND p.week_end IS NOT NULL AND a.date BETWEEN p.week_start AND p.week_end)
+             OR (p.week_start IS NULL AND p.month IS NOT NULL AND p.year IS NOT NULL
+                 AND EXTRACT(MONTH FROM a.date) = p.month AND EXTRACT(YEAR FROM a.date) = p.year)
+           )
+       )`,
+    [dateStr, AUTO_CHECKOUT_LOOKBACK_DAYS]
   );
 
   let updatedCount = 0;
@@ -67,8 +83,9 @@ const runAutoCheckoutShiftBased = async (overrideDate = null) => {
     }
 
     const autoCheckoutTriggerMin = shiftEnd + 60;
+    const isPastDay = row.date < dateStr;
 
-    if (currentMinutes >= autoCheckoutTriggerMin) {
+    if (isPastDay || currentMinutes >= autoCheckoutTriggerMin) {
       const shiftEndStr = minutesToTimeString(shiftEnd);
       const hoursWorked = calculateHoursWorked(row.check_in, shiftEndStr);
       const metrics = calculateShiftMetrics(empDetails, row.check_in, shiftEndStr, {
@@ -116,7 +133,7 @@ const runAutoCheckoutShiftBased = async (overrideDate = null) => {
   }
 
   if (updatedCount > 0) {
-    console.log(`[auto-attendance] Auto-checked out ${updatedCount} employee(s) for ${dateStr}.`);
+    console.log(`[auto-attendance] Auto-checked out ${updatedCount} open check-in(s) up to ${dateStr}.`);
   }
 
   return updatedCount;
@@ -226,4 +243,5 @@ module.exports = {
   startAutoAttendanceScheduler,
   getCairoDateAndMinutes,
   minutesToTimeString,
+  AUTO_CHECKOUT_LOOKBACK_DAYS,
 };
