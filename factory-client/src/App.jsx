@@ -14,7 +14,7 @@ const Dashboard  = lazy(() => import('./features/dashboard/Dashboard'));
 const Inventory  = lazy(() => import('./pages/Inventory'));
 const Employees  = lazy(() => import('./features/employees/Employees'));
 const Payroll    = lazy(() => import('./features/payroll/Payroll'));
-const Loans      = lazy(() => import('./pages/Loans'));
+const Loans      = lazy(() => import('./features/loans/Loans'));
 const Sales      = lazy(() => import('./pages/Sales'));
 const Customers  = lazy(() => import('./pages/Customers'));
 const Production = lazy(() => import('./pages/Production'));

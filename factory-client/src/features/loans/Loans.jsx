@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { hrApi, employeeApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg } from '../components/ui';
+import { hrApi, employeeApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg } from '../../components/ui';
 
 const emptyForm = {
   employee_id: '',
