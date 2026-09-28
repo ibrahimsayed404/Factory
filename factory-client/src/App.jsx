@@ -33,7 +33,7 @@ const PrintShops = lazy(() => import('./features/printShops/PrintShops'));
 const ProductionTrackingBoard = lazy(() => import('./features/production/ProductionTrackingBoard'));
 const Attendance = lazy(() => import('./features/attendance/Attendance'));
 const Reports    = lazy(() => import('./features/reports/Reports'));
-const Accounting = lazy(() => import('./pages/Accounting'));
+const Accounting = lazy(() => import('./features/accounting/Accounting'));
 const Products   = lazy(() => import('./features/products/Products'));
 const Purchasing = lazy(() => import('./pages/Purchasing'));
 const Bom        = lazy(() => import('./pages/BOM'));

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { accountingApi } from '../api';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, MetricCard, Spinner, ErrorMsg } from '../components/ui';
+import { accountingApi } from '../../api';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, MetricCard, Spinner, ErrorMsg } from '../../components/ui';
 
 const money = (value) => `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
