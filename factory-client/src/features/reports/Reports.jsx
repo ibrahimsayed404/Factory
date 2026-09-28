@@ -4,15 +4,15 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area, CartesianGrid,
 } from 'recharts';
-import { reportsApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../components/ui';
+import { reportsApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../../components/ui';
 import {
   buildSalesReportHtml,
   buildProductionReportHtml,
   buildHrReportHtml,
   buildPrintShopsReportHtml,
-} from '../utils/reportTemplateGenerator';
+} from './reportTemplateGenerator';
 
 let reportExportModules;
 const loadReportExportModules = async () => {
@@ -32,14 +32,14 @@ const exportPDF = async (filename, title, sections, action = 'print', htmlConten
   // If rich self-explanatory HTML content is provided, prioritize native high-definition browser rendering
   // This gives the user full Arabic Cairo/Segoe UI fonts, color badges, KPI cards, and "Save as PDF" option
   if (htmlContent) {
-    const { printHtmlDocument } = await import('../utils/printDocument');
+    const { printHtmlDocument } = await import('../../utils/printDocument');
     const ok = printHtmlDocument(htmlContent, { title: filename.replace(/\.pdf$/i, '') || title });
     if (ok) return;
   }
 
   const [{ jsPDF, autoTable }, { downloadPdfBlob, printPdfBlob }] = await Promise.all([
     loadReportExportModules(),
-    import('../utils/printDocument'),
+    import('../../utils/printDocument'),
   ]);
   // Landscape A4 orientation: 297mm width x 210mm height gives ample room for 8+ columns without text-wrapping
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
