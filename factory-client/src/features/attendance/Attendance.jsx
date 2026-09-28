@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { employeeApi } from '../../api';
+import { employeeApi } from '../employees/employees.api';
 import { useLanguage } from '../../context/LanguageContext';
 import { useFetch } from '../../hooks/useFetch';
 import {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { productionCycleApi } from '../../api';
+import { productionCycleApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Btn, Spinner, ErrorMsg } from '../../components/ui';
 import { PrintableOrderSlip } from './PrintableOrderSlip';

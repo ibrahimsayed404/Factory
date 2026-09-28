@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Table } from 'react-bootstrap';
-import { qcApi } from '../../api';
+import { qcApi } from './qc.api';
 import { toast } from 'react-toastify';
 
 export default function QCReports() {

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import { authApi } from '../api';
+import { authApi } from '../features/auth/auth.api';
 
 const AuthContext = createContext(null);
 

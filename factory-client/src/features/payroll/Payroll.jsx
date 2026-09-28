@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { payrollApi } from '../../api';
+import { payrollApi } from './payroll.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

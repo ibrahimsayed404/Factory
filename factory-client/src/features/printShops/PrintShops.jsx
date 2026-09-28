@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { printShopApi } from '../../api';
+import { printShopApi } from './printShops.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Btn, Spinner, ErrorMsg, Modal, Input } from '../../components/ui';
 

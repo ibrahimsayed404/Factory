@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area, CartesianGrid,
 } from 'recharts';
-import { reportsApi } from '../../api';
+import { reportsApi } from './reports.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../../components/ui';
 import {

@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
-jest.mock('../api', () => ({
+jest.mock('../features/auth/auth.api', () => ({
   authApi: {
     me: jest.fn(() => Promise.resolve({ id: 1, name: 'A', role: 'admin' })),
     login: jest.fn(() => Promise.resolve({ token: 't1', refreshToken: 'r1', user: { id: 2, name: 'B', role: 'staff' } })),

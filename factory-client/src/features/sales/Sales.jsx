@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { salesApi, productApi, productionTrackingApi } from '../../api';
+import { salesApi } from './sales.api';
+import { productApi } from '../products/products.api';
+import { productionTrackingApi } from '../production/production.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant, SearchInput } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

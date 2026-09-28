@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 
-import { productApi, productionTrackingApi } from '../../api';
+import { productApi } from '../products/products.api';
+import { productionTrackingApi } from './production.api';
 
 import { useFetch } from '../../hooks/useFetch';
 

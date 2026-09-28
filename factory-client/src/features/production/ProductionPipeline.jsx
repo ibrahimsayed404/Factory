@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { productionApi } from '../../api';
+import { productionApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Spinner, ErrorMsg, Badge, statusVariant } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

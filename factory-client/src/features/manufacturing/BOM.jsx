@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { manufacturingApi, productApi, inventoryApi } from '../../api';
+import { manufacturingApi } from './manufacturing.api';
+import { productApi } from '../products/products.api';
+import { inventoryApi } from '../inventory/inventory.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, Select } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

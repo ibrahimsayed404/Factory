@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { productionApi, productionTrackingApi, productApi, manufacturingApi } from '../../api';
+import { productionApi, productionTrackingApi } from './production.api';
+import { productApi } from '../products/products.api';
+import { manufacturingApi } from '../manufacturing/manufacturing.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, statusVariant, SearchInput } from '../../components/ui';
 import { FEATURE_FLAGS } from '../../config/featureFlags';

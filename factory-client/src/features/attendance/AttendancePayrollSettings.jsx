@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { settingsApi } from '../../api';
+import { settingsApi } from './settings.api';
 import { Btn, Card, ErrorMsg, Input, PageHeader, Spinner } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';
 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { salesApi, resolveApiAssetUrl } from '../../api';
+import { salesApi } from './sales.api';
+import { resolveApiAssetUrl } from '../../api/client';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, MetricCard, Badge, statusVariant, SearchInput } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { dashboardApi } from '../../api';
+import { dashboardApi } from './dashboard.api';
 import { useFetch } from '../../hooks/useFetch';
 import { MetricCard, Card, Spinner, ErrorMsg, PageHeader, Badge } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

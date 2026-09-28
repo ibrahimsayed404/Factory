@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { setApiLanguage } from '../api';
+import { setApiLanguage } from '../api/client';
 
 const LANG_STORAGE_KEY = 'lang';
 

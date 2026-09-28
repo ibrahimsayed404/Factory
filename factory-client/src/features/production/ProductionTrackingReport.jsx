@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { productApi, productionTrackingApi } from '../../api';
+import { productApi } from '../products/products.api';
+import { productionTrackingApi } from './production.api';
 import { useFetch } from '../../hooks/useFetch';
 import { Badge, Card, ErrorMsg, PageHeader, Select, Spinner, Table, Btn, Modal, Input } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

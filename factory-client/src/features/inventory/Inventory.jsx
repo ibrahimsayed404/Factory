@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { inventoryApi } from '../../api';
+import { inventoryApi } from './inventory.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg, SearchInput } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';

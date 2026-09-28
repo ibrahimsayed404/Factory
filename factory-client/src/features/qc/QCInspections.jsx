@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { qcApi } from '../../api';
+import { qcApi } from './qc.api';
 import { toast } from 'react-toastify';
 import { Table, Button, Badge, Modal, Form } from 'react-bootstrap';
 import { FaPlus, FaEye } from 'react-icons/fa';
