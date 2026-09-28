@@ -9,7 +9,7 @@ import { LanguageProvider } from './context/LanguageContext';
 import { Spinner } from './components/ui';
 import { FEATURE_FLAGS } from './config/featureFlags';
 
-const Login      = lazy(() => import('./pages/Login'));
+const Login      = lazy(() => import('./features/auth/Login'));
 const Dashboard  = lazy(() => import('./pages/Dashboard'));
 const Inventory  = lazy(() => import('./pages/Inventory'));
 const Employees  = lazy(() => import('./pages/Employees'));

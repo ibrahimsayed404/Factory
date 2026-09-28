@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { Input, Btn, ErrorMsg, Spinner } from '../components/ui';
-import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
-import { useLanguage } from '../context/LanguageContext';
-import BlackFoxLogo from '../components/brand/BlackFoxLogo';
+import { useAuth } from '../../context/AuthContext';
+import { Input, Btn, ErrorMsg, Spinner } from '../../components/ui';
+import { LanguageSwitcher } from '../../components/ui/LanguageSwitcher';
+import { useLanguage } from '../../context/LanguageContext';
+import BlackFoxLogo from '../../components/brand/BlackFoxLogo';
 
 export default function Login() {
   const { login } = useAuth();
