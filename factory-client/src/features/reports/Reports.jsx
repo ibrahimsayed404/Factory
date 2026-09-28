@@ -545,7 +545,8 @@ const getStageLabel = (stage) => {
     case 'cutting': return '1. القص';
     case 'sorting': return '2. الفرز';
     case 'printing': return '3. المطبعة';
-    case 'ready_for_delivery': return '4. جاهز للتسليم';
+    case 'machines': return '4. المكن';
+    case 'ready_for_delivery': return '5. جاهز للتسليم';
     case 'delivered': return '✓ تم التسليم';
     default: return stage;
   }

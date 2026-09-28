@@ -36,6 +36,7 @@ export default function ProductionPrintingPhase() {
     (o.current_stage === 'printing' || o.current_stage === 'sorting') &&
     !o.print_sent_at &&
     !o.print_received_at &&
+    o.current_stage !== 'machines' &&
     o.current_stage !== 'ready_for_delivery' &&
     o.current_stage !== 'delivered'
   );
@@ -130,7 +131,7 @@ export default function ProductionPrintingPhase() {
         print_notes: receiveNotes,
       });
 
-      setSuccessMsg(`تم استلام الأوردر ${updated.model_number} من المطبعة بنجاح، وأصبح جاهزاً للتسليم!`);
+      setSuccessMsg(`تم استلام الأوردر ${updated.model_number} من المطبعة بنجاح، وتم تحويله لمرحلة المكن!`);
       const targetPrint = updated;
       setReceiveTargetOrder(null);
       await refetchOrders();
@@ -185,10 +186,10 @@ export default function ProductionPrintingPhase() {
           <Btn
             variant="primary"
             size="sm"
-            onClick={() => navigate('/production-orders/delivery')}
+            onClick={() => navigate('/production-orders/machines')}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}
           >
-            <span>🚚</span> الذهاب لصفحة التسليم ➔
+            <span>⚙️</span> الذهاب لصفحة المكن ➔
           </Btn>
         </div>
       )}

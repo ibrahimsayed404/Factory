@@ -20,6 +20,7 @@ const Customers  = lazy(() => import('./features/sales/Customers'));
 const ProductionCutting = lazy(() => import('./features/production/ProductionCutting'));
 const ProductionSortingPhase = lazy(() => import('./features/production/ProductionSortingPhase'));
 const ProductionPrintingPhase = lazy(() => import('./features/production/ProductionPrintingPhase'));
+const ProductionMachinesPhase = lazy(() => import('./features/production/ProductionMachinesPhase'));
 const ProductionDeliveryPhase = lazy(() => import('./features/production/ProductionDeliveryPhase'));
 const PrintShops = lazy(() => import('./features/printShops/PrintShops'));
 const ProductionTrackingBoard = lazy(() => import('./features/production/ProductionTrackingBoard'));
@@ -68,6 +69,7 @@ export default function App() {
                   <Route path="/production-orders/sorting" element={<Protected><ProductionSortingPhase /></Protected>} />
                   <Route path="/production-orders/printing" element={<Protected><ProductionPrintingPhase /></Protected>} />
                   <Route path="/production-orders/outsourcing" element={<Protected><ProductionPrintingPhase /></Protected>} />
+                  <Route path="/production-orders/machines" element={<Protected><ProductionMachinesPhase /></Protected>} />
                   <Route path="/production-orders/delivery" element={<Protected><ProductionDeliveryPhase /></Protected>} />
                   <Route path="/production-orders/final" element={<Protected><ProductionDeliveryPhase /></Protected>} />
                   <Route path="/print-shops" element={<Protected><PrintShops /></Protected>} />

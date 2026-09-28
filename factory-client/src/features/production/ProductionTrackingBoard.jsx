@@ -55,6 +55,7 @@ export default function ProductionTrackingBoard() {
   const cuttingOrders = filteredOrders.filter(o => o.current_stage === 'cutting');
   const sortingOrders = filteredOrders.filter(o => o.current_stage === 'sorting');
   const printingOrders = filteredOrders.filter(o => o.current_stage === 'printing');
+  const machinesOrders = filteredOrders.filter(o => o.current_stage === 'machines');
   const readyForDeliveryOrders = filteredOrders.filter(o => o.current_stage === 'ready_for_delivery');
   const deliveredOrders = (orders || []).filter(o => {
     if (o.current_stage !== 'delivered') return false;
@@ -102,7 +103,8 @@ export default function ProductionTrackingBoard() {
 
   const getPiecesCount = (o) => {
     if (o.current_stage === 'delivered') return o.total_delivered_quantity || o.quantity;
-    if (o.current_stage === 'ready_for_delivery') return o.total_print_received_quantity || o.total_sorted_quantity || o.total_cut_quantity;
+    if (o.current_stage === 'ready_for_delivery') return o.total_machine_quantity ?? (o.total_print_received_quantity || o.total_sorted_quantity || o.total_cut_quantity);
+    if (o.current_stage === 'machines') return (o.print_received_at ? o.total_print_received_quantity : null) || o.total_sorted_quantity || o.total_cut_quantity;
     if (o.current_stage === 'printing') return o.total_print_sent_quantity || o.total_sorted_quantity || o.total_cut_quantity;
     if (o.current_stage === 'sorting') return o.total_sorted_quantity || o.total_cut_quantity;
     return o.total_cut_quantity || o.quantity || 0;
@@ -116,8 +118,10 @@ export default function ProductionTrackingBoard() {
         return <span style={{ background: 'rgba(217, 119, 6, 0.1)', color: '#d97706', border: '1px solid rgba(217, 119, 6, 0.25)', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>2. الفرز</span>;
       case 'printing':
         return <span style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', border: '1px solid rgba(124, 58, 237, 0.25)', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>3. المطبعة</span>;
+      case 'machines':
+        return <span style={{ background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', border: '1px solid rgba(79, 70, 229, 0.25)', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>4. المكن</span>;
       case 'ready_for_delivery':
-        return <span style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669', border: '1px solid rgba(5, 150, 105, 0.25)', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>4. جاهز للتسليم</span>;
+        return <span style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669', border: '1px solid rgba(5, 150, 105, 0.25)', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>5. جاهز للتسليم</span>;
       case 'delivered':
         return <span style={{ background: 'rgba(4, 120, 87, 0.12)', color: '#047857', border: '1px solid rgba(4, 120, 87, 0.25)', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 800 }}>✓ تم التسليم</span>;
       default:
@@ -204,6 +208,23 @@ export default function ProductionTrackingBoard() {
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#7c3aed', marginTop: 8 }}>
             {Number(kpis?.printing_pieces || 0).toLocaleString()} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>قطعة</span>
+          </div>
+        </div>
+
+        {/* Machines */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderTop: '3px solid #4f46e5',
+          borderRadius: 10,
+          padding: '16px 20px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: 13, fontWeight: 600 }}>
+            <span>⚙️ في المكن</span>
+            <span>{kpis?.machines_orders || 0} أوردر</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#4f46e5', marginTop: 8 }}>
+            {Number(kpis?.machines_pieces || 0).toLocaleString()} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>قطعة</span>
           </div>
         </div>
 
@@ -442,7 +463,7 @@ export default function ProductionTrackingBoard() {
       {!loading && viewMode === 'kanban' && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(5, minmax(260px, 1fr))',
           gap: 16,
           alignItems: 'start',
           overflowX: 'auto',
@@ -676,7 +697,83 @@ export default function ProductionTrackingBoard() {
             );
           })()}
 
-          {/* Column 4: Delivery (with Sub-Tabs: Ready vs Delivered) */}
+          {/* Column 4: Machines */}
+          {(() => {
+            const col = getColItems(machinesOrders, 'machines');
+            return (
+              <div style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  background: 'rgba(79, 70, 229, 0.08)',
+                  borderBottom: '2px solid #4f46e5',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}>
+                  <span style={{ fontWeight: 800, color: '#4f46e5', fontSize: 15 }}>⚙️ 4. في المكن</span>
+                  <span style={{ background: '#4f46e5', color: '#ffffff', borderRadius: 12, padding: '2px 8px', fontSize: 12, fontWeight: 800 }}>
+                    {machinesOrders.length}
+                  </span>
+                </div>
+                <div style={{
+                  padding: 10,
+                  minHeight: 350,
+                  maxHeight: 'calc(100vh - 310px)',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: cardDensity === 'compact' ? 8 : 12,
+                }}>
+                  {machinesOrders.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: 13 }}>
+                      لا توجد أوردرات في المكن
+                    </div>
+                  ) : (
+                    <>
+                      {col.items.map(ord => (
+                        <OrderKanbanCard
+                          key={ord.id}
+                          order={ord}
+                          density={cardDensity}
+                          onOpenDetails={() => setSelectedOrderDetails(ord)}
+                          onOpenSlip={openSlip}
+                          onAction={() => navigate('/production-orders/machines')}
+                          actionText="تسجيل المكن ⚙️"
+                          onDelete={() => handleDeleteOrder(ord.id, ord.model_number)}
+                        />
+                      ))}
+                      {col.hasMore && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedColumns(prev => ({ ...prev, machines: true }))}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            border: '1px dashed var(--border)',
+                            background: 'var(--bg-hover)',
+                            color: '#4f46e5',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                          }}
+                        >
+                          + عرض {col.remaining} أوردر إضافي
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Column 5: Delivery (with Sub-Tabs: Ready vs Delivered) */}
           {(() => {
             const col = getColItems(deliveryColumnOrders, 'delivery');
             return (
@@ -697,7 +794,7 @@ export default function ProductionTrackingBoard() {
                     alignItems: 'center',
                     marginBottom: 8,
                   }}>
-                    <span style={{ fontWeight: 800, color: '#059669', fontSize: 15 }}>🚚 4. التسليم</span>
+                    <span style={{ fontWeight: 800, color: '#059669', fontSize: 15 }}>🚚 5. التسليم</span>
                     <span style={{ background: '#059669', color: '#ffffff', borderRadius: 12, padding: '2px 8px', fontSize: 12, fontWeight: 800 }}>
                       {readyForDeliveryOrders.length} جاهز
                     </span>
@@ -908,8 +1005,8 @@ export default function ProductionTrackingBoard() {
               marginBottom: 32,
               padding: '10px 20px',
             }}>
-              {['القص', 'الفرز', 'المطبعة', 'التسليم'].map((stepName, sIdx) => {
-                const stages = ['cutting', 'sorting', 'printing', 'ready_for_delivery', 'delivered'];
+              {['القص', 'الفرز', 'المطبعة', 'المكن', 'التسليم'].map((stepName, sIdx) => {
+                const stages = ['cutting', 'sorting', 'printing', 'machines', 'ready_for_delivery', 'delivered'];
                 const curIdx = stages.indexOf(selectedOrderDetails.current_stage);
                 const isPassed = curIdx >= sIdx;
                 const isCurrent = curIdx === sIdx;
@@ -956,6 +1053,7 @@ export default function ProductionTrackingBoard() {
                     <th style={{ padding: '8px 12px', textAlign: 'center' }}>الفرز</th>
                     <th style={{ padding: '8px 12px', textAlign: 'center' }}>المرسل مطبعة</th>
                     <th style={{ padding: '8px 12px', textAlign: 'center' }}>المستلم مطبعة</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'center' }}>الخارج من المكن</th>
                     <th style={{ padding: '8px 12px', textAlign: 'center' }}>المسلم للعميل</th>
                     <th style={{ padding: '8px 12px' }}>ملاحظة الفرز / الهالك</th>
                   </tr>
@@ -970,11 +1068,12 @@ export default function ProductionTrackingBoard() {
                       </td>
                       <td style={{ padding: '8px 12px', textAlign: 'center' }}>{col.print_sent_quantity ?? '—'}</td>
                       <td style={{ padding: '8px 12px', textAlign: 'center' }}>{col.print_received_quantity ?? '—'}</td>
+                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>{col.machine_quantity ?? '—'}</td>
                       <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, color: '#059669' }}>
                         {col.delivered_quantity ?? '—'}
                       </td>
                       <td style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: 12 }}>
-                        {col.sorting_note || col.print_note || '—'}
+                        {col.machine_note || col.sorting_note || col.print_note || '—'}
                       </td>
                     </tr>
                   ))}

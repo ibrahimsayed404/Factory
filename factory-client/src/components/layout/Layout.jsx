@@ -148,6 +148,7 @@ export const Layout = ({ children }) => {
           <NavItem to="/production-orders/cutting" label={t('cuttingPhase', 'القص وإنشاء الأوامر')} icon="✂️" />
           <NavItem to="/production-orders/sorting" label={t('sortingPhase', 'فرز ما بعد القص')} icon="🗂️" />
           <NavItem to="/production-orders/printing" label={t('printingPhase', 'المطبعة')} icon="🖨️" />
+          <NavItem to="/production-orders/machines" label={t('machinesPhase', 'المكن')} icon="⚙️" />
           <NavItem to="/production-orders/delivery" label={t('deliveryPhase', 'التسليم للعميل')} icon="🚚" />
           <NavItem to="/print-shops" label={t('printShops', 'دليل المطابع')} icon="🏢" />
 

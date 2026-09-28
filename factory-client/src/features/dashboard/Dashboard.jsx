@@ -15,6 +15,7 @@ const productionColors = {
   completed: 'var(--accent)',
   cutting: '#38bdf8',
   printing: '#a855f7',
+  machines: '#6366f1',
   ready_for_delivery: '#22c55e',
   delivered: '#10b981',
 };
@@ -28,7 +29,8 @@ const productionStatusLabel = (status) => ({
   sorting: '2. الفرز (Sorting)',
   outsourcing: '3. المطبعة (Printing)',
   printing: '3. المطبعة (Printing)',
-  ready_for_delivery: '4. جاهز للتسليم (Ready)',
+  machines: '4. المكن (Machines)',
+  ready_for_delivery: '5. جاهز للتسليم (Ready)',
   delivered: '✓ تم التسليم (Delivered)',
   completed: 'مكتمل',
 }[status] || status.replaceAll('_', ' '));
