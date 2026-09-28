@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { payrollApi } from '../api';
-import { useFetch } from '../hooks/useFetch';
-import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../components/ui';
-import { useLanguage } from '../context/LanguageContext';
-import { groupPayrollByWeek } from '../utils/payrollGrouping';
-import { formatMinutes, formatCurrency } from '../utils/payrollFormat';
+import { payrollApi } from '../../api';
+import { useFetch } from '../../hooks/useFetch';
+import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Spinner, ErrorMsg } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
+import { groupPayrollByWeek } from './payrollGrouping';
+import { formatMinutes, formatCurrency } from './payrollFormat';
 
 // Weekly payroll periods run Saturday → Friday (7 days inclusive).
 const WEEK_LENGTH_DAYS = 6;
@@ -272,7 +272,7 @@ export default function Payroll() {
     const direction = isAr ? 'rtl' : 'ltr';
     const weekLabel = formatWeekInterval(selectedWeek.weekStart === 'monthly' ? null : selectedWeek.weekStart, selectedWeek.weekEnd, t);
 
-    const { printHtmlDocument } = await import('../utils/printDocument');
+    const { printHtmlDocument } = await import('../../utils/printDocument');
 
     // Only render rows that carry a value — zero/empty rows are omitted so the
     // breakdown shows just what actually affected this employee's pay.

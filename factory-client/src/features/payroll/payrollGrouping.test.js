@@ -1,4 +1,4 @@
-import { groupPayrollByWeek } from '../utils/payrollGrouping';
+import { groupPayrollByWeek } from './payrollGrouping';
 
 describe('groupPayrollByWeek', () => {
   it('groups payroll rows by their week start and keeps the newest week first', () => {
