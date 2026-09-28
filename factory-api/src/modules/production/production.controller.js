@@ -1,4 +1,4 @@
-const productionService = require('../services/productionService');
+const productionService = require('./production.service');
 
 const getAll = async (req, res, next) => {
   try {

@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const v = require('../middleware/validation');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const v = require('../../middleware/validation');
 
-const production = require('../controllers/productionController');
+const production = require('./production.controller');
 
 router.get('/production', authenticate, production.getAll);
 router.get('/production/:id', authenticate, production.getOne);

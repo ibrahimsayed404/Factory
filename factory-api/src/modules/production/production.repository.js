@@ -1,4 +1,4 @@
-const pool = require('../db/pool');
+const pool = require('../../db/pool');
 
 const getProductionOrdersCount = async (status) => {
   let countQuery = 'SELECT COUNT(*) FROM production_orders po WHERE 1=1';
