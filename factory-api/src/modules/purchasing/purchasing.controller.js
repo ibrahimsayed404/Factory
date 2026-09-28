@@ -1,5 +1,5 @@
-const purchasingService = require('../services/purchasingService');
-const ApiError = require('../utils/ApiError');
+const purchasingService = require('./purchasing.service');
+const ApiError = require('../../utils/ApiError');
 
 // =======================
 // SUPPLIERS

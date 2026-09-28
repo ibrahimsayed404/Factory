@@ -1,8 +1,8 @@
-const purchasingRepository = require('../repositories/purchasingRepository');
-const inventoryService = require('../modules/inventory/inventory.service');
-const accountingService = require('../modules/accounting/accounting.service');
-const pool = require('../db/pool');
-const ApiError = require('../utils/ApiError');
+const purchasingRepository = require('./purchasing.repository');
+const inventoryService = require('../inventory/inventory.service');
+const accountingService = require('../accounting/accounting.service');
+const pool = require('../../db/pool');
+const ApiError = require('../../utils/ApiError');
 
 // =======================
 // SUPPLIERS
