@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorizeAdmin } = require('../middleware/auth');
-const { paymentEvidenceUpload, validateEvidenceSignature } = require('../middleware/upload');
-const v = require('../middleware/validation');
+const { authenticate, authorizeAdmin } = require('../../middleware/auth');
+const { paymentEvidenceUpload, validateEvidenceSignature } = require('../../middleware/upload');
+const v = require('../../middleware/validation');
 
 const path = require('node:path');
 const fsPromises = require('node:fs').promises;
-const storageService = require('../services/storageService');
+const storageService = require('../../services/storageService');
 
-const sales = require('../controllers/salesController');
+const sales = require('./sales.controller');
 
 
 // Customers
@@ -53,7 +53,7 @@ router.get('/uploads/payment-evidence/:filename', authenticate, authorizeAdmin, 
     if (!filename || /[/\\]/.test(filename) || filename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
-    const filePath = path.join(__dirname, '..', '..', 'uploads', 'payment-evidence', filename);
+    const filePath = path.join(__dirname, '..', '..', '..', 'uploads', 'payment-evidence', filename);
     try {
       await fsPromises.access(filePath);
       return res.sendFile(filePath);

@@ -21,7 +21,7 @@ if (missing.length > 0) {
 }
 
 const pool = require('../../src/db/pool');
-const salesService = require('../../src/services/salesService');
+const salesService = require('../../src/modules/sales/sales.service');
 const productionTrackingService = require('../../src/modules/productionTracking/productionTracking.service');
 
 const TEST_MARKER = '__ATOMICITY_INTEG_TEST__';

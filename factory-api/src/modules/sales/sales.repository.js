@@ -1,4 +1,4 @@
-const pool = require('../db/pool');
+const pool = require('../../db/pool');
 
 const relationColumnExistsCache = new Map();
 

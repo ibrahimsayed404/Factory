@@ -1,5 +1,5 @@
-const salesService = require('../../src/services/salesService');
-const salesRepository = require('../../src/repositories/salesRepository');
+const salesService = require('../../src/modules/sales/sales.service');
+const salesRepository = require('../../src/modules/sales/sales.repository');
 const accountingService = require('../../src/modules/accounting/accounting.service');
 const auditService = require('../../src/services/auditService');
 const pool = require('../../src/db/pool');

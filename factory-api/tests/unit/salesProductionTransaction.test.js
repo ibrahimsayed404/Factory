@@ -1,6 +1,6 @@
-const salesService = require('../../src/services/salesService');
+const salesService = require('../../src/modules/sales/sales.service');
 const productionTrackingService = require('../../src/modules/productionTracking/productionTracking.service');
-const salesRepository = require('../../src/repositories/salesRepository');
+const salesRepository = require('../../src/modules/sales/sales.repository');
 const pool = require('../../src/db/pool');
 
 describe('Sales & Production Order Transaction Atomicity Tests', () => {

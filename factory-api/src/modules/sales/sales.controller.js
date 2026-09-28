@@ -1,6 +1,6 @@
-const salesService = require('../services/salesService');
-const { extractReqContext } = require('../services/auditService');
-const { verifyUserPassword } = require('../utils/verifyPassword');
+const salesService = require('./sales.service');
+const { extractReqContext } = require('../../services/auditService');
+const { verifyUserPassword } = require('../../utils/verifyPassword');
 
 const getCustomers = async (req, res, next) => {
   try {

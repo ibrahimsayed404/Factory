@@ -1,6 +1,6 @@
 const pool = require('../../db/pool');
 const ApiError = require('../../utils/ApiError');
-const salesRepository = require('../../repositories/salesRepository');
+const salesRepository = require('../sales/sales.repository');
 
 // Stage constants
 const STAGE_CUTTING = 'cutting';
