@@ -5,7 +5,7 @@ const { deviceAuthenticate } = require('../../middleware/deviceAuth');
 const v = require('../../middleware/validation');
 
 const auth = require('./auth.controller');
-const device = require('../../controllers/deviceController');
+const device = require('../device/device.controller');
 
 // Device ingestion (API-key protected)
 router.post('/device/punch-events', deviceAuthenticate, device.ingestPunchEvents);

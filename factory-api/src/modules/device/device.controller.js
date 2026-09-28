@@ -1,6 +1,6 @@
 const crypto = require('crypto');
-const pool = require('../db/pool');
-const payrollRepository = require('../repositories/payrollRepository');
+const pool = require('../../db/pool');
+const payrollRepository = require('../../repositories/payrollRepository');
 const {
   calculateHoursWorked,
   calculateWorkedMinutes,
@@ -9,8 +9,8 @@ const {
   isWeekendDate,
   toMinutes,
   resolveShiftWindow,
-} = require('../utils/attendanceMetrics');
-const { getAttendancePayrollPolicy } = require('../utils/policySettings');
+} = require('../../utils/attendanceMetrics');
+const { getAttendancePayrollPolicy } = require('../../utils/policySettings');
 
 const WEEKEND_PRESENT_NOTE = 'present vacation';
 const DUPLICATE_PUNCH_WINDOW_MINUTES = Number(process.env.ATTENDANCE_DUPLICATE_PUNCH_MINUTES || 3);
