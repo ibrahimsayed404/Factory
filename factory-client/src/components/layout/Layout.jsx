@@ -190,7 +190,7 @@ export const Layout = ({ children }) => {
               {user?.role}
             </div>
           </div>
-          <button onClick={handleLogout} title="Logout" style={{
+          <button onClick={handleLogout} title={t('nav_logout', 'Logout')} style={{
             background: 'var(--bg-hover)', color: 'var(--text-muted)',
             fontSize: 13, cursor: 'pointer',
             padding: '5px 8px', borderRadius: 'var(--radius-sm)',

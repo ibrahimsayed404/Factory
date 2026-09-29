@@ -96,7 +96,7 @@ export default function Dashboard() {
             <div className="animate-in stagger-2">
               <MetricCard
                 label={t('revenue', 'Revenue')}
-                value={`$${Number(stats.monthly_revenue).toLocaleString()}`}
+                value={`${Number(stats.monthly_revenue).toLocaleString('en-US')} ${t('currency', 'EGP')}`}
                 sub={t('customerPaymentsThisMonth', 'Customer payments this month')}
                 color="var(--accent)"
                 icon="💰"
@@ -105,7 +105,7 @@ export default function Dashboard() {
             <div className="animate-in stagger-3">
               <MetricCard
                 label={t('moneySpent', 'Money spent')}
-                value={`$${Number(stats.monthly_spent).toLocaleString()}`}
+                value={`${Number(stats.monthly_spent).toLocaleString('en-US')} ${t('currency', 'EGP')}`}
                 sub={t('paidPayrollThisMonth', 'Paid payroll this month')}
                 color="var(--danger)"
                 icon="📉"
@@ -114,7 +114,7 @@ export default function Dashboard() {
             <div className="animate-in stagger-4">
               <MetricCard
                 label={t('netAfterPayroll', 'Net after payroll')}
-                value={`$${Number(stats.monthly_net).toLocaleString()}`}
+                value={`${Number(stats.monthly_net).toLocaleString('en-US')} ${t('currency', 'EGP')}`}
                 sub={t('revenueMinusPaidSalary', 'Revenue minus paid salary')}
                 color={Number(stats.monthly_net) >= 0 ? 'var(--accent)' : 'var(--danger)'}
                 icon="📊"
@@ -176,8 +176,8 @@ export default function Dashboard() {
                     { label: t('activeOrders', 'Active orders'), value: stats.active_orders, badge: 'info' },
                     { label: t('lowStockItems', 'Low stock items'), value: stats.low_stock_alerts, badge: stats.low_stock_alerts > 0 ? 'danger' : 'success' },
                     { label: t('activeEmployees', 'Active employees'), value: stats.active_employees, badge: 'success' },
-                    { label: t('revenue', 'Revenue'), value: `$${Number(stats.monthly_revenue).toLocaleString()}`, badge: 'success' },
-                    { label: t('paidPayrollThisMonthShort', 'Paid payroll this month'), value: `$${Number(stats.paid_payroll_spent).toLocaleString()}`, badge: 'danger' },
+                    { label: t('revenue', 'Revenue'), value: `${Number(stats.monthly_revenue).toLocaleString('en-US')} ${t('currency', 'EGP')}`, badge: 'success' },
+                    { label: t('paidPayrollThisMonthShort', 'Paid payroll this month'), value: `${Number(stats.paid_payroll_spent).toLocaleString('en-US')} ${t('currency', 'EGP')}`, badge: 'danger' },
                   ].map((item, i) => (
                     <div key={item.label} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',

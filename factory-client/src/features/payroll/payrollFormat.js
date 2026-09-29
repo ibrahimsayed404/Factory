@@ -17,17 +17,16 @@ export const formatMinutes = (minutes) => {
 };
 
 /**
- * Format a numeric amount as USD currency with a fixed 2 decimal places,
+ * Format a numeric amount in Egyptian pounds with a fixed 2 decimal places,
  * independent of the browser's runtime locale.
  * @param {number} amount
- * @returns {string} e.g. "$1,234.50"
+ * @returns {string} e.g. "1,234.50 ج.م"
  */
 export const formatCurrency = (amount) => {
   const value = Number(amount) || 0;
-  return value.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  const text = value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+  return `${text} ج.م`;
 };

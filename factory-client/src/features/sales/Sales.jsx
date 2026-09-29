@@ -43,10 +43,10 @@ const OrderDetailsContent = ({ order, metrics, t, statusVariant }) => (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{item.product_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>${Number(item.unit_price || 0).toFixed(2)} / {t('pcs', 'pcs')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{Number(item.unit_price || 0).toFixed(2)} {t('currency', 'EGP')} / {t('pcs', 'pcs')}</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>${Number((item.quantity || 0) * (item.unit_price || 0)).toFixed(2)}</div>
+              <div style={{ textAlign: 'end' }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{Number((item.quantity || 0) * (item.unit_price || 0)).toLocaleString('en-US')} {t('currency', 'EGP')}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('total', 'Total')}</div>
               </div>
             </div>
@@ -65,11 +65,11 @@ const OrderDetailsContent = ({ order, metrics, t, statusVariant }) => (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
       <div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('totalOrdered', 'Total Amount')}</div>
-        <div style={{ fontSize: 18, fontWeight: 600 }}>${Number(order.total_amount || 0).toLocaleString()}</div>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>{Number(order.total_amount || 0).toLocaleString('en-US')} {t('currency', 'EGP')}</div>
       </div>
       <div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('payment', 'Payment Status')}</div>
-        <Badge variant={statusVariant(order.payment_status)}>{order.payment_status}</Badge>
+        <Badge variant={statusVariant(order.payment_status)}>{t(`sal_pay_${order.payment_status}`, order.payment_status)}</Badge>
       </div>
     </div>
 
@@ -286,21 +286,21 @@ export default function Sales() {
   );
 
   const columns = [
-    { key: 'order_number', label: 'Order #', render: v => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{v}</span> },
+    { key: 'order_number', label: t('sal_orderNo', 'Order #'), render: v => <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{v}</span> },
     { key: 'customer_name', label: t('customers', 'Customer'), render: v => v || '—' },
     {
       key: 'customer_balance',
       label: t('customerBalance', 'Customer balance'),
       render: (_, row) => {
         const bal = customerBalanceMap[Number(row.customer_id)] || { remaining: 0, credit: 0 };
-        if (bal.remaining > 0) return <Badge variant="danger">{`Due ${bal.remaining.toLocaleString()}`}</Badge>;
-        if (bal.credit > 0) return <Badge variant="success">{`Credit ${bal.credit.toLocaleString()}`}</Badge>;
+        if (bal.remaining > 0) return <Badge variant="danger">{`${t('balanceDue', 'Owes')} ${bal.remaining.toLocaleString('en-US')} ${t('currency', 'EGP')}`}</Badge>;
+        if (bal.credit > 0) return <Badge variant="success">{`${t('balanceCredit', 'In credit')} ${bal.credit.toLocaleString('en-US')} ${t('currency', 'EGP')}`}</Badge>;
         return <Badge variant="success">{t('clear', 'Clear')}</Badge>;
       },
     },
-    { key: 'total_amount', label: t('totalOrdered', 'Total'), render: v => `$${Number(v || 0).toLocaleString()}` },
-    { key: 'payment_status', label: t('payment', 'Payment'), render: v => <Badge variant={statusVariant(v)}>{v}</Badge> },
-    { key: 'status', label: t('status', 'Status'), render: v => <Badge variant={statusVariant(v)}>{v}</Badge> },
+    { key: 'total_amount', label: t('totalOrdered', 'Total'), render: v => `${Number(v || 0).toLocaleString('en-US')} ${t('currency', 'EGP')}` },
+    { key: 'payment_status', label: t('payment', 'Payment'), render: v => <Badge variant={statusVariant(v)}>{t(`sal_pay_${v}`, v)}</Badge> },
+    { key: 'status', label: t('status', 'Status'), render: v => <Badge variant={statusVariant(v)}>{t(v, v)}</Badge> },
     { key: 'order_date', label: t('date', 'Date'), render: v => new Date(v).toLocaleDateString() },
     {
       key: 'actions',
@@ -331,7 +331,7 @@ export default function Sales() {
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
             <SearchInput 
-              placeholder="Search by order number, customer, status, or payment status..." 
+              placeholder={t('sal_search', 'Search by order number, customer, status, or payment status...')} 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -344,7 +344,7 @@ export default function Sales() {
         <Modal title={t('newSalesOrder', 'New sales order')} onClose={() => setShowModal(false)} width={560}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <Select label={t('customers', 'Customer')} value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })}>
-              <option value="">{t('selectEmployee', 'Select customer')}</option>
+              <option value="">{t('sal_selectCustomer', 'Select customer')}</option>
               {customers?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
             <Input label={t('dueDate', 'Delivery date')} type="date" value={form.delivery_date} onChange={e => setForm({ ...form, delivery_date: e.target.value })} />

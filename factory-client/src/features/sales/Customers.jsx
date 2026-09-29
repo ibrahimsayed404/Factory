@@ -243,7 +243,7 @@ export default function Customers() {
   const f = v => e => setForm({ ...form, [v]: e.target.value });
 
   const columns = [
-    { key: 'name', label: t('material', 'Name'), render: (v) => (
+    { key: 'name', label: t('cust_name', 'Name'), render: (v) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--info-dim)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>
           {v?.[0]?.toUpperCase()}
@@ -599,13 +599,13 @@ export default function Customers() {
                 label={t('paymentMethod', 'Payment method')}
                 value={editPaymentForm.payment_method}
                 onChange={e => setEditPaymentForm({ ...editPaymentForm, payment_method: e.target.value })}
-                placeholder="e.g. cash, bank, check"
+                placeholder={t('cust_methodPh', 'e.g. cash, bank, check')}
               />
               <Input
                 label={t('referenceNumber', 'Reference #')}
                 value={editPaymentForm.reference_number}
                 onChange={e => setEditPaymentForm({ ...editPaymentForm, reference_number: e.target.value })}
-                placeholder="Ref / Check number"
+                placeholder={t('cust_refPh', 'Ref / Check number')}
               />
             </div>
 
