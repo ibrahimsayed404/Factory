@@ -94,9 +94,9 @@ export default function Login() {
           </p>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <Input label="Email" type="email" placeholder="you@factory.com"
+            <Input label={t('auth_email', 'Email')} type="email" placeholder="you@factory.com"
               value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
-            <Input label="Password" type="password" placeholder="••••••••"
+            <Input label={t('auth_password', 'Password')} type="password" placeholder="••••••••"
               value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
             {error && <ErrorMsg msg={error} />}
             <Btn type="submit" variant="primary" disabled={loading} aria-busy={loading}

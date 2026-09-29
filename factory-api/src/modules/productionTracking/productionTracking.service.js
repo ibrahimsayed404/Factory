@@ -508,6 +508,7 @@ const buildDetailedReport = (orderRow, phaseRows) => {
     total_sorted_quantity: orderRow.total_sorted_quantity !== null && orderRow.total_sorted_quantity !== undefined ? Number(orderRow.total_sorted_quantity) : sortingQty,
     total_print_sent_quantity: orderRow.total_print_sent_quantity !== null && orderRow.total_print_sent_quantity !== undefined ? Number(orderRow.total_print_sent_quantity) : outsourcingQty,
     total_print_received_quantity: orderRow.total_print_received_quantity !== null && orderRow.total_print_received_quantity !== undefined ? Number(orderRow.total_print_received_quantity) : null,
+    total_machine_quantity: orderRow.total_machine_quantity !== null && orderRow.total_machine_quantity !== undefined ? Number(orderRow.total_machine_quantity) : null,
     total_delivered_quantity: orderRow.total_delivered_quantity !== null && orderRow.total_delivered_quantity !== undefined ? Number(orderRow.total_delivered_quantity) : finalQty,
     total_price: orderRow.total_price ? Number(orderRow.total_price) : null,
     print_shop_name: orderRow.print_shop_name || null,
@@ -517,6 +518,7 @@ const buildDetailedReport = (orderRow, phaseRows) => {
       { key: 'cutting', name: 'القص', quantity: Number(orderRow.total_cut_quantity || inputQty || 0) },
       { key: 'sorting', name: 'الفرز', quantity: Number(orderRow.total_sorted_quantity || sortingQty || orderRow.total_cut_quantity || inputQty || 0) },
       { key: 'printing', name: 'المطبعة', quantity: Number(orderRow.total_print_received_quantity || orderRow.total_print_sent_quantity || outsourcingQty || 0) },
+      { key: 'machines', name: 'المكن', quantity: Number(orderRow.total_machine_quantity || 0) },
       { key: 'delivery', name: 'التسليم', quantity: Number(orderRow.total_delivered_quantity || finalQty || 0) },
     ],
   };
@@ -1062,11 +1064,13 @@ const getDashboardEfficiencySummary = async () => {
         COUNT(CASE WHEN current_stage = 'cutting' THEN 1 END)::int AS cutting_orders,
         COUNT(CASE WHEN current_stage = 'sorting' THEN 1 END)::int AS sorting_orders,
         COUNT(CASE WHEN current_stage = 'printing' THEN 1 END)::int AS printing_orders,
+        COUNT(CASE WHEN current_stage = 'machines' THEN 1 END)::int AS machines_orders,
         COUNT(CASE WHEN current_stage IN ('ready_for_delivery', 'delivered') THEN 1 END)::int AS delivery_orders,
         COALESCE(SUM(total_cut_quantity), 0)::int AS cut_total,
         COALESCE(SUM(total_sorted_quantity), 0)::int AS sorted_total,
         COALESCE(SUM(total_print_sent_quantity), 0)::int AS print_sent_total,
         COALESCE(SUM(total_print_received_quantity), 0)::int AS print_received_total,
+        COALESCE(SUM(total_machine_quantity), 0)::int AS machine_total,
         COALESCE(SUM(total_delivered_quantity), 0)::int AS delivered_total
       FROM production_orders
     `);
@@ -1092,6 +1096,11 @@ const getDashboardEfficiencySummary = async () => {
       total_quantity: p.print_received_total || p.print_sent_total || summary.outsourcing.total_quantity,
       average_loss_percentage: printLossPct || summary.outsourcing.average_loss_percentage,
       current_order_count: p.printing_orders || summary.outsourcing.current_order_count,
+    };
+    summary.machines = {
+      total_quantity: p.machine_total || 0,
+      average_loss_percentage: 0,
+      current_order_count: p.machines_orders || 0,
     };
     summary.delivery = {
       total_quantity: p.delivered_total || summary.final.total_quantity,

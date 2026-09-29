@@ -42,8 +42,20 @@ const getCurrentWeekRange = () => {
 
   return { start: fmt(saturday), end: fmt(thursday) };
 };
-const monthName = m => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1];
-const weekDayName = i => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i];
+const MONTHS = {
+  en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  ar: ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'],
+};
+const WEEK_DAYS = {
+  en: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+  ar: ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'],
+};
+const HEATMAP_DAYS = {
+  en: ['Su','Mo','Tu','We','Th','Fr','Sa'],
+  ar: ['ح','ن','ث','ر','خ','ج','س'],
+};
+const monthName = (m, lang = 'en') => (MONTHS[lang] || MONTHS.en)[m - 1];
+const weekDayName = (i, lang = 'en') => (WEEK_DAYS[lang] || WEEK_DAYS.en)[i];
 const SHIFT_SCHEDULES = {
   morning: { start: '09:00', end: '17:00' },
   evening: { start: '14:00', end: '22:00' },
@@ -66,10 +78,10 @@ const dayOfWeekFromDate = (value) => {
   return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
 };
 
-const formatAttendanceDate = (value) => {
+const formatAttendanceDate = (value, lang = 'en') => {
   const parts = parseDateParts(value);
   if (!parts) return value || '—';
-  return `${weekDayName(dayOfWeekFromDate(value))}, ${monthName(parts.month)} ${parts.day}`;
+  return `${weekDayName(dayOfWeekFromDate(value), lang)}، ${parts.day} ${monthName(parts.month, lang)}`;
 };
 
 const formatTime = (value) => {
@@ -241,6 +253,7 @@ const augmentWithInferredAbsences = (records, weekendDays) => {
 
 /* ── Small calendar heatmap ─────────────────────────────── */
 const HeatMap = ({ records, year, month }) => {
+  const { t, language } = useLanguage();
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDay    = new Date(year, month - 1, 1).getDay(); // 0=Sun
 
@@ -262,7 +275,7 @@ const HeatMap = ({ records, year, month }) => {
   for (let d = 1; d <= daysInMonth; d++) {
     const s = byDay[d];
     cells.push(
-      <div key={d} title={s ? `${d}: ${s}` : `${d}: no record`}
+      <div key={d} title={s ? `${d}: ${t(`att_status_${s}`, s)}` : `${d}: ${t('att_noRecord', 'no record')}`}
         style={{
           width: 26, height: 26, borderRadius: 5,
           background: color(s),
@@ -279,7 +292,7 @@ const HeatMap = ({ records, year, month }) => {
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,26px)', gap: 4, marginBottom: 8 }}>
-        {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+        {(HEATMAP_DAYS[language] || HEATMAP_DAYS.en).map(d => (
           <div key={d} style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'center', fontWeight: 600 }}>{d}</div>
         ))}
       </div>
@@ -291,7 +304,7 @@ const HeatMap = ({ records, year, month }) => {
         {[['present','#22d3a0'],['late','#f5a623'],['absent','#f05252'],['half-day','#60a5fa']].map(([label, c]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-secondary)' }}>
             <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} />
-            {label}
+            {t(`att_status_${label}`, label)}
           </div>
         ))}
       </div>
@@ -301,7 +314,7 @@ const HeatMap = ({ records, year, month }) => {
 
 /* ── Main page ─────────────────────────────────────────── */
 export default function Attendance() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const now = new Date();
   const [month, setMonth]  = useState(now.getMonth() + 1);
   const [year,  setYear]   = useState(now.getFullYear());
@@ -501,7 +514,7 @@ export default function Attendance() {
       const r = row.todayRecord;
       if (!r || (!r.check_in && !r.check_out)) {
         if (r?.status === 'absent') {
-          return <Badge variant="danger">absent</Badge>;
+          return <Badge variant="danger">{t('att_status_absent', 'absent')}</Badge>;
         }
         return <span style={{ color: 'var(--text-muted)' }}>—</span>;
       }
@@ -524,7 +537,7 @@ export default function Attendance() {
     { key: 'absentCount', label: t('absent', 'Absent'), render: v => (
       <span style={{ color: 'var(--danger)' }}>{v}</span>
     )},
-    { key: 'totalHrs', label: t('totalHours', 'Total hours'), render: v => `${v}h` },
+    { key: 'totalHrs', label: t('totalHours', 'Total hours'), render: v => `${v} ${t('att_hUnit', 'h')}` },
     { key: 'rate', label: t('attendanceRate', 'Attendance rate'), render: (_, row) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ flex: 1, height: 5, background: 'var(--bg-hover)', borderRadius: 99, maxWidth: 80 }}>
@@ -534,60 +547,60 @@ export default function Attendance() {
       </div>
     )},
     { key: 'actions', label: '', sortable: false, render: (_, row) => (
-      <Btn size="sm" onClick={() => selectEmployee(row.emp)}>View</Btn>
+      <Btn size="sm" onClick={() => selectEmployee(row.emp)}>{t('att_view', 'View')}</Btn>
     )},
   ];
 
   // Detail table columns
   const detailColumns = [
-    { key: 'date', label: 'Date', render: v => formatAttendanceDate(v) },
-    { key: 'status', label: 'Status', render: v => <Badge variant={statusVariant(v)}>{v}</Badge> },
-    { key: 'check_in',  label: 'Check in',  render: v => formatTime(v) },
-    { key: 'check_out', label: 'Check out', render: v => formatTime(v) },
-    { key: 'hours_worked', label: 'Hours', render: v => v ? `${v}h` : '—' },
-    { key: 'late_minutes', label: 'Late', render: v => `${v || 0}m` },
-    { key: 'early_leave_minutes', label: 'Early leave', render: v => `${v || 0}m` },
-    { key: 'overtime_minutes', label: 'Overtime', render: v => `${v || 0}m` },
-    { key: 'notes', label: 'Notes', render: v => v || '—' },
+    { key: 'date', label: t('att_date', 'Date'), render: v => formatAttendanceDate(v, language) },
+    { key: 'status', label: t('att_status', 'Status'), render: v => <Badge variant={statusVariant(v)}>{t(`att_status_${v}`, v)}</Badge> },
+    { key: 'check_in',  label: t('att_checkIn', 'Check in'),  render: v => formatTime(v) },
+    { key: 'check_out', label: t('att_checkOut', 'Check out'), render: v => formatTime(v) },
+    { key: 'hours_worked', label: t('att_hours', 'Hours'), render: v => v ? `${v} ${t('att_hUnit', 'h')}` : '—' },
+    { key: 'late_minutes', label: t('att_late', 'Late'), render: v => `${v || 0} ${t('att_mUnit', 'm')}` },
+    { key: 'early_leave_minutes', label: t('att_earlyLeave', 'Early leave'), render: v => `${v || 0} ${t('att_mUnit', 'm')}` },
+    { key: 'overtime_minutes', label: t('att_overtime', 'Overtime'), render: v => `${v || 0} ${t('att_mUnit', 'm')}` },
+    { key: 'notes', label: t('att_notes', 'Notes'), render: (v, row) => (row.inferred_absence ? t('att_inferredAbsence', v) : (v || '—')) },
   ];
 
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const months = MONTHS[language] || MONTHS.en;
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
       <PageHeader
-        title="Attendance"
-        subtitle={`${monthName(month)} ${year} — track daily employee attendance`}
+        title={t('att_title', 'Attendance')}
+        subtitle={`${monthName(month, language)} ${year} — ${t('att_subtitle', 'track daily employee attendance')}`}
         action={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Select value={month} onChange={e => setMonth(Number(e.target.value))} style={{ width: 90 }}>
               {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
             </Select>
             <Input type="number" value={year} onChange={e => setYear(Number(e.target.value))} style={{ width: 80 }} />
-            <Btn variant="primary" onClick={() => { setShowLog(true); setSaveError(''); }}>+ Log attendance</Btn>
+            <Btn variant="primary" onClick={() => { setShowLog(true); setSaveError(''); }}>{t('att_logBtn', '+ Log attendance')}</Btn>
           </div>
         }
       />
 
       {/* Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 14, marginBottom: 24 }}>
-        <MetricCard label="Days present"  value={totalPresent}          color="var(--accent)" />
-        <MetricCard label="Days late"     value={totalLate}             color="var(--warn)" />
-        <MetricCard label="Days absent"   value={totalAbsent}           color="var(--danger)" />
-        <MetricCard label="Total hours"   value={`${totalHours.toFixed(0)}h`} />
+        <MetricCard label={t('att_daysPresent', 'Days present')}  value={totalPresent}          color="var(--accent)" />
+        <MetricCard label={t('att_daysLate', 'Days late')}     value={totalLate}             color="var(--warn)" />
+        <MetricCard label={t('att_daysAbsent', 'Days absent')}   value={totalAbsent}           color="var(--danger)" />
+        <MetricCard label={t('att_totalHours', 'Total hours')}   value={`${totalHours.toFixed(0)} ${t('att_hUnit', 'h')}`} />
       </div>
 
       {/* Date range filter — always visible */}
       <Card padding="12px 16px" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Filter by date range:</span>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>{t('att_filterRange', 'Filter by date range:')}</span>
           <input 
             type="date" 
             value={startDate} 
             onChange={e => setStartDate(e.target.value)}
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)', padding: '8px 10px', fontSize: 13 }}
           />
-          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>to</span>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('att_to', 'to')}</span>
           <input 
             type="date" 
             value={endDate} 
@@ -604,7 +617,7 @@ export default function Attendance() {
               setEndDate(wk.end);
             }}
           >
-            This Week
+            {t('att_thisWeek', 'This Week')}
           </Btn>
           {/* Quick-filter: Full Month */}
           <Btn 
@@ -614,7 +627,7 @@ export default function Attendance() {
               setEndDate(`${year}-${String(month).padStart(2, '0')}-${String(new Date(year, month, 0).getDate()).padStart(2, '0')}`);
             }}
           >
-            Full Month
+            {t('att_fullMonth', 'Full Month')}
           </Btn>
         </div>
       </Card>
@@ -623,7 +636,7 @@ export default function Attendance() {
       {!selectedEmp && (
         <Card padding="12px 16px" style={{ marginBottom: 16 }}>
           <SearchInput 
-            placeholder="Search by employee name or device ID..." 
+            placeholder={t('att_search', 'Search by employee name or device ID...')} 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
@@ -634,8 +647,8 @@ export default function Attendance() {
       {selectedEmp ? (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <Btn onClick={() => setSelectedEmp(null)}>← Back</Btn>
-            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{selectedEmp.name} — {monthName(month)} {year}</h2>
+            <Btn onClick={() => setSelectedEmp(null)}>{t('att_back', '← Back')}</Btn>
+            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{selectedEmp.name} — {monthName(month, language)} {year}</h2>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 16, marginBottom: 20 }}>
@@ -645,13 +658,13 @@ export default function Attendance() {
                   <Table columns={detailColumns} data={filteredEmpRecords} />
                 ) : (
                   <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                    No attendance records for this period.
+                    {t('att_noRecords', 'No attendance records for this period.')}
                   </div>
                 )
               )}
             </Card>
             <Card style={{ minWidth: 230 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 14 }}>MONTHLY CALENDAR</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 14 }}>{t('att_monthlyCalendar', 'MONTHLY CALENDAR')}</div>
               {empLoading ? <Spinner /> : <HeatMap records={empRecords} year={year} month={month} />}
             </Card>
           </div>
@@ -665,7 +678,7 @@ export default function Attendance() {
               <Table
                 columns={summaryColumns}
                 data={summaryTableData}
-                emptyMsg="No employees found."
+                emptyMsg={t('att_noEmployees', 'No employees found.')}
               />
             </Card>
           )}
@@ -674,34 +687,34 @@ export default function Attendance() {
 
       {/* Log attendance modal */}
       {showLog && (
-        <Modal title="Log attendance" onClose={() => setShowLog(false)}>
+        <Modal title={t('att_logTitle', 'Log attendance')} onClose={() => setShowLog(false)}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ gridColumn: '1/-1' }}>
-              <Select label="Employee" value={logForm.employee_id}
+              <Select label={t('att_employee', 'Employee')} value={logForm.employee_id}
                 onChange={e => setLogForm({ ...logForm, employee_id: e.target.value })}>
-                <option value="">Select employee</option>
+                <option value="">{t('att_selectEmployee', 'Select employee')}</option>
                 {employees?.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
               </Select>
             </div>
-            <Input label="Date" type="date" value={logForm.date}
+            <Input label={t('att_date', 'Date')} type="date" value={logForm.date}
               onChange={e => setLogForm({ ...logForm, date: e.target.value })} />
-            <Select label="Status" value={logForm.status}
+            <Select label={t('att_status', 'Status')} value={logForm.status}
               onChange={e => setLogForm({ ...logForm, status: e.target.value })}>
-              {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+              {STATUS_OPTS.map(s => <option key={s} value={s}>{t(`att_status_${s}`, s)}</option>)}
             </Select>
-            <Input label="Check in" type="time" value={logForm.check_in}
+            <Input label={t('att_checkIn', 'Check in')} type="time" value={logForm.check_in}
               onChange={e => setLogForm({ ...logForm, check_in: e.target.value })} />
-            <Input label="Check out" type="time" value={logForm.check_out}
+            <Input label={t('att_checkOut', 'Check out')} type="time" value={logForm.check_out}
               onChange={e => setLogForm({ ...logForm, check_out: e.target.value })} />
             <div style={{ gridColumn: '1/-1' }}>
-              <Input label="Hours worked" type="number" value={logForm.hours_worked}
+              <Input label={t('att_hoursWorked', 'Hours worked')} type="number" value={logForm.hours_worked}
                 readOnly />
             </div>
-            <Input label="Late (minutes)" type="number" value={logForm.late_minutes} readOnly />
-            <Input label="Early leave (minutes)" type="number" value={logForm.early_leave_minutes} readOnly />
-            <Input label="Overtime (minutes)" type="number" value={logForm.overtime_minutes} readOnly />
+            <Input label={t('att_lateMin', 'Late (minutes)')} type="number" value={logForm.late_minutes} readOnly />
+            <Input label={t('att_earlyMin', 'Early leave (minutes)')} type="number" value={logForm.early_leave_minutes} readOnly />
+            <Input label={t('att_overtimeMin', 'Overtime (minutes)')} type="number" value={logForm.overtime_minutes} readOnly />
             <div style={{ gridColumn: '1/-1' }}>
-              <Input label="Notes" value={logForm.notes}
+              <Input label={t('att_notes', 'Notes')} value={logForm.notes}
                 onChange={e => setLogForm({ ...logForm, notes: e.target.value })} />
             </div>
           </div>
@@ -711,7 +724,7 @@ export default function Attendance() {
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-            <Btn onClick={() => setShowLog(false)} disabled={saving}>Cancel</Btn>
+            <Btn onClick={() => setShowLog(false)} disabled={saving}>{t('att_cancel', 'Cancel')}</Btn>
             <Btn variant="primary" onClick={handleLog} disabled={saving} aria-busy={saving}>
               {saving ? <Spinner /> : 'Save record'}
             </Btn>

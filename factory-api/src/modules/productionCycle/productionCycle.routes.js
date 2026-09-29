@@ -10,6 +10,7 @@ router.put('/production-cycle/orders/:id/sorting', authenticate, authorizeAdmin,
 router.put('/production-cycle/orders/:id/print/send', authenticate, authorizeAdmin, productionCycle.sendToPrint);
 router.put('/production-cycle/orders/:id/print/receive', authenticate, authorizeAdmin, productionCycle.receiveFromPrint);
 router.put('/production-cycle/orders/:id/print/skip', authenticate, authorizeAdmin, productionCycle.skipPrint);
+router.put('/production-cycle/orders/:id/machines', authenticate, authorizeAdmin, productionCycle.submitMachinesPhase);
 router.put('/production-cycle/orders/:id/deliver', authenticate, authorizeAdmin, productionCycle.deliverToCustomer);
 router.delete('/production-cycle/orders/:id', authenticate, authorizeAdmin, productionCycle.deleteOrder);
 router.get('/production-cycle/kpis', authenticate, productionCycle.getKPIs);

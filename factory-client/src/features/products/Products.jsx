@@ -80,7 +80,7 @@ export default function Products() {
   const columns = [
     { key: 'name', label: t('product', 'Product') },
     { key: 'description', label: t('description', 'Description'), render: v => v || '—' },
-    { key: 'default_price', label: t('defaultPrice', 'Default Price'), render: v => v ? `$${v}` : '—' },
+    { key: 'default_price', label: t('defaultPrice', 'Default Price'), render: v => v ? `${Number(v).toLocaleString('en-US')} ${t('currency', 'EGP')}` : '—' },
     { key: 'actions', label: '', render: (_, row) => (
       <div style={{ display: 'flex', gap: 6 }}>
         <Btn size="sm" onClick={e => { e.stopPropagation(); openEdit(row); }} disabled={deletingId === row.id}>{t('edit', 'Edit')}</Btn>
@@ -108,7 +108,7 @@ export default function Products() {
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
             <SearchInput 
-              placeholder="Search by name or description..." 
+              placeholder={t('prod_search', 'Search by name or description...')} 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -125,7 +125,7 @@ export default function Products() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
             <Input label={t('product', 'Name')} value={form.name} onChange={f('name')} />
             <Input label={t('description', 'Description')} value={form.description} onChange={f('description')} />
-            <Input label={t('defaultPrice', 'Default Price ($)')} type="number" value={form.default_price} onChange={f('default_price')} />
+            <Input label={`${t('defaultPrice', 'Default Price')} (${t('currency', 'EGP')})`} type="number" value={form.default_price} onChange={f('default_price')} />
           </div>
           {formError && <div style={{color:'var(--danger)',marginTop:10}}>{formError}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>

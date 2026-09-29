@@ -304,7 +304,7 @@ export const PrintableOrderSlip = ({ order, type = 'cutting', printShop, custome
             </thead>
             <tbody>
               {colors.map((c, idx) => {
-                const deliveredQty = c.delivered_quantity || c.print_received_quantity || c.sorted_quantity || c.cut_quantity;
+                const deliveredQty = c.delivered_quantity || c.machine_quantity || c.print_received_quantity || c.sorted_quantity || c.cut_quantity;
                 const unitPrice = order.unit_price || 0;
                 const lineTotal = deliveredQty * unitPrice;
                 const formattedColor = formatColorName(c.color);

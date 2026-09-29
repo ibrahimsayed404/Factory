@@ -3,6 +3,7 @@ import { hrApi } from './loans.api';
 import { employeeApi } from '../employees/employees.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
 
 const emptyForm = {
   employee_id: '',
@@ -13,6 +14,7 @@ const emptyForm = {
 };
 
 export default function Loans() {
+  const { t } = useLanguage();
   const { data: loans, loading, error, refetch } = useFetch(() => hrApi.loans('?limit=1000'));
   const { data: employees } = useFetch(employeeApi.list);
   const [showModal, setShowModal] = useState(false);
@@ -44,23 +46,23 @@ export default function Loans() {
 
   const handleSave = async () => {
     if (!form.employee_id) {
-      setFormError('Please select an employee.');
+      setFormError(t('loan_errEmployee', 'Please select an employee.'));
       return;
     }
     const principal = Number(form.principal_amount);
     const installment = Number(form.monthly_installment);
     if (!Number.isFinite(principal) || principal <= 0) {
-      setFormError('Principal amount must be greater than zero.');
+      setFormError(t('loan_errPrincipal', 'Principal amount must be greater than zero.'));
       return;
     }
     if (!Number.isFinite(installment) || installment <= 0) {
-      setFormError('Monthly installment must be greater than zero.');
+      setFormError(t('loan_errInstallment', 'Monthly installment must be greater than zero.'));
       return;
     }
 
     let remaining = form.remaining_amount !== '' ? Number(form.remaining_amount) : principal;
     if (!Number.isFinite(remaining) || remaining < 0) {
-      setFormError('Remaining amount must be a non-negative number.');
+      setFormError(t('loan_errRemaining', 'Remaining amount must be a non-negative number.'));
       return;
     }
 
@@ -88,26 +90,26 @@ export default function Loans() {
       setEditingLoan(null);
       await refetch();
     } catch (err) {
-      setFormError(err?.message || (editingLoan ? 'Failed to update loan.' : 'Failed to create loan.'));
+      setFormError(err?.message || (editingLoan ? t('loan_errUpdate', 'Failed to update loan.') : t('loan_errCreate', 'Failed to create loan.')));
     } finally {
       setSaving(false);
     }
   };
 
   const columns = [
-    { key: 'employee_name', label: 'Employee' },
-    { key: 'principal_amount', label: 'Principal', render: (v) => `$${Number(v || 0).toLocaleString()}` },
-    { key: 'remaining_amount', label: 'Remaining', render: (v) => `$${Number(v || 0).toLocaleString()}` },
-    { key: 'monthly_installment', label: 'Installment', render: (v) => `$${Number(v || 0).toLocaleString()}` },
-    { key: 'status', label: 'Status', render: (v) => <Badge variant={v === 'active' ? 'success' : 'default'}>{v === 'active' ? 'Active' : 'Finished'}</Badge> },
-    { key: 'created_at', label: 'Created', render: (v) => v ? new Date(v).toLocaleDateString() : '—' },
+    { key: 'employee_name', label: t('loan_employee', 'Employee') },
+    { key: 'principal_amount', label: t('loan_principal', 'Principal'), render: (v) => `${Number(v || 0).toLocaleString('en-US')} ${t('currency', 'EGP')}` },
+    { key: 'remaining_amount', label: t('loan_remaining', 'Remaining'), render: (v) => `${Number(v || 0).toLocaleString('en-US')} ${t('currency', 'EGP')}` },
+    { key: 'monthly_installment', label: t('loan_installment', 'Installment'), render: (v) => `${Number(v || 0).toLocaleString('en-US')} ${t('currency', 'EGP')}` },
+    { key: 'status', label: t('loan_status', 'Status'), render: (v) => <Badge variant={v === 'active' ? 'success' : 'default'}>{v === 'active' ? t('loan_active', 'Active') : t('loan_finished', 'Finished')}</Badge> },
+    { key: 'created_at', label: t('loan_created', 'Created'), render: (v) => v ? String(v).slice(0, 10) : '—' },
     {
       key: 'actions',
-      label: 'Actions',
+      label: t('loan_actions', 'Actions'),
       sortable: false,
       render: (_, loan) => (
         <Btn variant="ghost" size="sm" onClick={() => openEdit(loan)}>
-          Edit / Adjust
+          {t('loan_edit', 'Edit / Adjust')}
         </Btn>
       ),
     },
@@ -117,14 +119,14 @@ export default function Loans() {
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      <PageHeader title="Loans" subtitle="Create and track employee loans and repayments"
+      <PageHeader title={t('loan_title', 'Loans')} subtitle={t('loan_subtitle', 'Create and track employee loans and repayments')}
         action={
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, cursor: 'pointer', color: 'var(--text-secondary)' }}>
               <input type="checkbox" checked={showFinished} onChange={(e) => setShowFinished(e.target.checked)} style={{ cursor: 'pointer' }} />
-              Show finished loans
+              {t('loan_showFinished', 'Show finished loans')}
             </label>
-            <Btn variant="primary" onClick={openCreate}>+ Add loan</Btn>
+            <Btn variant="primary" onClick={openCreate}>{t('loan_addBtn', '+ Add loan')}</Btn>
           </div>
         }
       />
@@ -133,26 +135,26 @@ export default function Loans() {
       {!loading && <Card padding="0"><Table columns={columns} data={filteredLoans} /></Card>}
 
       {showModal && (
-        <Modal title={editingLoan ? 'Edit / Adjust loan' : 'Add loan'} onClose={() => { setShowModal(false); setEditingLoan(null); }} width={480}>
+        <Modal title={editingLoan ? t('loan_editTitle', 'Edit / Adjust loan') : t('loan_addTitle', 'Add loan')} onClose={() => { setShowModal(false); setEditingLoan(null); }} width={480}>
           {formError && <div style={{ color: 'var(--danger)', marginBottom: 12, fontWeight: 600 }}>{formError}</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Select label="Employee" value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })}>
-              <option value="">Select employee</option>
+            <Select label={t('loan_employee', 'Employee')} value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })}>
+              <option value="">{t('loan_selectEmployee', 'Select employee')}</option>
               {employees?.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
             </Select>
-            <Input label="Principal amount" type="number" value={form.principal_amount} onChange={(e) => setForm({ ...form, principal_amount: e.target.value })} />
+            <Input label={t('loan_principalAmount', 'Principal amount')} type="number" value={form.principal_amount} onChange={(e) => setForm({ ...form, principal_amount: e.target.value })} />
             {editingLoan && (
-              <Input label="Remaining amount" type="number" value={form.remaining_amount} onChange={(e) => setForm({ ...form, remaining_amount: e.target.value })} />
+              <Input label={t('loan_remainingAmount', 'Remaining amount')} type="number" value={form.remaining_amount} onChange={(e) => setForm({ ...form, remaining_amount: e.target.value })} />
             )}
-            <Input label="Monthly installment" type="number" value={form.monthly_installment} onChange={(e) => setForm({ ...form, monthly_installment: e.target.value })} />
-            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              <option value="active">Active</option>
-              <option value="closed">Closed</option>
+            <Input label={t('loan_installmentAmount', 'Monthly installment')} type="number" value={form.monthly_installment} onChange={(e) => setForm({ ...form, monthly_installment: e.target.value })} />
+            <Select label={t('loan_status', 'Status')} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option value="active">{t('loan_active', 'Active')}</option>
+              <option value="closed">{t('loan_closed', 'Closed')}</option>
             </Select>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-            <Btn onClick={() => { setShowModal(false); setEditingLoan(null); }}>Cancel</Btn>
-            <Btn variant="primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : (editingLoan ? 'Update' : 'Save')}</Btn>
+            <Btn onClick={() => { setShowModal(false); setEditingLoan(null); }}>{t('loan_cancel', 'Cancel')}</Btn>
+            <Btn variant="primary" onClick={handleSave} disabled={saving}>{saving ? t('loan_saving', 'Saving…') : (editingLoan ? t('loan_update', 'Update') : t('loan_save', 'Save'))}</Btn>
           </div>
         </Modal>
       )}

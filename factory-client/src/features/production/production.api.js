@@ -39,6 +39,7 @@ export const productionCycleApi = {
   sendToPrint: (id, body) => api.put(`/production-cycle/orders/${id}/print/send`, body),
   receiveFromPrint: (id, body) => api.put(`/production-cycle/orders/${id}/print/receive`, body),
   skipPrint: (id) => api.put(`/production-cycle/orders/${id}/print/skip`),
+  submitMachines: (id, body) => api.put(`/production-cycle/orders/${id}/machines`, body),
   deliver: (id, body) => api.put(`/production-cycle/orders/${id}/deliver`, body),
   deleteOrder: (id) => api.delete(`/production-cycle/orders/${id}`),
   getKPIs: () => api.get('/production-cycle/kpis'),

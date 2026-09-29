@@ -4,6 +4,8 @@ import { resolveApiAssetUrl } from '../../api/client';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Btn, Modal, Input, Spinner, ErrorMsg, MetricCard, Badge, statusVariant, SearchInput } from '../../components/ui';
 import { useLanguage } from '../../context/LanguageContext';
+import { printHtmlDocument } from '../../utils/printDocument';
+import { buildStatement, buildStatementPrintHtml, orderItems, money } from './customerStatement';
 
 const emptyForm = { name: '', email: '', phone: '', address: '', city: '', country: '' };
 const emptyPaymentForm = () => {
@@ -45,10 +47,9 @@ export default function Customers() {
   const [deletePaymentTarget, setDeletePaymentTarget] = useState(null);
   const [deletePaymentSaving, setDeletePaymentSaving] = useState(false);
   const [deletePaymentError, setDeletePaymentError] = useState('');
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [deleteError, setDeleteError] = useState('');
-  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [ledgerTab, setLedgerTab] = useState('statement');
+  const [stmtFrom, setStmtFrom] = useState('');
+  const [stmtTo, setStmtTo] = useState('');
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [formError, setFormError] = useState('');
@@ -67,22 +68,6 @@ export default function Customers() {
       (customer.address?.toLowerCase() || '').includes(term)
     );
   }, [customers, searchTerm]);
-
-  const enrichLedgerOrders = async (orders = []) => Promise.all(
-    (orders || []).map(async (order) => {
-      try {
-        const detailed = await salesApi.order(order.id);
-        const detailedOrder = detailed?.data && typeof detailed.data === 'object' ? detailed.data : detailed;
-        return {
-          ...order,
-          ...detailedOrder,
-          items: Array.isArray(detailedOrder?.items) ? detailedOrder.items : Array.isArray(order?.items) ? order.items : [],
-        };
-      } catch {
-        return order;
-      }
-    })
-  );
 
   const validateForm = () => {
     if (!form.name.trim()) return t('customerNameRequired', 'Customer name is required.');
@@ -116,6 +101,9 @@ export default function Customers() {
   const openLedger = async (customer) => {
     setSelectedCustomer(customer);
     setShowLedger(true);
+    setLedgerTab('statement');
+    setStmtFrom('');
+    setStmtTo('');
     setLedgerLoading(true);
     setLedgerError('');
     setPaymentError('');
@@ -123,10 +111,7 @@ export default function Customers() {
     setPaymentEvidence(null);
     try {
       const data = await salesApi.customerLedger(customer.id);
-      setLedger({
-        ...data,
-        orders: await enrichLedgerOrders(data?.orders || []),
-      });
+      setLedger(data);
     } catch (e) {
       setLedgerError(e.message);
     } finally {
@@ -140,10 +125,7 @@ export default function Customers() {
     setLedgerError('');
     try {
       const data = await salesApi.customerLedger(selectedCustomer.id);
-      setLedger({
-        ...data,
-        orders: await enrichLedgerOrders(data?.orders || []),
-      });
+      setLedger(data);
     } catch (e) {
       setLedgerError(e.message);
     } finally {
@@ -261,7 +243,7 @@ export default function Customers() {
   const f = v => e => setForm({ ...form, [v]: e.target.value });
 
   const columns = [
-    { key: 'name', label: t('material', 'Name'), render: (v) => (
+    { key: 'name', label: t('cust_name', 'Name'), render: (v) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--info-dim)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>
           {v?.[0]?.toUpperCase()}
@@ -278,10 +260,10 @@ export default function Customers() {
         const remaining = Number(row.remaining_balance || 0);
         const credit = Number(row.credit_balance || 0);
         if (remaining > 0) {
-          return <Badge variant="danger">Due ${remaining.toLocaleString()}</Badge>;
+          return <Badge variant="danger">{t('balanceDue', 'عليه')} {money(remaining)} {t('currency', 'ج.م')}</Badge>;
         }
         if (credit > 0) {
-          return <Badge variant="success">Credit ${credit.toLocaleString()}</Badge>;
+          return <Badge variant="success">{t('balanceCredit', 'له')} {money(credit)} {t('currency', 'ج.م')}</Badge>;
         }
         return <Badge variant="success">{t('clear', 'Clear')}</Badge>;
       },
@@ -295,34 +277,25 @@ export default function Customers() {
   const ledgerOrders = ledger?.orders || [];
   const paymentRows = ledger?.payments || [];
   const summary = ledger?.summary || {};
-  const getOrderItems = (row) => {
-    const sourceItems = Array.isArray(row?.items)
-      ? row.items
-      : typeof row?.items === 'string'
-        ? (() => {
-            try {
-              const parsed = JSON.parse(row.items);
-              return Array.isArray(parsed) ? parsed : [];
-            } catch {
-              return [];
-            }
-          })()
-        : [];
-
-    return sourceItems
-      .map((item) => ({
-        product_name: item?.product_name || item?.name || 'Item',
-        color: item?.color || item?.colors || item?.variant_color || '',
-        quantity: Number(item?.quantity || 0),
-      }))
-      .filter((item) => item.product_name);
+  const fmt = (v) => `${money(v)} ${t('currency', 'ج.م')}`;
+  const balanceText = (b) => {
+    if (b > 0.005) return `${t('balanceDue', 'عليه')} ${fmt(b)}`;
+    if (b < -0.005) return `${t('balanceCredit', 'له')} ${fmt(-b)}`;
+    return t('clear', 'صفر');
   };
+  const statement = buildStatement({ orders: ledgerOrders, payments: paymentRows, from: stmtFrom, to: stmtTo });
+
+  const printStatement = () => {
+    const html = buildStatementPrintHtml({ customer: selectedCustomer, statement, from: stmtFrom, to: stmtTo });
+    printHtmlDocument(html, { title: `statement-${selectedCustomer?.id || ''}` });
+  };
+
   const paymentColumns = [
-    { key: 'payment_date', label: t('paymentDate', 'Payment date'), render: v => v ? new Date(v).toLocaleDateString() : '—' },
-    { key: 'amount', label: t('amount', 'Amount'), render: v => <span style={{ color: 'var(--accent)', fontWeight: 600 }}>+${Number(v || 0).toLocaleString()}</span> },
+    { key: 'payment_date', label: t('paymentDate', 'Payment date'), render: v => v ? String(v).slice(0, 10) : '—' },
+    { key: 'amount', label: t('amount', 'Amount'), render: v => <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{fmt(v)}</span> },
     {
       key: 'evidence_url',
-      label: 'Evidence',
+      label: t('evidence', 'Evidence'),
       render: (_, row) => row.evidence_url ? (
         <a href={resolveApiAssetUrl(row.evidence_url)} target="_blank" rel="noreferrer" style={{ color: 'var(--info)' }}>
           {row.evidence_name || t('viewFile', 'View file')}
@@ -346,148 +319,200 @@ export default function Customers() {
     },
   ];
 
+  const tabBtn = (key, label, count) => (
+    <button
+      type="button"
+      onClick={() => setLedgerTab(key)}
+      style={{
+        padding: '8px 16px',
+        borderRadius: 8,
+        border: '1px solid var(--border)',
+        background: ledgerTab === key ? 'var(--accent)' : 'var(--bg-hover)',
+        color: ledgerTab === key ? '#ffffff' : 'var(--text-secondary)',
+        fontWeight: 700,
+        fontSize: 13,
+        cursor: 'pointer',
+      }}
+    >
+      {label}{count !== undefined ? ` (${count})` : ''}
+    </button>
+  );
+
+  const th = { padding: '8px 10px', textAlign: 'start', fontSize: 12, color: 'var(--text-secondary)', fontWeight: 700, borderBottom: '1px solid var(--border)' };
+  const td = { padding: '8px 10px', fontSize: 13, borderBottom: '1px solid var(--border)', verticalAlign: 'top' };
+  const num = { ...td, textAlign: 'end', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
+
   let ledgerBody = <Spinner />;
   if (ledgerError) {
     ledgerBody = <ErrorMsg msg={ledgerError} />;
   } else if (!ledgerLoading) {
+    const due = Number(summary.remaining_balance || 0);
+    const credit = Number(summary.credit_balance || 0);
     ledgerBody = (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: 12 }}>
-          <MetricCard label={t('productsTaken', 'Products taken')} value={summary.total_products || 0} />
-          <MetricCard label={t('totalOrdered', 'Total ordered')} value={`$${Number(summary.total_ordered || 0).toLocaleString()}`} />
-          <MetricCard label={t('totalPaid', 'Total paid')} value={`$${Number(summary.total_paid || 0).toLocaleString()}`} color="var(--accent)" />
-          <MetricCard label={t('remaining', 'Remaining')} value={`$${Number(summary.remaining_balance || 0).toLocaleString()}`} color={Number(summary.remaining_balance || 0) > 0 ? 'var(--danger)' : 'var(--accent)'} />
+          <MetricCard label={t('totalOrdered', 'Total ordered')} value={fmt(summary.total_ordered)} />
+          <MetricCard label={t('totalPaid', 'Total paid')} value={fmt(summary.total_paid)} color="var(--accent)" />
+          <MetricCard
+            label={t('customerBalance', 'Balance')}
+            value={balanceText(due > 0 ? due : -credit)}
+            color={due > 0 ? 'var(--danger)' : 'var(--accent)'}
+          />
+          <MetricCard label={t('productsTaken', 'Products taken')} value={`${Number(summary.total_products || 0).toLocaleString('en-US')} ${t('pcs', 'ق')}`} />
         </div>
 
-        <Card>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 12 }}>{t('addPayment', 'ADD WEEKLY PAYMENT')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 10, alignItems: 'end' }}>
-            <Input label={t('paymentDate', 'Payment date')} type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
-            <Input label={t('amount', 'Amount')} type="number" min="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
-            <Input label={t('notes', 'Notes')} value={paymentForm.notes} onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
-            <Btn variant="primary" onClick={handleAddPayment} disabled={paymentSaving || !paymentForm.amount} aria-busy={paymentSaving}>
-              {paymentSaving ? <Spinner /> : t('addPayment', 'Add payment')}
-            </Btn>
-          </div>
-          <div style={{ marginTop: 10, maxWidth: 340 }}>
-            <Input
-              label={t('evidence', 'Evidence (screenshot or PDF)')}
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={e => setPaymentEvidence(e.target.files?.[0] || null)}
-            />
-          </div>
-          {paymentError && <div style={{ marginTop: 12 }}><ErrorMsg msg={paymentError} /></div>}
-        </Card>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {tabBtn('statement', t('tabStatement', 'كشف الحساب'))}
+          {tabBtn('deliveries', t('tabDeliveries', 'التسليمات'), ledgerOrders.length)}
+          {tabBtn('payments', t('tabPayments', 'الدفعات'), paymentRows.length)}
+        </div>
 
-        <Card padding="0">
-          <div style={{ padding: '14px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{t('customerLedger', 'CUSTOMER ORDERS')}</div>
-          {!ledgerOrders.length ? (
-            <div style={{ padding: '20px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('noOrdersYet', 'No orders for this customer yet.')}</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 12px 12px' }}>
-              {ledgerOrders.map((row) => {
-                const items = getOrderItems(row);
-                const remaining = Math.max(0, Number(row.total_amount || 0) - Number(row.paid_amount || 0));
-                const displayOrderNumber = row.order_number || row.orderNo || row.order_no || `#${row.id}`;
-                return (
-                  <div key={row.id} style={{ padding: '10px 12px', backgroundColor: 'var(--background-secondary)', border: '1px solid var(--border)', borderRadius: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                      <div>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 7px', borderRadius: 6, background: 'var(--accent-dim)', color: 'var(--accent)', fontWeight: 700, fontSize: 12, lineHeight: 1, fontFamily: 'var(--font-mono)' }}>
-                          {displayOrderNumber}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>
-                          {row.order_date ? new Date(row.order_date).toLocaleDateString() : '—'} · {Number(row.total_products || 0)} pcs
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        <Badge variant={statusVariant(row.payment_status)}>{row.payment_status}</Badge>
-                        <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
-                        <Btn size="sm" variant="danger" onClick={async () => {
-                          setDeleteTarget(row);
-                          setDeletePassword('');
-                          setDeleteError('');
-                        }}>Delete</Btn>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('totalOrdered', 'Total ordered')}</div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>${Number(row.total_amount || 0).toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('totalPaid', 'Total paid')}</div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>${Number(row.paid_amount || 0).toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('remaining', 'Remaining')}</div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>${remaining.toLocaleString()}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 2 }}>{t('productsTaken', 'Products taken')}</div>
-                        <div style={{ fontWeight: 600, fontSize: 13 }}>{Number(row.total_products || 0)}</div>
-                      </div>
-                    </div>
-
-                    <div style={{ borderTop: '1px dashed var(--border)', paddingTop: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('orderItems', 'ORDER ITEMS')}</div>
-                      {!items.length ? (
-                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{String(row.details || row.order_details || row.items_details || '') || '—'}</div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          {items.map((item, idx) => (
-                            <div key={`${row.id}-${idx}-${item.product_name}`} style={{ padding: '8px 10px', backgroundColor: 'var(--background-primary)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product_name}</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
-                                <Badge variant="outline" style={{ display: 'flex', gap: 8, padding: '3px 7px', fontSize: 11, backgroundColor: 'var(--background-primary)' }}>
-                                  <span style={{ fontWeight: 500 }}>{item.color || t('defaultColor', 'Default')}</span>
-                                </Badge>
-                                <Badge variant="outline" style={{ display: 'flex', gap: 8, padding: '3px 7px', fontSize: 11, backgroundColor: 'var(--background-primary)' }}>
-                                  <span style={{ fontWeight: 500 }}>{item.quantity} {t('pcs', 'pcs')}</span>
-                                </Badge>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+        {ledgerTab === 'statement' && (
+          <Card padding="0">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'end', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ width: 170 }}><Input label={t('fromDate', 'من')} type="date" value={stmtFrom} onChange={e => setStmtFrom(e.target.value)} /></div>
+              <div style={{ width: 170 }}><Input label={t('toDate', 'إلى')} type="date" value={stmtTo} onChange={e => setStmtTo(e.target.value)} /></div>
+              {(stmtFrom || stmtTo) && <Btn size="sm" onClick={() => { setStmtFrom(''); setStmtTo(''); }}>{t('allPeriods', 'كل الفترات')}</Btn>}
+              <div style={{ flex: 1 }} />
+              <Btn variant="primary" onClick={printStatement}>🖨️ {t('printStatement', 'طباعة كشف الحساب')}</Btn>
             </div>
-          )}
-        </Card>
+            <div style={{ overflowX: 'auto', maxHeight: 460, overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)' }}>
+                  <tr>
+                    <th style={th}>{t('stmtDate', 'التاريخ')}</th>
+                    <th style={th}>{t('stmtDescription', 'البيان')}</th>
+                    <th style={{ ...th, textAlign: 'end' }}>{t('stmtDebit', 'عليه')}</th>
+                    <th style={{ ...th, textAlign: 'end' }}>{t('stmtCredit', 'له')}</th>
+                    <th style={{ ...th, textAlign: 'end' }}>{t('stmtBalance', 'الرصيد')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ background: 'var(--bg-hover)' }}>
+                    <td style={td} colSpan={4}><strong>{t('openingBalance', 'رصيد أول المدة')}</strong></td>
+                    <td style={{ ...num, fontWeight: 700 }}>{balanceText(statement.opening)}</td>
+                  </tr>
+                  {statement.rows.length === 0 && (
+                    <tr><td style={{ ...td, color: 'var(--text-muted)' }} colSpan={5}>{t('noMovements', 'لا توجد حركات في هذه الفترة')}</td></tr>
+                  )}
+                  {statement.rows.map((r) => (
+                    <tr key={r.key}>
+                      <td style={{ ...td, whiteSpace: 'nowrap' }}>{r.date}</td>
+                      <td style={td}>
+                        <span style={{
+                          display: 'inline-block',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          marginInlineEnd: 6,
+                          background: r.type === 'delivery' ? 'rgba(220, 38, 38, 0.1)' : 'rgba(5, 150, 105, 0.1)',
+                          color: r.type === 'delivery' ? '#dc2626' : '#059669',
+                        }}>
+                          {r.type === 'delivery' ? t('typeDelivery', 'تسليم') : t('typePayment', 'دفعة')}
+                        </span>
+                        {r.description}
+                      </td>
+                      <td style={{ ...num, color: '#dc2626' }}>{r.debit ? money(r.debit) : ''}</td>
+                      <td style={{ ...num, color: '#059669' }}>{r.credit ? money(r.credit) : ''}</td>
+                      <td style={{ ...num, fontWeight: 700 }}>{balanceText(r.balance)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: 'var(--bg-hover)', fontWeight: 700 }}>
+                    <td style={td} colSpan={2}>{t('periodTotal', 'إجمالي الفترة')}</td>
+                    <td style={{ ...num, color: '#dc2626' }}>{money(statement.totalDebit)}</td>
+                    <td style={{ ...num, color: '#059669' }}>{money(statement.totalCredit)}</td>
+                    <td style={num} />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: '12px 14px', fontSize: 15, fontWeight: 800, borderTop: '1px solid var(--border)' }}>
+              {t('closingBalance', 'الرصيد الختامي')}: <span style={{ color: statement.closing > 0 ? 'var(--danger)' : 'var(--accent)' }}>{balanceText(statement.closing)}</span>
+            </div>
+          </Card>
+        )}
 
-        <Card padding="0">
-          <div style={{ padding: '14px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>PAYMENT HISTORY</div>
-          <Table columns={paymentColumns} data={paymentRows} emptyMsg={t('noPaymentsYet', 'No payments recorded yet.')} />
-        </Card>
+        {ledgerTab === 'deliveries' && (
+          <Card padding="0">
+            {!ledgerOrders.length ? (
+              <div style={{ padding: '20px 16px', color: 'var(--text-muted)', fontSize: 13 }}>{t('noOrdersYet', 'No orders for this customer yet.')}</div>
+            ) : (
+              <div style={{ overflowX: 'auto', maxHeight: 520, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-card)' }}>
+                    <tr>
+                      <th style={th}>{t('stmtDate', 'التاريخ')}</th>
+                      <th style={th}>{t('model', 'الموديل')}</th>
+                      <th style={th}>{t('color', 'اللون')}</th>
+                      <th style={{ ...th, textAlign: 'end' }}>{t('quantity', 'الكمية')}</th>
+                      <th style={{ ...th, textAlign: 'end' }}>{t('unitPrice', 'سعر القطعة')}</th>
+                      <th style={{ ...th, textAlign: 'end' }}>{t('lineTotal', 'الإجمالي')}</th>
+                      <th style={th}>{t('payment', 'الدفع')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...ledgerOrders].sort((a, b) => String(b.order_date).localeCompare(String(a.order_date)) || b.id - a.id).map((row) => {
+                      const items = orderItems(row);
+                      const lines = items.length ? items : [{ product_name: row.order_number || `#${row.id}`, color: '', quantity: Number(row.total_products || 0), unit_price: 0, line_total: Number(row.total_amount || 0) }];
+                      return lines.map((item, idx) => (
+                        <tr key={`${row.id}-${idx}`}>
+                          {idx === 0 && <td style={{ ...td, whiteSpace: 'nowrap' }} rowSpan={lines.length}>{String(row.order_date || '').slice(0, 10)}</td>}
+                          <td style={{ ...td, fontWeight: 700 }}>{item.product_name}</td>
+                          <td style={td}>{item.color || '—'}</td>
+                          <td style={num}>{item.quantity.toLocaleString('en-US')}</td>
+                          <td style={num}>{item.unit_price ? money(item.unit_price) : '—'}</td>
+                          <td style={{ ...num, fontWeight: 700 }}>{money(item.line_total)}</td>
+                          {idx === 0 && (
+                            <td style={td} rowSpan={lines.length}>
+                              <Badge variant={statusVariant(row.payment_status)}>
+                                {row.payment_status === 'paid' ? t('payPaid', 'مدفوع')
+                                  : row.payment_status === 'pending' ? t('payPending', 'غير مدفوع')
+                                    : t('payPartial', 'مدفوع جزئياً')}
+                              </Badge>
+                            </td>
+                          )}
+                        </tr>
+                      ));
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {ledgerTab === 'payments' && (
+          <>
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12 }}>{t('addPayment', 'Add payment')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr auto', gap: 10, alignItems: 'end' }}>
+                <Input label={t('paymentDate', 'Payment date')} type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })} />
+                <Input label={`${t('amount', 'Amount')} (${t('currency', 'ج.م')})`} type="number" min="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
+                <Input label={t('notes', 'Notes')} value={paymentForm.notes} onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })} />
+                <Btn variant="primary" onClick={handleAddPayment} disabled={paymentSaving || !paymentForm.amount} aria-busy={paymentSaving}>
+                  {paymentSaving ? <Spinner /> : t('addPayment', 'Add payment')}
+                </Btn>
+              </div>
+              <div style={{ marginTop: 10, maxWidth: 340 }}>
+                <Input
+                  label={t('evidence', 'Evidence (screenshot or PDF)')}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={e => setPaymentEvidence(e.target.files?.[0] || null)}
+                />
+              </div>
+              {paymentError && <div style={{ marginTop: 12 }}><ErrorMsg msg={paymentError} /></div>}
+            </Card>
+            <Card padding="0">
+              <div style={{ padding: '14px 16px', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('paymentHistory', 'سجل الدفعات')}</div>
+              <Table columns={paymentColumns} data={paymentRows} emptyMsg={t('noPaymentsYet', 'No payments recorded yet.')} />
+            </Card>
+          </>
+        )}
       </div>
     );
   }
-
-  const handleDeleteOrder = async () => {
-    if (!deleteTarget) return;
-    if (!deletePassword.trim()) {
-      setDeleteError(t('passwordRequired', 'Password is required.'));
-      return;
-    }
-
-    setDeleteSaving(true);
-    setDeleteError('');
-    try {
-      await salesApi.delete(deleteTarget.id, { password: deletePassword });
-      setDeleteTarget(null);
-      setDeletePassword('');
-      await reloadLedger();
-    } catch (e) {
-      setDeleteError(e.message || t('deleteFailed', 'Failed to delete order.'));
-    } finally {
-      setDeleteSaving(false);
-    }
-  };
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
@@ -500,7 +525,7 @@ export default function Customers() {
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
             <SearchInput 
-              placeholder="Search by name, email, phone, city, country, or address..." 
+              placeholder={t('searchCustomers', 'ابحث بالاسم أو التليفون أو المدينة...')}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -534,29 +559,6 @@ export default function Customers() {
       {showLedger && (
         <Modal title={`${t('customerLedger', 'Customer ledger')} — ${selectedCustomer?.name || ''}`} onClose={() => setShowLedger(false)} width={980}>
           {ledgerBody}
-        </Modal>
-      )}
-
-      {deleteTarget && (
-        <Modal title={t('deleteOrder', 'Delete Order')} onClose={() => setDeleteTarget(null)} width={420} zIndex={120}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              {t('confirmDeleteOrder', 'Enter your password to confirm deleting order')} {deleteTarget.order_number}.
-            </div>
-            <Input
-              label={t('confirmPassword', 'Enter your password to confirm')}
-              type="password"
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-            />
-            {deleteError && <ErrorMsg msg={deleteError} />}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Btn onClick={() => setDeleteTarget(null)} disabled={deleteSaving}>{t('cancel', 'Cancel')}</Btn>
-              <Btn variant="danger" onClick={handleDeleteOrder} disabled={deleteSaving}>
-                {deleteSaving ? t('deleting', 'Deleting…') : t('delete', 'Delete')}
-              </Btn>
-            </div>
-          </div>
         </Modal>
       )}
 
@@ -597,13 +599,13 @@ export default function Customers() {
                 label={t('paymentMethod', 'Payment method')}
                 value={editPaymentForm.payment_method}
                 onChange={e => setEditPaymentForm({ ...editPaymentForm, payment_method: e.target.value })}
-                placeholder="e.g. cash, bank, check"
+                placeholder={t('cust_methodPh', 'e.g. cash, bank, check')}
               />
               <Input
                 label={t('referenceNumber', 'Reference #')}
                 value={editPaymentForm.reference_number}
                 onChange={e => setEditPaymentForm({ ...editPaymentForm, reference_number: e.target.value })}
-                placeholder="Ref / Check number"
+                placeholder={t('cust_refPh', 'Ref / Check number')}
               />
             </div>
 
@@ -654,9 +656,9 @@ export default function Customers() {
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               {t('confirmDeletePaymentMsg', 'Are you sure you want to delete this payment of')}{' '}
               <strong style={{ color: 'var(--accent)', margin: '0 4px' }}>
-                ${Number(deletePaymentTarget.amount || 0).toLocaleString()}
+                {fmt(deletePaymentTarget.amount)}
               </strong>
-              {deletePaymentTarget.payment_date ? ` (${new Date(deletePaymentTarget.payment_date).toLocaleDateString()})` : ''}?
+              {deletePaymentTarget.payment_date ? ` (${String(deletePaymentTarget.payment_date).slice(0, 10)})` : ''}?
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {t('deletePaymentWarning', 'This will revert invoice allocations and recalculate the customer ledger balance.')}

@@ -35,6 +35,7 @@ export default function ProductionDeliveryPhase() {
   const getOrderTotalPieces = (order) => {
     if (!order) return 0;
     if (order.total_delivered_quantity > 0) return order.total_delivered_quantity;
+    if (order.total_machine_quantity !== null && order.total_machine_quantity !== undefined) return order.total_machine_quantity;
     if (order.total_print_received_quantity > 0) return order.total_print_received_quantity;
     if (order.total_sorted_quantity > 0) return order.total_sorted_quantity;
     return order.total_cut_quantity || order.quantity || 0;
@@ -157,9 +158,11 @@ export default function ProductionDeliveryPhase() {
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {(ord.colors || []).map((col, idx) => {
-                            const qty = col.print_received_quantity !== null
-                              ? col.print_received_quantity
-                              : (col.sorted_quantity !== null ? col.sorted_quantity : col.cut_quantity);
+                            const qty = col.machine_quantity !== null && col.machine_quantity !== undefined
+                              ? col.machine_quantity
+                              : (col.print_received_quantity !== null
+                                ? col.print_received_quantity
+                                : (col.sorted_quantity !== null ? col.sorted_quantity : col.cut_quantity));
                             return (
                               <span
                                 key={idx}

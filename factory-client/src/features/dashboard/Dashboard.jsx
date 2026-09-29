@@ -15,6 +15,7 @@ const productionColors = {
   completed: 'var(--accent)',
   cutting: '#38bdf8',
   printing: '#a855f7',
+  machines: '#6366f1',
   ready_for_delivery: '#22c55e',
   delivered: '#10b981',
 };
@@ -28,7 +29,8 @@ const productionStatusLabel = (status) => ({
   sorting: '2. الفرز (Sorting)',
   outsourcing: '3. المطبعة (Printing)',
   printing: '3. المطبعة (Printing)',
-  ready_for_delivery: '4. جاهز للتسليم (Ready)',
+  machines: '4. المكن (Machines)',
+  ready_for_delivery: '5. جاهز للتسليم (Ready)',
   delivered: '✓ تم التسليم (Delivered)',
   completed: 'مكتمل',
 }[status] || status.replaceAll('_', ' '));
@@ -94,7 +96,7 @@ export default function Dashboard() {
             <div className="animate-in stagger-2">
               <MetricCard
                 label={t('revenue', 'Revenue')}
-                value={`$${Number(stats.monthly_revenue).toLocaleString()}`}
+                value={`${Number(stats.monthly_revenue).toLocaleString('en-US')} ${t('currency', 'EGP')}`}
                 sub={t('customerPaymentsThisMonth', 'Customer payments this month')}
                 color="var(--accent)"
                 icon="💰"
@@ -103,7 +105,7 @@ export default function Dashboard() {
             <div className="animate-in stagger-3">
               <MetricCard
                 label={t('moneySpent', 'Money spent')}
-                value={`$${Number(stats.monthly_spent).toLocaleString()}`}
+                value={`${Number(stats.monthly_spent).toLocaleString('en-US')} ${t('currency', 'EGP')}`}
                 sub={t('paidPayrollThisMonth', 'Paid payroll this month')}
                 color="var(--danger)"
                 icon="📉"
@@ -112,7 +114,7 @@ export default function Dashboard() {
             <div className="animate-in stagger-4">
               <MetricCard
                 label={t('netAfterPayroll', 'Net after payroll')}
-                value={`$${Number(stats.monthly_net).toLocaleString()}`}
+                value={`${Number(stats.monthly_net).toLocaleString('en-US')} ${t('currency', 'EGP')}`}
                 sub={t('revenueMinusPaidSalary', 'Revenue minus paid salary')}
                 color={Number(stats.monthly_net) >= 0 ? 'var(--accent)' : 'var(--danger)'}
                 icon="📊"
@@ -174,8 +176,8 @@ export default function Dashboard() {
                     { label: t('activeOrders', 'Active orders'), value: stats.active_orders, badge: 'info' },
                     { label: t('lowStockItems', 'Low stock items'), value: stats.low_stock_alerts, badge: stats.low_stock_alerts > 0 ? 'danger' : 'success' },
                     { label: t('activeEmployees', 'Active employees'), value: stats.active_employees, badge: 'success' },
-                    { label: t('revenue', 'Revenue'), value: `$${Number(stats.monthly_revenue).toLocaleString()}`, badge: 'success' },
-                    { label: t('paidPayrollThisMonthShort', 'Paid payroll this month'), value: `$${Number(stats.paid_payroll_spent).toLocaleString()}`, badge: 'danger' },
+                    { label: t('revenue', 'Revenue'), value: `${Number(stats.monthly_revenue).toLocaleString('en-US')} ${t('currency', 'EGP')}`, badge: 'success' },
+                    { label: t('paidPayrollThisMonthShort', 'Paid payroll this month'), value: `${Number(stats.paid_payroll_spent).toLocaleString('en-US')} ${t('currency', 'EGP')}`, badge: 'danger' },
                   ].map((item, i) => (
                     <div key={item.label} style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -211,14 +213,15 @@ export default function Dashboard() {
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: 16,
                 }}>
-                  {['cutting', 'sorting', 'printing', 'delivery'].map((phase) => {
+                  {['cutting', 'sorting', 'printing', 'machines', 'delivery'].map((phase) => {
                     const fallbackKey = phase === 'cutting' ? 'input' : phase === 'printing' ? 'outsourcing' : phase === 'delivery' ? 'final' : phase;
                     const data = stageEfficiency[phase] || stageEfficiency[fallbackKey] || {};
                     const phaseLabels = {
                       cutting: '1. القص (Cutting)',
                       sorting: '2. الفرز (Sorting)',
                       printing: '3. المطبعة (Printing)',
-                      delivery: '4. التسليم (Delivery)',
+                      machines: '4. المكن (Machines)',
+                      delivery: '5. التسليم (Delivery)',
                     };
                     const phaseLabel = phaseLabels[phase] || t(phase, phase);
                     return (

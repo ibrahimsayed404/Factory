@@ -689,7 +689,7 @@ export default function Payroll() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700 }}>{formatWeekInterval(group.weekStart === 'monthly' ? null : group.weekStart, group.weekEnd, t)}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{group.employeeCount} employee{group.employeeCount === 1 ? '' : 's'} · {formatCurrency(group.totalNet)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{group.employeeCount} {t('pay_employees', 'employees')} · {formatCurrency(group.totalNet)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Badge variant={group.paidCount === group.employeeCount && group.employeeCount > 0 ? 'success' : 'default'}>
@@ -713,7 +713,7 @@ export default function Payroll() {
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatCurrency(row.net_salary)}</div>
                   </div>
                 ))}
-                {group.records.length > 4 && <div style={{ alignSelf: 'center', color: 'var(--text-muted)', fontSize: 12 }}>+{group.records.length - 4} more</div>}
+                {group.records.length > 4 && <div style={{ alignSelf: 'center', color: 'var(--text-muted)', fontSize: 12 }}>+{group.records.length - 4} {t('pay_more', 'more')}</div>}
               </div>
             </Card>
           ))}
@@ -725,7 +725,7 @@ export default function Payroll() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>{formatWeekInterval(selectedWeek.weekStart === 'monthly' ? null : selectedWeek.weekStart, selectedWeek.weekEnd, t)}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selectedWeek.employeeCount} employee{selectedWeek.employeeCount === 1 ? '' : 's'} payrolls</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selectedWeek.employeeCount} {t('pay_employeePayrolls', 'employee payrolls')}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {selectedWeek.weekStart !== 'monthly' && selectedWeek.paidCount < selectedWeek.employeeCount && (
@@ -764,8 +764,8 @@ export default function Payroll() {
             {formatWeekInterval(adjustTarget.week_start, adjustTarget.week_end, t)}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Input label={t('manualBonus', 'Manual bonus ($)')} type="number" min="0" step="0.01" value={adjustForm.bonus} onChange={e => setAdjustForm({ ...adjustForm, bonus: e.target.value })} />
-            <Input label={t('manualDeductions', 'Manual deduction ($)')} type="number" min="0" step="0.01" value={adjustForm.deductions} onChange={e => setAdjustForm({ ...adjustForm, deductions: e.target.value })} />
+            <Input label={`${t('manualBonus', 'Manual bonus')} (${t('currency', 'EGP')})`} type="number" min="0" step="0.01" value={adjustForm.bonus} onChange={e => setAdjustForm({ ...adjustForm, bonus: e.target.value })} />
+            <Input label={`${t('manualDeductions', 'Manual deduction')} (${t('currency', 'EGP')})`} type="number" min="0" step="0.01" value={adjustForm.deductions} onChange={e => setAdjustForm({ ...adjustForm, deductions: e.target.value })} />
           </div>
           {adjustError && <div style={{ marginTop: 12 }}><ErrorMsg msg={adjustError} /></div>}
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
@@ -792,7 +792,7 @@ export default function Payroll() {
         <Modal title={`${t('payrollBreakdown', 'Payroll breakdown')} — ${selectedBreakdown.employee_name}`} onClose={() => setSelectedBreakdown(null)} width={520}>
           {selectedBreakdown.status !== 'paid' && selectedBreakdown.has_recalc_drift && (
             <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'var(--warning-soft, #fef9c3)', color: 'var(--warning-strong, #a16207)', fontSize: 12 }}>
-              ⚠️ {t('recalcDriftHint', 'Recalculated total differs from the paid amount')}: {formatCurrency(selectedBreakdown.recomputed_net_salary)} vs {formatCurrency(selectedBreakdown.net_salary)}
+              ⚠️ {t('recalcDriftHint', 'Recalculated total differs from the paid amount')}: {formatCurrency(selectedBreakdown.recomputed_net_salary)} {t('pay_vs', 'vs')} {formatCurrency(selectedBreakdown.net_salary)}
             </div>
           )}
           {(() => {

@@ -5,6 +5,7 @@ import {
   AreaChart, Area, CartesianGrid,
 } from 'recharts';
 import { reportsApi } from './reports.api';
+import ExpensesCard from './ExpensesCard';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../../components/ui';
 import {
@@ -196,7 +197,14 @@ const exportExcel = async (filename, sheets) => {
 
 /* ── Colour palette ─────────────────────────────────── */
 const COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0284c7', '#dc2626'];
-const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTH_LABELS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const EN_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// "Sep 2026" (from the API) -> "سبتمبر 2026"
+const arabicMonthLabel = (label) => String(label || '').replace(
+  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/,
+  (m) => MONTH_LABELS[EN_MONTHS.indexOf(m)]
+);
 
 const normalizeMonthlyRows = (rows = []) => rows.map((row) => {
   const fallbackName = row.month && MONTH_LABELS[Number(row.month) - 1]
@@ -204,7 +212,7 @@ const normalizeMonthlyRows = (rows = []) => rows.map((row) => {
     : (row.month_start || '');
   return {
     ...row,
-    name: row.month_label || row.name || fallbackName,
+    name: arabicMonthLabel(row.month_label || row.name) || fallbackName,
   };
 });
 
@@ -231,6 +239,8 @@ const TT = ({ active, payload, label, prefix = '', suffix = '' }) => {
   );
 };
 
+const egp = (v) => `${Number(v || 0).toLocaleString('en-US')} ج.م`;
+
 const SectionTitle = ({ children }) => (
   <div style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'.08em', marginBottom:14 }}>
     {children}
@@ -245,13 +255,6 @@ const SalesTab = ({ startDate, endDate }) => {
   );
   const [exporting, setExporting] = useState('');
   const [netMode, setNetMode] = useState('cash');
-  const [addingExpense, setAddingExpense] = useState(false);
-  const [expenseError, setExpenseError] = useState('');
-  const [expenseForm, setExpenseForm] = useState(() => {
-    const now = new Date();
-    const expenseDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return { expense_date: expenseDate, amount: '', category: '', notes: '' };
-  });
 
   const handlePDF = async (action = 'print') => {
     setExporting(action === 'download' ? 'pdf-download' : 'pdf-print');
@@ -273,17 +276,17 @@ const SalesTab = ({ startDate, endDate }) => {
             title: 'Executive Financial Summary',
             description: 'Core revenue, collections, operating costs, and net liquidity indicators.',
             metrics: [
-              { label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, desc: 'Invoiced orders' },
+              { label: 'Total Revenue', value: `EGP ${totalRevenue.toLocaleString()}`, desc: 'Invoiced orders' },
               { label: 'Total Orders', value: totalOrders, desc: 'Sales orders count' },
-              { label: 'Collected Cash', value: `$${totalCollected.toLocaleString()}`, desc: 'Liquid funds received' },
-              { label: 'Total Spent', value: `$${totalSpent.toLocaleString()}`, desc: 'Payroll + Materials + Extra' },
-              { label: netMode === 'cash' ? 'Cash Net' : 'Accrual Net', value: `$${totalNet.toLocaleString()}`, desc: netMode === 'cash' ? 'Collected - Spent' : 'Revenue - Costs' },
+              { label: 'Collected Cash', value: `EGP ${totalCollected.toLocaleString()}`, desc: 'Liquid funds received' },
+              { label: 'Total Spent', value: `EGP ${totalSpent.toLocaleString()}`, desc: 'Payroll + Materials + Extra' },
+              { label: netMode === 'cash' ? 'Cash Net' : 'Accrual Net', value: `EGP ${totalNet.toLocaleString()}`, desc: netMode === 'cash' ? 'Collected - Spent' : 'Revenue - Costs' },
             ],
           },
           {
             title: 'Monthly Cashflow Trend',
             description: 'Chronological comparison of monthly revenue recognition, collections, and net margin.',
-            head: ['Month', 'Orders', 'Revenue ($)', 'Collected ($)', 'Spent ($)', netMode === 'cash' ? 'Cash Net ($)' : 'Accrual Net ($)'],
+            head: ['Month', 'Orders', 'Revenue (EGP)', 'Collected (EGP)', 'Spent (EGP)', netMode === 'cash' ? 'Cash Net (EGP)' : 'Accrual Net (EGP)'],
             rows: monthly.map(r => [
               r.name,
               r.orders || 0,
@@ -304,7 +307,7 @@ const SalesTab = ({ startDate, endDate }) => {
           {
             title: 'Top Customers & Receivables',
             description: 'Major clients performance, invoiced revenue, collected cash, and outstanding balances.',
-            head: ['Customer', 'Orders', 'Revenue ($)', 'Collected ($)', 'Balance Due ($)'],
+            head: ['Customer', 'Orders', 'Revenue (EGP)', 'Collected (EGP)', 'Balance Due (EGP)'],
             rows: (data?.top_customers || []).map(c => {
               const rev = Number(c.revenue || 0);
               const col = Number(c.collected || 0);
@@ -315,13 +318,13 @@ const SalesTab = ({ startDate, endDate }) => {
           {
             title: 'Payment Status Distribution',
             description: 'Breakdown of orders based on client payment settlement state.',
-            head: ['Status', 'Orders Count', 'Amount ($)'],
+            head: ['Status', 'Orders Count', 'Amount (EGP)'],
             rows: (data?.payment_breakdown || []).map(p => [p.status, p.count, p.amount.toLocaleString()]),
           },
           {
             title: 'Operating Spend Breakdown',
             description: 'Distribution of factory expenditures across payroll, materials, and overhead.',
-            head: ['Expense Category', 'Amount ($)'],
+            head: ['Expense Category', 'Amount (EGP)'],
             rows: [
               ['Payroll & Labor (Direct)', Number(data?.summary?.payroll_spent || 0).toLocaleString()],
               ['Materials & Raw Fabrics (COGS)', Number(data?.summary?.materials_spent || 0).toLocaleString()],
@@ -345,22 +348,22 @@ const SalesTab = ({ startDate, endDate }) => {
       await exportExcel(`sales-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Monthly Revenue',
-          headers: ['Month', 'Orders', 'Revenue ($)', 'Collected ($)', 'Spent ($)', 'Cash Net ($)', 'Accrual Net ($)', 'Payroll Spent ($)', 'Materials Spent ($)', 'Extra Spent ($)'],
+          headers: ['الشهر', 'الأوامر', 'المبيعات (ج.م)', 'المحصّل (ج.م)', 'المصروف (ج.م)', 'الصافي النقدي (ج.م)', 'صافي الاستحقاق (ج.م)', 'المرتبات (ج.م)', 'الخامات (ج.م)', 'مصروفات إضافية (ج.م)'],
           rows: monthly.map(r => [r.name, r.orders||0, r.revenue||0, r.collected||0, r.total_spent||0, r.net_value||0, r.accrual_net_value||0, r.payroll_spent||0, r.materials_spent||0, r.extra_spent||0]),
         },
         {
           sheetName: 'Top Customers',
-          headers: ['Customer', 'Orders', 'Revenue ($)', 'Collected ($)'],
+          headers: ['العميل', 'الأوامر', 'المبيعات (ج.م)', 'المحصّل (ج.م)'],
           rows: (data?.top_customers||[]).map(c => [c.name, c.orders, c.revenue||0, c.collected||0]),
         },
         {
           sheetName: 'Payment Status',
-          headers: ['Status', 'Count', 'Amount ($)'],
+          headers: ['الحالة', 'العدد', 'المبلغ (ج.م)'],
           rows: (data?.payment_breakdown||[]).map(p => [p.status, p.count, p.amount]),
         },
         {
           sheetName: 'Spend Summary',
-          headers: ['Type', 'Amount ($)'],
+          headers: ['البند', 'المبلغ (ج.م)'],
           rows: [
             ['Payroll spent', data?.summary?.payroll_spent || 0],
             ['Materials spent', data?.summary?.materials_spent || 0],
@@ -372,7 +375,7 @@ const SalesTab = ({ startDate, endDate }) => {
         },
         {
           sheetName: 'Order Statuses',
-          headers: ['Status', 'Count'],
+          headers: ['الحالة', 'العدد'],
           rows: (data?.order_statuses||[]).map(o => [o.status, o.count]),
         },
       ]);
@@ -382,25 +385,6 @@ const SalesTab = ({ startDate, endDate }) => {
   if (loading) return <Spinner />;
   if (error) return <ErrorMsg msg={error} />;
   if (!data) return null;
-
-  const addExpense = async () => {
-    setAddingExpense(true);
-    setExpenseError('');
-    try {
-      await reportsApi.addSalesExpense({
-        expense_date: expenseForm.expense_date,
-        amount: Number(expenseForm.amount),
-        category: expenseForm.category,
-        notes: expenseForm.notes,
-      });
-      setExpenseForm({ ...expenseForm, amount: '', category: '', notes: '' });
-      await refetch();
-    } catch (e) {
-      setExpenseError(e.message);
-    } finally {
-      setAddingExpense(false);
-    }
-  };
 
   const monthly = normalizeMonthlyRows(data.monthly || []);
   const totalRevenue   = (data.monthly||[]).reduce((a,r) => a+(r.revenue||0),0);
@@ -413,8 +397,8 @@ const SalesTab = ({ startDate, endDate }) => {
     <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
         <div style={{ display:'flex', gap:8 }}>
-          <Btn size="sm" variant={netMode === 'cash' ? 'primary' : 'ghost'} onClick={() => setNetMode('cash')}>Cash net</Btn>
-          <Btn size="sm" variant={netMode === 'accrual' ? 'primary' : 'ghost'} onClick={() => setNetMode('accrual')}>Accrual net</Btn>
+          <Btn size="sm" variant={netMode === 'cash' ? 'primary' : 'ghost'} onClick={() => setNetMode('cash')}>صافي نقدي</Btn>
+          <Btn size="sm" variant={netMode === 'accrual' ? 'primary' : 'ghost'} onClick={() => setNetMode('accrual')}>صافي استحقاق</Btn>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
           <Btn size="sm" onClick={handleExcel} disabled={!!exporting}>{exporting==='excel'?'جاري التصدير…':'↓ Excel'}</Btn>
@@ -423,33 +407,19 @@ const SalesTab = ({ startDate, endDate }) => {
         </div>
       </div>
 
-      <Card>
-        <SectionTitle>Add extra spent money</SectionTitle>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10, alignItems:'end' }}>
-          <input type="date" value={expenseForm.expense_date} onChange={e => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <input type="number" min="0.01" placeholder="Amount" value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <input type="text" placeholder="Category" value={expenseForm.category} onChange={e => setExpenseForm({ ...expenseForm, category: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <input type="text" placeholder="Notes" value={expenseForm.notes} onChange={e => setExpenseForm({ ...expenseForm, notes: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <Btn size="sm" variant="primary" onClick={addExpense} disabled={addingExpense || !expenseForm.amount}>{addingExpense ? 'Saving…' : 'Add expense'}</Btn>
-        </div>
-        {expenseError && <div style={{ marginTop: 10 }}><ErrorMsg msg={expenseError} /></div>}
-      </Card>
+      <ExpensesCard startDate={startDate} endDate={endDate} onChanged={refetch} />
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
-        <MetricCard label="Total revenue"    value={`$${totalRevenue.toLocaleString()}`}   color="var(--accent)" sub={`${startDate} to ${endDate}`} />
-        <MetricCard label="Total orders"     value={totalOrders}                            sub={`${startDate} to ${endDate}`} />
-        <MetricCard label="Amount collected" value={`$${totalCollected.toLocaleString()}`} sub={`${startDate} to ${endDate}`} />
-        <MetricCard label="Total spent"      value={`$${totalSpent.toLocaleString()}`}     color="var(--danger)" sub={`${startDate} to ${endDate}`} />
-        <MetricCard label={netMode === 'cash' ? 'Net value (cash)' : 'Net value (accrual)'} value={`$${netValue.toLocaleString()}`} color={netValue >= 0 ? 'var(--accent)' : 'var(--danger)'} sub={`${startDate} to ${endDate}`} />
+        <MetricCard label="إجمالي المبيعات"   value={egp(totalRevenue)}   color="var(--accent)" sub={`${startDate} إلى ${endDate}`} />
+        <MetricCard label="عدد الأوامر"       value={totalOrders}         sub={`${startDate} إلى ${endDate}`} />
+        <MetricCard label="المحصّل"           value={egp(totalCollected)} sub={`${startDate} إلى ${endDate}`} />
+        <MetricCard label="إجمالي المصروف"    value={egp(totalSpent)}     color="var(--danger)" sub={`${startDate} إلى ${endDate}`} />
+        <MetricCard label={netMode === 'cash' ? 'الصافي (نقدي)' : 'الصافي (استحقاق)'} value={egp(netValue)} color={netValue >= 0 ? 'var(--accent)' : 'var(--danger)'} sub={`${startDate} إلى ${endDate}`} />
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
-          <SectionTitle>Monthly sales cashflow — {startDate} to {endDate}</SectionTitle>
+          <SectionTitle>التدفق النقدي الشهري — من {startDate} إلى {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={monthly}>
               <defs>
@@ -465,41 +435,41 @@ const SalesTab = ({ startDate, endDate }) => {
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<TT prefix="$" />} />
+              <Tooltip content={<TT suffix=" ج.م" />} />
               <Legend iconSize={8} wrapperStyle={{ fontSize:11, color:'var(--text-secondary)' }} />
-              <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#22d3a0" strokeWidth={2} fill="url(#revGrad)" />
-              <Area type="monotone" dataKey="total_spent" name="Spent" stroke="#f05252" strokeWidth={2} fillOpacity={0} />
-              <Area type="monotone" dataKey={netMode === 'cash' ? 'net_value' : 'accrual_net_value'} name={netMode === 'cash' ? 'Cash net' : 'Accrual net'} stroke="#60a5fa" strokeWidth={2} fill="url(#netGrad)" />
+              <Area type="monotone" dataKey="revenue" name="المبيعات" stroke="#22d3a0" strokeWidth={2} fill="url(#revGrad)" />
+              <Area type="monotone" dataKey="total_spent" name="المصروف" stroke="#f05252" strokeWidth={2} fillOpacity={0} />
+              <Area type="monotone" dataKey={netMode === 'cash' ? 'net_value' : 'accrual_net_value'} name={netMode === 'cash' ? 'صافي نقدي' : 'صافي استحقاق'} stroke="#60a5fa" strokeWidth={2} fill="url(#netGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </Card>
         <Card>
-          <SectionTitle>Spend summary</SectionTitle>
+          <SectionTitle>ملخص المصروفات</SectionTitle>
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text-secondary)' }}>Payroll spent</span>
-              <span style={{ color:'var(--danger)', fontWeight:600 }}>${Number(data?.summary?.payroll_spent || 0).toLocaleString()}</span>
+              <span style={{ color:'var(--text-secondary)' }}>المرتبات</span>
+              <span style={{ color:'var(--danger)', fontWeight:600 }}>{egp(data?.summary?.payroll_spent)}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text-secondary)' }}>Materials spent</span>
-              <span style={{ color:'var(--warn)', fontWeight:600 }}>${Number(data?.summary?.materials_spent || 0).toLocaleString()}</span>
+              <span style={{ color:'var(--text-secondary)' }}>الخامات</span>
+              <span style={{ color:'var(--warn)', fontWeight:600 }}>{egp(data?.summary?.materials_spent)}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text-secondary)' }}>Extra spent</span>
-              <span style={{ color:'#f59e0b', fontWeight:600 }}>${Number(data?.summary?.extra_spent || 0).toLocaleString()}</span>
+              <span style={{ color:'var(--text-secondary)' }}>مصروفات إضافية</span>
+              <span style={{ color:'#f59e0b', fontWeight:600 }}>{egp(data?.summary?.extra_spent)}</span>
             </div>
             <div style={{ height:1, background:'var(--border)' }} />
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text-secondary)' }}>Total spent</span>
-              <span style={{ color:'var(--danger)', fontWeight:700 }}>${Number(data?.summary?.total_spent || 0).toLocaleString()}</span>
+              <span style={{ color:'var(--text-secondary)' }}>إجمالي المصروف</span>
+              <span style={{ color:'var(--danger)', fontWeight:700 }}>{egp(data?.summary?.total_spent)}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text-secondary)' }}>Cash net value</span>
-              <span style={{ color:Number(data?.summary?.net_value || 0) >= 0 ? 'var(--accent)' : 'var(--danger)', fontWeight:700 }}>${Number(data?.summary?.net_value || 0).toLocaleString()}</span>
+              <span style={{ color:'var(--text-secondary)' }}>الصافي النقدي</span>
+              <span style={{ color:Number(data?.summary?.net_value || 0) >= 0 ? 'var(--accent)' : 'var(--danger)', fontWeight:700 }}>{egp(data?.summary?.net_value)}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:'var(--text-secondary)' }}>Accrual net value</span>
-              <span style={{ color:Number(data?.summary?.accrual_net_value || 0) >= 0 ? 'var(--accent)' : 'var(--danger)', fontWeight:700 }}>${Number(data?.summary?.accrual_net_value || 0).toLocaleString()}</span>
+              <span style={{ color:'var(--text-secondary)' }}>صافي الاستحقاق</span>
+              <span style={{ color:Number(data?.summary?.accrual_net_value || 0) >= 0 ? 'var(--accent)' : 'var(--danger)', fontWeight:700 }}>{egp(data?.summary?.accrual_net_value)}</span>
             </div>
           </div>
         </Card>
@@ -507,7 +477,7 @@ const SalesTab = ({ startDate, endDate }) => {
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
-          <SectionTitle>Top customers by collections</SectionTitle>
+          <SectionTitle>أكبر العملاء في التحصيل</SectionTitle>
           {(data.top_customers||[]).map((c,i) => (
             <div key={i} style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
               <div style={{ width:24, height:24, borderRadius:'50%', background:COLORS[i%COLORS.length]+'22',
@@ -516,21 +486,21 @@ const SalesTab = ({ startDate, endDate }) => {
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:13, fontWeight:500 }}>{c.name}</div>
-                <div style={{ fontSize:11, color:'var(--text-muted)' }}>{c.orders} orders · ${Number(c.revenue||0).toLocaleString()} revenue</div>
+                <div style={{ fontSize:11, color:'var(--text-muted)' }}>{c.orders} أمر · مبيعات {egp(c.revenue)}</div>
               </div>
-              <div style={{ fontSize:13, fontWeight:600, color:'var(--accent)' }}>${Number(c.collected||0).toLocaleString()}</div>
+              <div style={{ fontSize:13, fontWeight:600, color:'var(--accent)' }}>{egp(c.collected)}</div>
             </div>
           ))}
-          {!data.top_customers?.length && <div style={{ color:'var(--text-muted)', fontSize:13 }}>No data yet</div>}
+          {!data.top_customers?.length && <div style={{ color:'var(--text-muted)', fontSize:13 }}>لا توجد بيانات</div>}
         </Card>
         <Card>
-          <SectionTitle>Orders per month</SectionTitle>
+          <SectionTitle>الأوامر في الشهر</SectionTitle>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthly} barCategoryGap="35%">
               <XAxis dataKey="name" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip content={<TT />} cursor={{ fill:'rgba(255,255,255,0.04)' }} />
-              <Bar dataKey="orders" name="Orders" fill="#60a5fa" radius={[4,4,0,0]} />
+              <Bar dataKey="orders" name="الأوامر" fill="#60a5fa" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -545,7 +515,8 @@ const getStageLabel = (stage) => {
     case 'cutting': return '1. القص';
     case 'sorting': return '2. الفرز';
     case 'printing': return '3. المطبعة';
-    case 'ready_for_delivery': return '4. جاهز للتسليم';
+    case 'machines': return '4. المكن';
+    case 'ready_for_delivery': return '5. جاهز للتسليم';
     case 'delivered': return '✓ تم التسليم';
     default: return stage;
   }
@@ -597,7 +568,7 @@ const ProductionTab = ({ startDate, endDate }) => {
           {
             title: 'Model-by-Model Output & Defect Matrix',
             description: 'Granular tracking of cut quantities, sorting, final delivery, and losses per model.',
-            head: ['Model #', 'Model Name', 'Orders', 'Cut Units', 'Sorted', 'Delivered', 'Loss', 'Revenue ($)'],
+            head: ['Model #', 'Model Name', 'Orders', 'Cut Units', 'Sorted', 'Delivered', 'Loss', 'Revenue (EGP)'],
             rows: models.map(m => [
               m.model_number,
               m.model_name || '—',
@@ -636,7 +607,7 @@ const ProductionTab = ({ startDate, endDate }) => {
           {
             title: 'Monthly Production Output Trend',
             description: 'Monthly progression of orders placed, completed batches, and garment volume.',
-            head: ['Month', 'Total Orders', 'Delivered Orders', 'Cut Units', 'Delivered Units', 'Delivered Revenue ($)'],
+            head: ['Month', 'Total Orders', 'Delivered Orders', 'Cut Units', 'Delivered Units', 'Delivered Revenue (EGP)'],
             rows: monthly.map(r => [
               r.name,
               r.total || 0,
@@ -659,7 +630,7 @@ const ProductionTab = ({ startDate, endDate }) => {
       await exportExcel(`production-pipeline-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Monthly Trend',
-          headers: ['Month', 'Total Orders', 'Delivered Orders', 'Cut Units', 'Delivered Units', 'Delivered Revenue'],
+          headers: ['الشهر', 'إجمالي الأوامر', 'الأوامر المسلّمة', 'القطع المقصوصة', 'القطع المسلّمة', 'قيمة المسلّم (ج.م)'],
           rows: monthly.map(r => [
             r.name,
             r.total || 0,
@@ -671,7 +642,7 @@ const ProductionTab = ({ startDate, endDate }) => {
         },
         {
           sheetName: 'Print Shops',
-          headers: ['Print Shop', 'Phone', 'Orders', 'Sent Units', 'Received Units', 'Loss Units', 'Loss Rate %'],
+          headers: ['المطبعة', 'التليفون', 'الأوامر', 'القطع المرسلة', 'القطع المستلمة', 'الهالك', 'نسبة الهالك %'],
           rows: printShops.map(p => [
             p.print_shop_name,
             p.phone || '',
@@ -684,7 +655,7 @@ const ProductionTab = ({ startDate, endDate }) => {
         },
         {
           sheetName: 'Models Performance',
-          headers: ['Model #', 'Model Name', 'Orders', 'Cut Units', 'Sorted Units', 'Delivered Units', 'Loss Units', 'Delivered Revenue'],
+          headers: ['رقم الموديل', 'اسم الموديل', 'الأوامر', 'القطع المقصوصة', 'القطع المفروزة', 'القطع المسلّمة', 'الهالك', 'قيمة المسلّم (ج.م)'],
           rows: models.map(m => [
             m.model_number,
             m.model_name || '',
@@ -698,7 +669,7 @@ const ProductionTab = ({ startDate, endDate }) => {
         },
         {
           sheetName: 'Stages Breakdown',
-          headers: ['Stage', 'Stage Name', 'Orders Count', 'Total Units'],
+          headers: ['المرحلة', 'اسم المرحلة', 'عدد الأوامر', 'إجمالي القطع'],
           rows: stageBreakdown.map(s => [s.stage, s.name, s.orders, s.units]),
         },
       ]);
@@ -1010,17 +981,17 @@ const HRTab = ({ startDate, endDate }) => {
             title: 'Payroll Financial Liability Summary',
             description: 'Disbursed wages, pending liabilities, overtime incentives, and employee deductions.',
             metrics: [
-              { label: 'Total Liability', value: `$${Number(pr.total_payout || 0).toLocaleString()}`, desc: 'Total calculated wages' },
-              { label: 'Paid Out', value: `$${Number(pr.paid_payout || 0).toLocaleString()}`, desc: 'Disbursed to workers' },
-              { label: 'Pending Payout', value: `$${Number(Math.max(0, (pr.total_payout || 0) - (pr.paid_payout || 0))).toLocaleString()}`, desc: 'Awaiting disbursement' },
-              { label: 'Overtime & Bonuses', value: `$${Number(pr.total_bonuses || 0).toLocaleString()}`, desc: 'Production overtime incentives' },
-              { label: 'Deductions', value: `$${Number(pr.total_deductions || 0).toLocaleString()}`, desc: 'Late, absent, loan installments' },
+              { label: 'Total Liability', value: `EGP ${Number(pr.total_payout || 0).toLocaleString()}`, desc: 'Total calculated wages' },
+              { label: 'Paid Out', value: `EGP ${Number(pr.paid_payout || 0).toLocaleString()}`, desc: 'Disbursed to workers' },
+              { label: 'Pending Payout', value: `EGP ${Number(Math.max(0, (pr.total_payout || 0) - (pr.paid_payout || 0))).toLocaleString()}`, desc: 'Awaiting disbursement' },
+              { label: 'Overtime & Bonuses', value: `EGP ${Number(pr.total_bonuses || 0).toLocaleString()}`, desc: 'Production overtime incentives' },
+              { label: 'Deductions', value: `EGP ${Number(pr.total_deductions || 0).toLocaleString()}`, desc: 'Late, absent, loan installments' },
             ],
           },
           {
             title: 'Monthly Payroll Payout History',
             description: 'Monthly disbursement status and reconciliation of wages.',
-            head: ['Month', 'Paid Payroll ($)', 'Pending Payroll ($)', 'Total Payroll ($)'],
+            head: ['Month', 'Paid Payroll (EGP)', 'Pending Payroll (EGP)', 'Total Payroll (EGP)'],
             rows: payrollHistory.map(r => [
               r.name,
               Number(r.paid_payout).toLocaleString(),
@@ -1065,22 +1036,22 @@ const HRTab = ({ startDate, endDate }) => {
       await exportExcel(`hr-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Payroll History',
-          headers: ['Month','Paid Payroll ($)','Pending Payroll ($)','Total Payroll ($)','Paid Records','Total Records'],
+          headers: ['الشهر','المرتبات المدفوعة (ج.م)','المرتبات غير المدفوعة (ج.م)','إجمالي المرتبات (ج.م)','مرتبات مدفوعة','إجمالي المرتبات'],
           rows: normalizeMonthlyRows(data?.payroll_history||[]).map(r => [r.name, r.paid_payout||0, r.pending_payout||0, r.total_payout||0, r.paid_records||0, r.total_records||0]),
         },
         {
           sheetName: 'Attendance by Dept',
-          headers: ['Department','Records','Present','Absent','Hours'],
+          headers: ['القسم','السجلات','حضور','غياب','الساعات'],
           rows: (data?.by_department||[]).map(d => [d.department, d.records, d.present, d.absent, d.hours]),
         },
         {
           sheetName: 'Attendance Status',
-          headers: ['Status','Count'],
+          headers: ['الحالة','العدد'],
           rows: (data?.attendance_summary||[]).map(a => [a.status, a.count]),
         },
         {
           sheetName: 'Top Hours',
-          headers: ['Employee','Total Hours','Days Logged'],
+          headers: ['الموظف','إجمالي الساعات','أيام الحضور'],
           rows: (data?.top_hours||[]).map(e => [e.name, e.total_hours, e.days_logged]),
         },
       ]);
@@ -1108,29 +1079,29 @@ const HRTab = ({ startDate, endDate }) => {
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
-        <MetricCard label="Payroll payout" value={`$${Number(pr.total_payout||0).toLocaleString()}`} color="var(--accent)" />
-        <MetricCard label="Paid payroll"   value={`$${Number(pr.paid_payout||0).toLocaleString()}`} color="var(--danger)" />
-        <MetricCard label="Pending payroll" value={`$${Number(pr.pending_payout||0).toLocaleString()}`} />
-        <MetricCard label="Paid employees" value={`${pr.paid_count||0} / ${pr.total_records||0}`} />
+        <MetricCard label="إجمالي المرتبات" value={egp(pr.total_payout)} color="var(--accent)" />
+        <MetricCard label="المرتبات المدفوعة" value={egp(pr.paid_payout)} color="var(--danger)" />
+        <MetricCard label="المرتبات غير المدفوعة" value={egp(pr.pending_payout)} />
+        <MetricCard label="الموظفين اللي قبضوا" value={`${pr.paid_count||0} / ${pr.total_records||0}`} />
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:16 }}>
         <Card>
-          <SectionTitle>Payroll spend history — {startDate} to {endDate}</SectionTitle>
+          <SectionTitle>المرتبات المصروفة — من {startDate} إلى {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={payrollHistory} barCategoryGap="25%">
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<TT prefix="$" />} cursor={{ fill:'rgba(255,255,255,0.04)' }} />
+              <Tooltip content={<TT suffix=" ج.م" />} cursor={{ fill:'rgba(255,255,255,0.04)' }} />
               <Legend iconSize={8} wrapperStyle={{ fontSize:11, color:'var(--text-secondary)' }} />
-              <Bar dataKey="paid_payout" name="Paid payroll" fill="#f05252" radius={[4,4,0,0]} />
-              <Bar dataKey="pending_payout" name="Pending payroll" fill="#60a5fa" radius={[4,4,0,0]} />
+              <Bar dataKey="paid_payout" name="مدفوع" fill="#f05252" radius={[4,4,0,0]} />
+              <Bar dataKey="pending_payout" name="غير مدفوع" fill="#60a5fa" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
         <Card>
-          <SectionTitle>Attendance breakdown — {startDate} to {endDate}</SectionTitle>
+          <SectionTitle>الحضور والغياب — من {startDate} إلى {endDate}</SectionTitle>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={data.attendance_summary||[]} dataKey="count" nameKey="status"
@@ -1149,21 +1120,21 @@ const HRTab = ({ startDate, endDate }) => {
           </ResponsiveContainer>
         </Card>
         <Card>
-          <SectionTitle>Attendance by department</SectionTitle>
+          <SectionTitle>الحضور حسب القسم</SectionTitle>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data.by_department||[]} layout="vertical" barCategoryGap="25%">
               <XAxis type="number" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="department" tick={{ fill:'var(--text-muted)', fontSize:11 }} axisLine={false} tickLine={false} width={80} />
               <Tooltip content={<TT />} cursor={{ fill:'rgba(255,255,255,0.04)' }} />
-              <Bar dataKey="present" name="Present" fill="#22d3a0" radius={[0,4,4,0]} />
-              <Bar dataKey="absent"  name="Absent"  fill="#f05252" radius={[0,4,4,0]} />
+              <Bar dataKey="present" name="حضور" fill="#22d3a0" radius={[0,4,4,0]} />
+              <Bar dataKey="absent"  name="غياب"  fill="#f05252" radius={[0,4,4,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
       </div>
 
       <Card>
-        <SectionTitle>Top employees by hours — {startDate} to {endDate}</SectionTitle>
+        <SectionTitle>أكتر الموظفين ساعات شغل — من {startDate} إلى {endDate}</SectionTitle>
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {(data.top_hours||[]).map((e,i) => (
             <div key={i} style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -1174,7 +1145,7 @@ const HRTab = ({ startDate, endDate }) => {
               <div style={{ flex:1 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
                   <span style={{ fontSize:13, fontWeight:500 }}>{e.name}</span>
-                  <span style={{ fontSize:12, color:'var(--text-muted)' }}>{e.total_hours}h · {e.days_logged} days</span>
+                  <span style={{ fontSize:12, color:'var(--text-muted)' }}>{e.total_hours} ساعة · {e.days_logged} يوم</span>
                 </div>
                 <div style={{ height:5, background:'var(--bg-hover)', borderRadius:99 }}>
                   <div style={{ width:`${Math.min((e.total_hours/Math.max(...(data.top_hours||[]).map(x=>x.total_hours),1))*100,100)}%`,
@@ -1183,7 +1154,7 @@ const HRTab = ({ startDate, endDate }) => {
               </div>
             </div>
           ))}
-          {!data.top_hours?.length && <div style={{ color:'var(--text-muted)', fontSize:13 }}>No data yet</div>}
+          {!data.top_hours?.length && <div style={{ color:'var(--text-muted)', fontSize:13 }}>لا توجد بيانات</div>}
         </div>
       </Card>
     </div>
@@ -1279,7 +1250,7 @@ const PrintShopsTab = ({ startDate, endDate }) => {
       await exportExcel(`print-shops-report-${startDate}-to-${endDate}.xlsx`, [
         {
           sheetName: 'Print Shops Performance',
-          headers: ['Print Shop', 'Phone', 'Contact Person', 'Total Orders', 'Active Orders', 'Sent Units', 'Received Units', 'Loss Units', 'Loss Rate %'],
+          headers: ['المطبعة', 'التليفون', 'المسؤول', 'إجمالي الأوامر', 'أوامر جارية', 'القطع المرسلة', 'القطع المستلمة', 'الهالك', 'نسبة الهالك %'],
           rows: printShops.map(p => [
             p.print_shop_name,
             p.phone || '',
@@ -1294,7 +1265,7 @@ const PrintShopsTab = ({ startDate, endDate }) => {
         },
         {
           sheetName: 'Dispatches History',
-          headers: ['Order #', 'Model #', 'Order Name', 'Print Shop', 'Sent Date', 'Received Date', 'Sent Units', 'Received Units', 'Stage'],
+          headers: ['رقم الأمر', 'رقم الموديل', 'اسم الأمر', 'المطبعة', 'تاريخ الإرسال', 'تاريخ الاستلام', 'القطع المرسلة', 'القطع المستلمة', 'المرحلة'],
           rows: recentDispatches.map(d => [
             d.order_number,
             d.model_number,

@@ -80,7 +80,7 @@ export default function ProductionSortingPhase() {
         next_action: nextAction,
       });
 
-      const destination = nextAction === 'delivery' ? 'جاهز للتسليم' : 'المطبعة';
+      const destination = nextAction === 'delivery' ? 'المكن' : 'المطبعة';
       setSuccessMsg(`تم اعتماد الفرز بنجاح للأوردر ${updated.model_number}! تم التحويل إلى: ${destination}.`);
       setSelectedOrder(null);
       await refetch();
@@ -258,7 +258,7 @@ export default function ProductionSortingPhase() {
                   checked={nextAction === 'delivery'}
                   onChange={() => setNextAction('delivery')}
                 />
-                <span>🚚 تخطي المطبعة (سادة ← تسليم مباشر)</span>
+                <span>⚙️ تخطي المطبعة (سادة ← المكن مباشرة)</span>
               </label>
             </div>
 

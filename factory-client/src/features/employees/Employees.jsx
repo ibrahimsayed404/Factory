@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { employeeApi } from './employees.api';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, Table, Badge, Btn, Modal, Input, Select, Spinner, ErrorMsg, SearchInput } from '../../components/ui';
+import { useLanguage } from '../../context/LanguageContext';
 
 const SHIFT_DEFAULTS = {
   morning: { start: '08:00', end: '17:00' },
@@ -10,19 +11,14 @@ const SHIFT_DEFAULTS = {
 };
 
 const WEEK_DAYS = [
-  { index: 0, label: 'Sun' },
-  { index: 1, label: 'Mon' },
-  { index: 2, label: 'Tue' },
-  { index: 3, label: 'Wed' },
-  { index: 4, label: 'Thu' },
-  { index: 5, label: 'Fri' },
-  { index: 6, label: 'Sat' },
+  { index: 0, key: 'emp_daySun', label: 'Sun' },
+  { index: 1, key: 'emp_dayMon', label: 'Mon' },
+  { index: 2, key: 'emp_dayTue', label: 'Tue' },
+  { index: 3, key: 'emp_dayWed', label: 'Wed' },
+  { index: 4, key: 'emp_dayThu', label: 'Thu' },
+  { index: 5, key: 'emp_dayFri', label: 'Fri' },
+  { index: 6, key: 'emp_daySat', label: 'Sat' },
 ];
-
-const WEEK_DAY_LABELS = WEEK_DAYS.reduce((acc, day) => {
-  acc[day.index] = day.label;
-  return acc;
-}, {});
 
 const parseWeekendDays = (value) =>
   String(value || '5')
@@ -35,23 +31,24 @@ const serializeWeekendDays = (days) =>
     .sort((a, b) => a - b)
     .join(',');
 
-const formatTime12h = (value) => {
+const formatTime12h = (value, lang = 'en') => {
   if (!value || value === '—') return '—';
   const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
   if (!match) return String(value);
   let h = parseInt(match[1], 10);
   const m = match[2];
   if (Number.isNaN(h)) return String(value);
-  const period = h >= 12 ? 'PM' : 'AM';
+  const period = lang === 'ar' ? (h >= 12 ? 'م' : 'ص') : (h >= 12 ? 'PM' : 'AM');
   h = h % 12;
   if (h === 0) h = 12;
   return `${h}:${m} ${period}`;
 };
 
 const WeekendChips = ({ value }) => {
+  const { t } = useLanguage();
   const days = parseWeekendDays(value);
   if (!days.length) {
-    return <span style={{ color: 'var(--text-muted)' }}>None</span>;
+    return <span style={{ color: 'var(--text-muted)' }}>{t('emp_none', 'None')}</span>;
   }
 
   return (
@@ -70,7 +67,7 @@ const WeekendChips = ({ value }) => {
             lineHeight: 1.5,
           }}
         >
-          {WEEK_DAY_LABELS[d]}
+          {t(WEEK_DAYS[d].key, WEEK_DAYS[d].label)}
         </span>
       ))}
     </div>
@@ -84,6 +81,7 @@ const emptyForm = {
 };
 
 export default function Employees() {
+  const { t, language } = useLanguage();
   const { data: employees, loading, error, refetch } = useFetch(employeeApi.list);
   const { data: departments } = useFetch(employeeApi.departments);
   const [showModal, setShowModal] = useState(false);
@@ -122,12 +120,12 @@ export default function Employees() {
   };
 
   const validateForm = () => {
-    if (!form.name.trim()) return 'Name is required.';
-    if (!form.department_id) return 'Department is required.';
-    if (!form.shift) return 'Shift is required.';
-    if (!form.shift_start) return 'Shift start is required.';
-    if (!form.shift_end) return 'Shift end is required.';
-    if (form.salary !== '' && (isNaN(Number(form.salary)) || Number(form.salary) < 0)) return 'Salary must be a non-negative number.';
+    if (!form.name.trim()) return t('emp_errName', 'Name is required.');
+    if (!form.department_id) return t('emp_errDepartment', 'Department is required.');
+    if (!form.shift) return t('emp_errShift', 'Shift is required.');
+    if (!form.shift_start) return t('emp_errShiftStart', 'Shift start is required.');
+    if (!form.shift_end) return t('emp_errShiftEnd', 'Shift end is required.');
+    if (form.salary !== '' && (isNaN(Number(form.salary)) || Number(form.salary) < 0)) return t('emp_errSalary', 'Salary must be a non-negative number.');
     return '';
   };
 
@@ -153,7 +151,7 @@ export default function Employees() {
       setForm(emptyForm);
       await refetch();
     } catch (err) {
-      setFormError(err?.message || 'Failed to save employee.');
+      setFormError(err?.message || t('emp_errSave', 'Failed to save employee.'));
     } finally {
       setSaving(false);
     }
@@ -161,7 +159,7 @@ export default function Employees() {
 
   const [deletingId, setDeletingId] = useState(null);
   const handleDelete = async (id) => {
-    if (!window.confirm('Terminate this employee? Their historical payroll and attendance data will be preserved.')) return;
+    if (!window.confirm(t('emp_confirmTerminate', 'Terminate this employee? Their historical payroll and attendance data will be preserved.'))) return;
     setDeletingId(id);
     try {
       await employeeApi.delete(id);
@@ -182,7 +180,7 @@ export default function Employees() {
   };
 
   const columns = [
-    { key: 'name', label: 'Name', render: (v) => (
+    { key: 'name', label: t('emp_colName', 'Name'), render: (v) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           width: 28, height: 28, borderRadius: '50%',
@@ -193,23 +191,23 @@ export default function Employees() {
         <span>{v}</span>
       </div>
     )},
-    { key: 'department_name', label: 'Department', render: v => v || '—' },
-    { key: 'device_user_id', label: 'Device ID', render: v => v || '—' },
-    { key: 'role', label: 'Role', render: v => v || '—' },
-    { key: 'shift', label: 'Shift', render: (v, row) => {
-      const label = v ? v.charAt(0).toUpperCase() + v.slice(1) : '—';
-      const start = row.shift_start ? formatTime12h(row.shift_start) : '—';
-      const end = row.shift_end ? formatTime12h(row.shift_end) : '—';
+    { key: 'department_name', label: t('emp_department', 'Department'), render: v => v || '—' },
+    { key: 'device_user_id', label: t('emp_colDeviceId', 'Device ID'), render: v => v || '—' },
+    { key: 'role', label: t('emp_colRole', 'Role'), render: v => v || '—' },
+    { key: 'shift', label: t('emp_shift', 'Shift'), render: (v, row) => {
+      const label = v ? t(`emp_shift_${v}`, v.charAt(0).toUpperCase() + v.slice(1)) : '—';
+      const start = row.shift_start ? formatTime12h(row.shift_start, language) : '—';
+      const end = row.shift_end ? formatTime12h(row.shift_end, language) : '—';
       return `${label} (${start} - ${end})`;
     } },
-    { key: 'weekend_days', label: 'Weekend', render: v => <WeekendChips value={v} /> },
-    { key: 'salary', label: 'Weekly Salary', render: v => v ? `$${Number(v).toLocaleString()}` : '—' },
-    { key: 'status', label: 'Status', render: v => <Badge variant={v === 'active' ? 'success' : 'default'}>{v}</Badge> },
+    { key: 'weekend_days', label: t('emp_colWeekend', 'Weekend'), render: v => <WeekendChips value={v} /> },
+    { key: 'salary', label: t('emp_colWeeklySalary', 'Weekly Salary'), render: v => v ? `${Number(v).toLocaleString('en-US')} ${t('currency', 'EGP')}` : '—' },
+    { key: 'status', label: t('emp_status', 'Status'), render: v => <Badge variant={v === 'active' ? 'success' : 'default'}>{t(`emp_status_${v}`, v)}</Badge> },
     { key: 'actions', label: '', render: (_, row) => (
       <div style={{ display: 'flex', gap: 6 }}>
-        <Btn size="sm" onClick={e => { e.stopPropagation(); openEdit(row); }} disabled={deletingId === row.id}>Edit</Btn>
+        <Btn size="sm" onClick={e => { e.stopPropagation(); openEdit(row); }} disabled={deletingId === row.id}>{t('emp_edit', 'Edit')}</Btn>
         <Btn size="sm" variant="danger" onClick={e => { e.stopPropagation(); handleDelete(row.id); }} disabled={deletingId === row.id} aria-busy={deletingId === row.id}>
-          {deletingId === row.id ? <Spinner /> : 'Del'}
+          {deletingId === row.id ? <Spinner /> : t('emp_terminate', 'Del')}
         </Btn>
       </div>
     )},
@@ -217,8 +215,8 @@ export default function Employees() {
 
   return (
     <div style={{ padding: '28px 28px 40px' }}>
-      <PageHeader title="Employees" subtitle="Manage your factory workforce"
-        action={<Btn variant="primary" onClick={openCreate}>+ Add employee</Btn>}
+      <PageHeader title={t('emp_title', 'Employees')} subtitle={t('emp_subtitle', 'Manage your factory workforce')}
+        action={<Btn variant="primary" onClick={openCreate}>{t('emp_addBtn', '+ Add employee')}</Btn>}
       />
       {loading && <Spinner />}
       {error && <ErrorMsg msg={error} />}
@@ -226,7 +224,7 @@ export default function Employees() {
         <>
           <Card padding="12px 16px" style={{ marginBottom: 16 }}>
             <SearchInput 
-              placeholder="Search by name, department, role, phone, or device ID..." 
+              placeholder={t('emp_search', 'Search by name, department, role, phone, or device ID...')} 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -236,22 +234,22 @@ export default function Employees() {
       )}
 
       {showModal && (
-        <Modal title={editing ? 'Edit employee' : 'Add employee'} onClose={() => setShowModal(false)} width={520}>
+        <Modal title={editing ? t('emp_editEmployee', 'Edit employee') : t('emp_addEmployee', 'Add employee')} onClose={() => setShowModal(false)} width={520}>
           {formError && (
             <div style={{ color: 'var(--danger)', marginBottom: 12, fontWeight: 600, gridColumn: '1/-1' }}>
               {formError}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1/-1' }}><Input label="Full name" value={form.name} onChange={f('name')} /></div>
-            <Input label="Phone" value={form.phone} onChange={f('phone')} />
-            <Select label="Department" value={form.department_id} onChange={f('department_id')}>
-              <option value="">Select department</option>
+            <div style={{ gridColumn: '1/-1' }}><Input label={t('emp_fullName', 'Full name')} value={form.name} onChange={f('name')} /></div>
+            <Input label={t('emp_phone', 'Phone')} value={form.phone} onChange={f('phone')} />
+            <Select label={t('emp_department', 'Department')} value={form.department_id} onChange={f('department_id')}>
+              <option value="">{t('emp_selectDepartment', 'Select department')}</option>
               {departments?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Select>
-            <Input label="Role / Position" value={form.role} onChange={f('role')} />
-            <Input label="Device user ID" value={form.device_user_id || ''} onChange={f('device_user_id')} />
-            <Select label="Shift" value={form.shift} onChange={e => {
+            <Input label={t('emp_rolePosition', 'Role / Position')} value={form.role} onChange={f('role')} />
+            <Input label={t('emp_deviceUserId', 'Device user ID')} value={form.device_user_id || ''} onChange={f('device_user_id')} />
+            <Select label={t('emp_shift', 'Shift')} value={form.shift} onChange={e => {
               const nextShift = e.target.value;
               const defaults = SHIFT_DEFAULTS[nextShift] || { start: '', end: '' };
               setForm({
@@ -261,15 +259,15 @@ export default function Employees() {
                 shift_end: form.shift_end || defaults.end,
               });
             }}>
-              <option value="morning">Morning</option>
-              <option value="evening">Evening</option>
-              <option value="night">Night</option>
+              <option value="morning">{t('emp_shift_morning', 'Morning')}</option>
+              <option value="evening">{t('emp_shift_evening', 'Evening')}</option>
+              <option value="night">{t('emp_shift_night', 'Night')}</option>
             </Select>
-            <Input label="Shift start" type="time" value={form.shift_start} onChange={f('shift_start')} />
-            <Input label="Shift end" type="time" value={form.shift_end} onChange={f('shift_end')} />
+            <Input label={t('emp_shiftStart', 'Shift start')} type="time" value={form.shift_start} onChange={f('shift_start')} />
+            <Input label={t('emp_shiftEnd', 'Shift end')} type="time" value={form.shift_end} onChange={f('shift_end')} />
             <div style={{ gridColumn: '1/-1' }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                Weekend days
+                {t('emp_weekendDays', 'Weekend days')}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}>
                 {WEEK_DAYS.map((day) => {
@@ -299,30 +297,30 @@ export default function Employees() {
                         onChange={() => toggleWeekendDay(day.index)}
                         style={{ margin: 0 }}
                       />
-                      {day.label}
+                      {t(day.key, day.label)}
                     </label>
                   );
                 })}
               </div>
             </div>
-            <Select label="Status" value={form.status} onChange={f('status')}>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+            <Select label={t('emp_status', 'Status')} value={form.status} onChange={f('status')}>
+              <option value="active">{t('emp_status_active', 'Active')}</option>
+              <option value="inactive">{t('emp_status_inactive', 'Inactive')}</option>
             </Select>
-            <Input label="Salary ($)" type="number" value={form.salary} onChange={f('salary')} />
+            <Input label={`${t('emp_salary', 'Salary')} (${t('currency', 'EGP')})`} type="number" value={form.salary} onChange={f('salary')} />
             {editing && (
               <Input
-                label="Reason for salary change (optional)"
-                placeholder="e.g. Annual Raise, Promotion"
+                label={t('emp_salaryReason', 'Reason for salary change (optional)')}
+                placeholder={t('emp_salaryReasonPh', 'e.g. Annual Raise, Promotion')}
                 value={form.reason || ''}
                 onChange={f('reason')}
               />
             )}
-            <Input label="Hire date" type="date" value={form.hire_date} onChange={f('hire_date')} />
+            <Input label={t('emp_hireDate', 'Hire date')} type="date" value={form.hire_date} onChange={f('hire_date')} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-            <Btn onClick={() => setShowModal(false)}>Cancel</Btn>
-            <Btn variant="primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn>
+            <Btn onClick={() => setShowModal(false)}>{t('emp_cancel', 'Cancel')}</Btn>
+            <Btn variant="primary" onClick={handleSave} disabled={saving}>{saving ? t('emp_saving', 'Saving…') : t('emp_save', 'Save')}</Btn>
           </div>
         </Modal>
       )}
