@@ -5,6 +5,7 @@ import {
   AreaChart, Area, CartesianGrid,
 } from 'recharts';
 import { reportsApi } from './reports.api';
+import ExpensesCard from './ExpensesCard';
 import { useFetch } from '../../hooks/useFetch';
 import { PageHeader, Card, MetricCard, Spinner, ErrorMsg, Badge, Btn } from '../../components/ui';
 import {
@@ -245,13 +246,6 @@ const SalesTab = ({ startDate, endDate }) => {
   );
   const [exporting, setExporting] = useState('');
   const [netMode, setNetMode] = useState('cash');
-  const [addingExpense, setAddingExpense] = useState(false);
-  const [expenseError, setExpenseError] = useState('');
-  const [expenseForm, setExpenseForm] = useState(() => {
-    const now = new Date();
-    const expenseDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return { expense_date: expenseDate, amount: '', category: '', notes: '' };
-  });
 
   const handlePDF = async (action = 'print') => {
     setExporting(action === 'download' ? 'pdf-download' : 'pdf-print');
@@ -383,25 +377,6 @@ const SalesTab = ({ startDate, endDate }) => {
   if (error) return <ErrorMsg msg={error} />;
   if (!data) return null;
 
-  const addExpense = async () => {
-    setAddingExpense(true);
-    setExpenseError('');
-    try {
-      await reportsApi.addSalesExpense({
-        expense_date: expenseForm.expense_date,
-        amount: Number(expenseForm.amount),
-        category: expenseForm.category,
-        notes: expenseForm.notes,
-      });
-      setExpenseForm({ ...expenseForm, amount: '', category: '', notes: '' });
-      await refetch();
-    } catch (e) {
-      setExpenseError(e.message);
-    } finally {
-      setAddingExpense(false);
-    }
-  };
-
   const monthly = normalizeMonthlyRows(data.monthly || []);
   const totalRevenue   = (data.monthly||[]).reduce((a,r) => a+(r.revenue||0),0);
   const totalOrders    = (data.monthly||[]).reduce((a,r) => a+(r.orders||0),0);
@@ -423,21 +398,7 @@ const SalesTab = ({ startDate, endDate }) => {
         </div>
       </div>
 
-      <Card>
-        <SectionTitle>Add extra spent money</SectionTitle>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:10, alignItems:'end' }}>
-          <input type="date" value={expenseForm.expense_date} onChange={e => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <input type="number" min="0.01" placeholder="Amount" value={expenseForm.amount} onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <input type="text" placeholder="Category" value={expenseForm.category} onChange={e => setExpenseForm({ ...expenseForm, category: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <input type="text" placeholder="Notes" value={expenseForm.notes} onChange={e => setExpenseForm({ ...expenseForm, notes: e.target.value })}
-            style={{ background:'var(--bg-elevated)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-primary)', padding:'8px 10px', fontSize:13 }} />
-          <Btn size="sm" variant="primary" onClick={addExpense} disabled={addingExpense || !expenseForm.amount}>{addingExpense ? 'Saving…' : 'Add expense'}</Btn>
-        </div>
-        {expenseError && <div style={{ marginTop: 10 }}><ErrorMsg msg={expenseError} /></div>}
-      </Card>
+      <ExpensesCard startDate={startDate} endDate={endDate} onChanged={refetch} />
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:14 }}>
         <MetricCard label="Total revenue"    value={`$${totalRevenue.toLocaleString()}`}   color="var(--accent)" sub={`${startDate} to ${endDate}`} />
