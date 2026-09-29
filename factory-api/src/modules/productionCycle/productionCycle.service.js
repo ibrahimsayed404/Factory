@@ -12,9 +12,19 @@ const STAGE_DELIVERED = 'delivered';
 
 // Each step only accepts orders at the stage it belongs to, so an order cannot
 // be re-sorted after delivery, received from print twice, or skip the machines.
+const STAGE_NAMES_AR = {
+  cutting: 'القص',
+  sorting: 'الفرز',
+  printing: 'المطبعة',
+  machines: 'المكن',
+  ready_for_delivery: 'جاهز للتسليم',
+  delivered: 'اتسلم',
+};
+
 const assertStage = (order, allowed, stepName) => {
   if (!allowed.includes(order.current_stage)) {
-    throw new ApiError(400, `لا يمكن تنفيذ ${stepName}: أمر الإنتاج في مرحلة "${order.current_stage}"`);
+    const stage = STAGE_NAMES_AR[order.current_stage] || order.current_stage;
+    throw new ApiError(400, `لا يمكن تنفيذ ${stepName}: أمر الإنتاج في مرحلة "${stage}"`);
   }
 };
 
