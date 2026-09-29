@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 
-export const Table = ({ columns, data, onRowClick, emptyMsg = 'No records found' }) => {
+// LanguageProvider sets <html lang>; reading it keeps this shared component free of app imports.
+const defaultEmptyMsg = () => (globalThis.document?.documentElement?.lang === 'ar' ? 'لا توجد بيانات' : 'No records found');
+
+export const Table = ({ columns, data, onRowClick, emptyMsg }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   const handleSort = (key) => {
@@ -74,7 +77,7 @@ export const Table = ({ columns, data, onRowClick, emptyMsg = 'No records found'
                 padding: '32px 14px', textAlign: 'center',
                 color: 'var(--text-muted)', fontSize: 13,
               }}>
-                {emptyMsg}
+                {emptyMsg || defaultEmptyMsg()}
               </td>
             </tr>
           ) : sortedData.map((row, i) => (

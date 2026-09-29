@@ -547,6 +547,9 @@ const translations = {
     addOrder: '+ Add order',
     orderDetails: 'Order Details',
     failedToLoadOrderDetails: 'Failed to load order details',
+    att_hUnit: 'h',
+    att_mUnit: 'm',
+    noRecordsFound: 'No records found',
   },
   ar: {
     appName: 'بلاك فوكس',
@@ -1089,6 +1092,9 @@ const translations = {
     addOrder: '+ إضافة أمر',
     orderDetails: 'تفاصيل الأمر',
     failedToLoadOrderDetails: 'حصل خطأ أثناء تحميل تفاصيل الأمر',
+    att_hUnit: 'ساعة',
+    att_mUnit: 'د',
+    noRecordsFound: 'لا توجد بيانات',
   },
 };
 

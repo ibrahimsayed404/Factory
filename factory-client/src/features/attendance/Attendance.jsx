@@ -537,7 +537,7 @@ export default function Attendance() {
     { key: 'absentCount', label: t('absent', 'Absent'), render: v => (
       <span style={{ color: 'var(--danger)' }}>{v}</span>
     )},
-    { key: 'totalHrs', label: t('totalHours', 'Total hours'), render: v => `${v}h` },
+    { key: 'totalHrs', label: t('totalHours', 'Total hours'), render: v => `${v} ${t('att_hUnit', 'h')}` },
     { key: 'rate', label: t('attendanceRate', 'Attendance rate'), render: (_, row) => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ flex: 1, height: 5, background: 'var(--bg-hover)', borderRadius: 99, maxWidth: 80 }}>
@@ -557,10 +557,10 @@ export default function Attendance() {
     { key: 'status', label: t('att_status', 'Status'), render: v => <Badge variant={statusVariant(v)}>{t(`att_status_${v}`, v)}</Badge> },
     { key: 'check_in',  label: t('att_checkIn', 'Check in'),  render: v => formatTime(v) },
     { key: 'check_out', label: t('att_checkOut', 'Check out'), render: v => formatTime(v) },
-    { key: 'hours_worked', label: t('att_hours', 'Hours'), render: v => v ? `${v}h` : '—' },
-    { key: 'late_minutes', label: t('att_late', 'Late'), render: v => `${v || 0}m` },
-    { key: 'early_leave_minutes', label: t('att_earlyLeave', 'Early leave'), render: v => `${v || 0}m` },
-    { key: 'overtime_minutes', label: t('att_overtime', 'Overtime'), render: v => `${v || 0}m` },
+    { key: 'hours_worked', label: t('att_hours', 'Hours'), render: v => v ? `${v} ${t('att_hUnit', 'h')}` : '—' },
+    { key: 'late_minutes', label: t('att_late', 'Late'), render: v => `${v || 0} ${t('att_mUnit', 'm')}` },
+    { key: 'early_leave_minutes', label: t('att_earlyLeave', 'Early leave'), render: v => `${v || 0} ${t('att_mUnit', 'm')}` },
+    { key: 'overtime_minutes', label: t('att_overtime', 'Overtime'), render: v => `${v || 0} ${t('att_mUnit', 'm')}` },
     { key: 'notes', label: t('att_notes', 'Notes'), render: (v, row) => (row.inferred_absence ? t('att_inferredAbsence', v) : (v || '—')) },
   ];
 
@@ -587,7 +587,7 @@ export default function Attendance() {
         <MetricCard label={t('att_daysPresent', 'Days present')}  value={totalPresent}          color="var(--accent)" />
         <MetricCard label={t('att_daysLate', 'Days late')}     value={totalLate}             color="var(--warn)" />
         <MetricCard label={t('att_daysAbsent', 'Days absent')}   value={totalAbsent}           color="var(--danger)" />
-        <MetricCard label={t('att_totalHours', 'Total hours')}   value={`${totalHours.toFixed(0)}h`} />
+        <MetricCard label={t('att_totalHours', 'Total hours')}   value={`${totalHours.toFixed(0)} ${t('att_hUnit', 'h')}`} />
       </div>
 
       {/* Date range filter — always visible */}

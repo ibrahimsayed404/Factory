@@ -31,14 +31,14 @@ const serializeWeekendDays = (days) =>
     .sort((a, b) => a - b)
     .join(',');
 
-const formatTime12h = (value) => {
+const formatTime12h = (value, lang = 'en') => {
   if (!value || value === '—') return '—';
   const match = String(value).trim().match(/^(\d{1,2}):(\d{2})/);
   if (!match) return String(value);
   let h = parseInt(match[1], 10);
   const m = match[2];
   if (Number.isNaN(h)) return String(value);
-  const period = h >= 12 ? 'PM' : 'AM';
+  const period = lang === 'ar' ? (h >= 12 ? 'م' : 'ص') : (h >= 12 ? 'PM' : 'AM');
   h = h % 12;
   if (h === 0) h = 12;
   return `${h}:${m} ${period}`;
@@ -81,7 +81,7 @@ const emptyForm = {
 };
 
 export default function Employees() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { data: employees, loading, error, refetch } = useFetch(employeeApi.list);
   const { data: departments } = useFetch(employeeApi.departments);
   const [showModal, setShowModal] = useState(false);
@@ -196,8 +196,8 @@ export default function Employees() {
     { key: 'role', label: t('emp_colRole', 'Role'), render: v => v || '—' },
     { key: 'shift', label: t('emp_shift', 'Shift'), render: (v, row) => {
       const label = v ? t(`emp_shift_${v}`, v.charAt(0).toUpperCase() + v.slice(1)) : '—';
-      const start = row.shift_start ? formatTime12h(row.shift_start) : '—';
-      const end = row.shift_end ? formatTime12h(row.shift_end) : '—';
+      const start = row.shift_start ? formatTime12h(row.shift_start, language) : '—';
+      const end = row.shift_end ? formatTime12h(row.shift_end, language) : '—';
       return `${label} (${start} - ${end})`;
     } },
     { key: 'weekend_days', label: t('emp_colWeekend', 'Weekend'), render: v => <WeekendChips value={v} /> },

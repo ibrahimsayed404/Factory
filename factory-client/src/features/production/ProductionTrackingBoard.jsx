@@ -143,7 +143,7 @@ export default function ProductionTrackingBoard() {
     <div style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
       <PageHeader
         title="لوحة متابعة خط الإنتاج"
-        subtitle="غرفة التحكم الشاملة لمسار الأوردرات عبر مراحل التشغيل الأربعة"
+        subtitle="غرفة التحكم الشاملة لمسار الأوردرات عبر مراحل التشغيل الخمسة"
         action={
           <div style={{ display: 'flex', gap: 10 }}>
             <Btn variant="primary" onClick={() => navigate('/production-orders/cutting')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -466,8 +466,8 @@ export default function ProductionTrackingBoard() {
       {!loading && viewMode === 'kanban' && (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(5, minmax(260px, 1fr))',
-          gap: 16,
+          gridTemplateColumns: 'repeat(5, minmax(180px, 1fr))',
+          gap: 10,
           alignItems: 'start',
           overflowX: 'auto',
           paddingBottom: 20,

@@ -213,14 +213,15 @@ export default function Dashboard() {
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: 16,
                 }}>
-                  {['cutting', 'sorting', 'printing', 'delivery'].map((phase) => {
+                  {['cutting', 'sorting', 'printing', 'machines', 'delivery'].map((phase) => {
                     const fallbackKey = phase === 'cutting' ? 'input' : phase === 'printing' ? 'outsourcing' : phase === 'delivery' ? 'final' : phase;
                     const data = stageEfficiency[phase] || stageEfficiency[fallbackKey] || {};
                     const phaseLabels = {
                       cutting: '1. القص (Cutting)',
                       sorting: '2. الفرز (Sorting)',
                       printing: '3. المطبعة (Printing)',
-                      delivery: '4. التسليم (Delivery)',
+                      machines: '4. المكن (Machines)',
+                      delivery: '5. التسليم (Delivery)',
                     };
                     const phaseLabel = phaseLabels[phase] || t(phase, phase);
                     return (
