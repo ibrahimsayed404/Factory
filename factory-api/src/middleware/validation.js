@@ -207,6 +207,11 @@ const salesExpenseCreate = [
   handleValidation,
 ];
 
+const salesExpenseUpdate = [
+  param('id').isInt({ min: 1 }).withMessage('id must be a positive integer'),
+  ...salesExpenseCreate,
+];
+
 const salesCreate = [
   body('customer_id').optional({ nullable: true, checkFalsy: true }).isInt({ min: 1 }).withMessage('customer_id must be valid'),
   body('delivery_date').optional({ checkFalsy: true }).isISO8601().withMessage('delivery_date must be YYYY-MM-DD'),
@@ -361,6 +366,7 @@ module.exports = {
   customerPaymentUpdate,
   customerPaymentDelete,
   salesExpenseCreate,
+  salesExpenseUpdate,
   salesCreate,
   salesStatusUpdate,
   accountCreate,

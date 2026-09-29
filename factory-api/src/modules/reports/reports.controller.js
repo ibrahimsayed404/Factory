@@ -1,4 +1,6 @@
 const pool = require('../../db/pool');
+const ApiError = require('../../utils/ApiError');
+const auditService = require('../../services/auditService');
 
 
 const toIsoDate = (date) => date.toISOString().slice(0, 10);
@@ -66,7 +68,71 @@ const createSalesExpense = async (req, res, next) => {
         req.user?.id || null,
       ]
     );
+    await auditService.log(req.user?.id, 'CREATE', 'business_expenses', result.rows[0].id, result.rows[0], auditService.extractReqContext(req));
     res.status(201).json(result.rows[0]);
+  } catch (err) { next(err); }
+};
+
+const EXPENSE_COLUMNS = `
+  e.id, e.expense_date::text AS expense_date, e.amount::float AS amount, e.category, e.notes,
+  e.created_by, u.name AS created_by_name, e.created_at`;
+
+// GET /api/reports/sales/expenses?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+// Every expense entry in the period, newest first, with who added it and when.
+const listSalesExpenses = async (req, res, next) => {
+  try {
+    const start = parseIsoDate(req.query.start_date) ? String(req.query.start_date) : null;
+    const end = parseIsoDate(req.query.end_date) ? String(req.query.end_date) : null;
+    const result = await pool.query(
+      `SELECT ${EXPENSE_COLUMNS}
+       FROM business_expenses e
+       LEFT JOIN users u ON u.id = e.created_by
+       WHERE ($1::date IS NULL OR e.expense_date >= $1::date)
+         AND ($2::date IS NULL OR e.expense_date <= $2::date)
+       ORDER BY e.expense_date DESC, e.id DESC`,
+      [start, end]
+    );
+    res.json(result.rows);
+  } catch (err) { next(err); }
+};
+
+const getExpenseRow = async (id) => {
+  const result = await pool.query(
+    `SELECT ${EXPENSE_COLUMNS}
+     FROM business_expenses e
+     LEFT JOIN users u ON u.id = e.created_by
+     WHERE e.id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+};
+
+// PUT /api/reports/sales/expenses/:id — fix a wrong entry; old values go to the audit log.
+const updateSalesExpense = async (req, res, next) => {
+  try {
+    const before = await getExpenseRow(req.params.id);
+    if (!before) throw new ApiError(404, 'المصروف غير موجود');
+    const { expense_date, amount, category, notes } = req.body;
+    await pool.query(
+      `UPDATE business_expenses
+       SET expense_date = $1, amount = $2, category = $3, notes = $4
+       WHERE id = $5`,
+      [expense_date || before.expense_date, amount, category || null, notes || null, req.params.id]
+    );
+    const after = await getExpenseRow(req.params.id);
+    await auditService.log(req.user?.id, 'UPDATE', 'business_expenses', req.params.id, { before, after }, auditService.extractReqContext(req));
+    res.json(after);
+  } catch (err) { next(err); }
+};
+
+// DELETE /api/reports/sales/expenses/:id — the deleted row is kept in the audit log.
+const deleteSalesExpense = async (req, res, next) => {
+  try {
+    const before = await getExpenseRow(req.params.id);
+    if (!before) throw new ApiError(404, 'المصروف غير موجود');
+    await pool.query('DELETE FROM business_expenses WHERE id = $1', [req.params.id]);
+    await auditService.log(req.user?.id, 'DELETE', 'business_expenses', req.params.id, before, auditService.extractReqContext(req));
+    res.json({ success: true });
   } catch (err) { next(err); }
 };
 
@@ -680,4 +746,4 @@ const printShopsOverview = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { salesOverview, createSalesExpense, productionOverview, hrOverview, inventoryOverview, printShopsOverview };
+module.exports = { salesOverview, createSalesExpense, listSalesExpenses, updateSalesExpense, deleteSalesExpense, productionOverview, hrOverview, inventoryOverview, printShopsOverview };
