@@ -10,6 +10,14 @@ const STAGE_MACHINES = 'machines';
 const STAGE_READY_FOR_DELIVERY = 'ready_for_delivery';
 const STAGE_DELIVERED = 'delivered';
 
+// Each step only accepts orders at the stage it belongs to, so an order cannot
+// be re-sorted after delivery, received from print twice, or skip the machines.
+const assertStage = (order, allowed, stepName) => {
+  if (!allowed.includes(order.current_stage)) {
+    throw new ApiError(400, `لا يمكن تنفيذ ${stepName}: أمر الإنتاج في مرحلة "${order.current_stage}"`);
+  }
+};
+
 // Pieces entering the machines stage for a color: what came back from the print
 // shop, else what was sorted, else what was cut.
 const stageInputQuantity = (c) => {
@@ -212,6 +220,7 @@ const submitSortingPhase = async (orderId, { colors, sorting_notes, next_action 
 
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
+    assertStage(orderRes.rows[0], [STAGE_CUTTING, STAGE_SORTING], 'الفرز');
 
     let totalSortedQty = 0;
 
@@ -291,6 +300,8 @@ const sendToPrintShop = async (orderId, { print_shop_id, colors, print_notes, se
 
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
+    assertStage(orderRes.rows[0], [STAGE_SORTING, STAGE_PRINTING], 'الإرسال للمطبعة');
+    if (orderRes.rows[0].print_sent_at) throw new ApiError(400, 'أمر الإنتاج اتبعت للمطبعة قبل كده');
 
     let totalPrintSent = 0;
 
@@ -380,6 +391,8 @@ const receiveFromPrintShop = async (orderId, { colors, print_notes, received_at 
 
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
+    assertStage(orderRes.rows[0], [STAGE_PRINTING], 'الاستلام من المطبعة');
+    if (!orderRes.rows[0].print_sent_at) throw new ApiError(400, 'أمر الإنتاج لسه ماتبعتش للمطبعة');
 
     for (const c of colors) {
       const recQty = Number.parseInt(c.print_received_quantity, 10);
@@ -445,6 +458,8 @@ const skipPrint = async (orderId) => {
     await client.query('BEGIN');
     const orderRes = await client.query('SELECT * FROM production_orders WHERE id = $1 FOR UPDATE', [orderId]);
     if (orderRes.rows.length === 0) throw new ApiError(404, 'أمر الإنتاج غير موجود');
+    assertStage(orderRes.rows[0], [STAGE_SORTING, STAGE_PRINTING], 'تخطي المطبعة');
+    if (orderRes.rows[0].print_sent_at) throw new ApiError(400, 'أمر الإنتاج في المطبعة فعلاً؛ سجّل الاستلام بدل التخطي');
 
     await client.query(
       `UPDATE production_orders
@@ -763,12 +778,12 @@ const getProductionKPIs = async () => {
       COALESCE(SUM(total_print_sent_quantity) FILTER (WHERE current_stage = 'printing'), 0) AS printing_pieces,
       COUNT(*) FILTER (WHERE current_stage = 'machines') AS machines_orders,
       COALESCE(SUM(CASE WHEN print_received_at IS NOT NULL THEN total_print_received_quantity
-                        ELSE COALESCE(total_sorted_quantity, total_cut_quantity) END)
+                        ELSE COALESCE(NULLIF(total_sorted_quantity, 0), total_cut_quantity) END)
                FILTER (WHERE current_stage = 'machines'), 0) AS machines_pieces,
       COUNT(*) FILTER (WHERE current_stage = 'ready_for_delivery') AS ready_delivery_orders,
       COALESCE(SUM(COALESCE(total_machine_quantity,
                             CASE WHEN print_received_at IS NOT NULL THEN total_print_received_quantity END,
-                            total_sorted_quantity, total_cut_quantity))
+                            NULLIF(total_sorted_quantity, 0), total_cut_quantity))
                FILTER (WHERE current_stage = 'ready_for_delivery'), 0) AS ready_delivery_pieces,
       COUNT(*) FILTER (WHERE current_stage = 'delivered') AS delivered_orders,
       COALESCE(SUM(total_delivered_quantity) FILTER (WHERE current_stage = 'delivered'), 0) AS delivered_pieces,

@@ -375,7 +375,10 @@ const productionOverview = async (req, res, next) => {
         SELECT
           current_stage AS stage,
           COUNT(*)::int AS orders,
-          COALESCE(SUM(COALESCE(total_delivered_quantity, total_machine_quantity, total_print_received_quantity, total_sorted_quantity, total_cut_quantity, quantity, 0)), 0)::int AS units
+          -- Stage totals default to 0 rather than NULL, so skip zeros to reach the
+          -- quantity the order actually has at its current stage.
+          COALESCE(SUM(COALESCE(NULLIF(total_delivered_quantity, 0), total_machine_quantity, NULLIF(total_print_received_quantity, 0),
+                                NULLIF(total_sorted_quantity, 0), NULLIF(total_cut_quantity, 0), quantity, 0)), 0)::int AS units
         FROM production_orders
         WHERE created_at >= $1::date AND created_at < ($2::date + interval '1 day')
         GROUP BY current_stage

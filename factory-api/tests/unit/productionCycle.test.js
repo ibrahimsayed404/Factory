@@ -6,11 +6,13 @@ describe('Production Cycle Unit Tests', () => {
   let mockClient;
   let queryLog;
   let orderStage;
+  let printSentAt;
   let colorRows;
 
   beforeEach(() => {
     queryLog = [];
     orderStage = 'cutting';
+    printSentAt = null;
     colorRows = [
       { id: 201, order_id: 101, color: 'أسود', cut_quantity: 200, sorted_quantity: 198, print_received_quantity: null, machine_quantity: null },
       { id: 202, order_id: 101, color: 'أبيض', cut_quantity: 300, sorted_quantity: 300, print_received_quantity: null, machine_quantity: null },
@@ -59,6 +61,7 @@ describe('Production Cycle Unit Tests', () => {
               order_name: 'بيزك',
               total_cut_quantity: 500,
               current_stage: orderStage,
+              print_sent_at: printSentAt,
               status: 'cutting',
             }],
           };
@@ -233,6 +236,8 @@ describe('Production Cycle Unit Tests', () => {
   });
 
   test('receiveFromPrintShop rejects negative received quantity', async () => {
+    orderStage = 'printing';
+    printSentAt = '2026-09-20T10:00:00Z';
     await expect(productionCycleService.receiveFromPrintShop(101, {
       colors: [{ id: 201, print_received_quantity: -10 }],
     })).rejects.toThrow('الكمية المستلمة يجب أن تكون رقم صحيح أكبر من أو يساوي صفر');
@@ -252,6 +257,7 @@ describe('Production Cycle Unit Tests', () => {
   });
 
   test('skipPrint sends the order to the machines stage', async () => {
+    orderStage = 'printing';
     const result = await productionCycleService.skipPrint(101);
     expect(result).toBeDefined();
     const updateLogged = queryLog.some(q => q.sql.includes('UPDATE production_orders') && q.params.includes('machines'));
@@ -268,6 +274,8 @@ describe('Production Cycle Unit Tests', () => {
   });
 
   test('receiving from the print shop sends the order to the machines stage', async () => {
+    orderStage = 'printing';
+    printSentAt = '2026-09-20T10:00:00Z';
     await productionCycleService.receiveFromPrintShop(101, {
       colors: [{ id: 201, print_received_quantity: 195 }, { id: 202, print_received_quantity: 300 }],
     });
@@ -351,5 +359,34 @@ describe('Production Cycle Unit Tests', () => {
     const items = salesRepository.insertSalesOrderItem.mock.calls.map(([, item]) => item.quantity);
     expect(items).toEqual([190, 300]);
     expect(salesRepository.createSalesOrderRecord.mock.calls[0][1].total_amount).toBe(4900);
+  });
+
+  describe('each step only accepts orders at its own stage', () => {
+    test('a delivered order cannot be sorted again', async () => {
+      orderStage = 'delivered';
+      await expect(productionCycleService.submitSortingPhase(101, {
+        colors: [{ id: 201, sorted_quantity: 1 }], next_action: 'printing',
+      })).rejects.toThrow('لا يمكن تنفيذ الفرز');
+    });
+
+    test('an order cannot be received from print before it was sent', async () => {
+      orderStage = 'printing';
+      await expect(productionCycleService.receiveFromPrintShop(101, {
+        colors: [{ id: 201, print_received_quantity: 1 }],
+      })).rejects.toThrow('لسه ماتبعتش للمطبعة');
+    });
+
+    test('an order at the print shop cannot skip printing', async () => {
+      orderStage = 'printing';
+      printSentAt = '2026-09-20T10:00:00Z';
+      await expect(productionCycleService.skipPrint(101)).rejects.toThrow('في المطبعة فعلاً');
+    });
+
+    test('an order that finished the machines cannot be sent to print', async () => {
+      orderStage = 'ready_for_delivery';
+      await expect(productionCycleService.sendToPrintShop(101, {
+        print_shop_id: 3, colors: [{ id: 201, print_sent_quantity: 1 }],
+      })).rejects.toThrow('لا يمكن تنفيذ الإرسال للمطبعة');
+    });
   });
 });
