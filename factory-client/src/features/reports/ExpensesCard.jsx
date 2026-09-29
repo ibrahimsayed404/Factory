@@ -40,6 +40,7 @@ export default function ExpensesCard({ startDate, endDate, onChanged }) {
   const [form, setForm] = useState(emptyForm);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
+  const [addNotice, setAddNotice] = useState('');
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [editSaving, setEditSaving] = useState(false);
@@ -59,8 +60,14 @@ export default function ExpensesCard({ startDate, endDate, onChanged }) {
   const addExpense = async () => {
     setAdding(true);
     setAddError('');
+    setAddNotice('');
     try {
       await reportsApi.addSalesExpense({ ...form, amount: Number(form.amount) });
+      // The list only covers the report period; say so instead of the entry "disappearing".
+      const outside = form.expense_date < startDate || form.expense_date > endDate;
+      setAddNotice(outside
+        ? `اتسجل المصروف بتاريخ ${form.expense_date}، وده برّه فترة التقرير الحالية (${startDate} إلى ${endDate})، عشان كده مش ظاهر في الجدول.`
+        : 'اتسجل المصروف.');
       setForm({ ...emptyForm(), expense_date: form.expense_date });
       await afterChange();
     } catch (e) {
@@ -118,6 +125,7 @@ export default function ExpensesCard({ startDate, endDate, onChanged }) {
           </Btn>
         </div>
         {addError && <div style={{ marginTop: 10 }}><ErrorMsg msg={addError} /></div>}
+        {addNotice && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>✓ {addNotice}</div>}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', fontSize: 13 }}>
