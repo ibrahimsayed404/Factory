@@ -257,9 +257,12 @@ const resolveShiftHours = (employee, fallbackHours = 8) => {
   return fallbackHours;
 };
 
-const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee) => {
+const getRates = (baseSalary, weekendSet, policy, useWeeklySalary, employee, divisorDays = null) => {
+  const weeklyDays = (Number.isFinite(Number(divisorDays)) && Number(divisorDays) > 0)
+    ? Number(divisorDays)
+    : getWeeklyWorkDays(weekendSet);
   const dailyRate = useWeeklySalary
-    ? baseSalary / getWeeklyWorkDays(weekendSet)
+    ? baseSalary / weeklyDays
     : baseSalary / policy.workingDaysPerMonth;
   const shiftHours = resolveShiftHours(employee, policy.workHoursPerDay || 8);
   const minuteRate = dailyRate / (shiftHours * 60);
@@ -312,7 +315,18 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
   // which would multiply the already-prorated base salary a second time.
   const baseSalary = fullBaseSalary;
 
-  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, shiftSource);
+  const { employed: employedDaysLimit, total: totalWorkDays } = (periodStart && periodEnd)
+    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj)
+    : { employed: getWeeklyWorkDays(weekendSet), total: getWeeklyWorkDays(weekendSet) };
+
+  // When weekly salary is prorated for partial employment (hired/terminated mid-period),
+  // divide by the employed days rather than the full week work days so the daily rate
+  // remains on the employee's true contract rate basis rather than being diluted a second time.
+  const divisorDays = (useWeeklySalary && totalWorkDays > 0 && employedDaysLimit < totalWorkDays && employedDaysLimit > 0)
+    ? employedDaysLimit
+    : null;
+
+  const { dailyRate, minuteRate } = getRates(baseSalary, weekendSet, policy, useWeeklySalary, shiftSource, divisorDays);
 
   let attendanceRecords = [];
   let approvedLeaveDates = new Set();
@@ -374,9 +388,7 @@ const computeLivePayrollFigures = async (row, employee, policy, preFetchedAttend
       )
     : 0;
 
-  const { employed: employedDaysLimit } = (periodStart && periodEnd)
-    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj)
-    : { employed: 6 };
+  // employedDaysLimit was already calculated above for rate determination
 
   const absentDays = Math.min(employedDaysLimit, absentDaysExplicit + inferredAbsentDays);
 
@@ -565,9 +577,10 @@ const calculatePayrollForEmployee = async (employee, options) => {
     ? round2(fullBaseSalary * (employed / total))
     : fullBaseSalary;
 
-  // Compute rates from the prorated base_salary so that deductions and the
-  // salary they are subtracted from are on the same basis.
-  const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary, employee);
+  // When weekly salary is prorated for partial employment, divisor is employed days
+  // so the daily rate matches the employee's true contract rate (fullBaseSalary / total).
+  const divisorDays = (useWeeklySalary && total > 0 && employed < total && employed > 0) ? employed : null;
+  const { dailyRate, minuteRate } = getRates(base_salary, weekendSet, policy, useWeeklySalary, employee, divisorDays);
 
   const totals = attendanceRecords.reduce((acc, row) => {
     const dStr = toIsoDateString(row.date);
@@ -861,9 +874,17 @@ const updateManualAdjustments = async (id, data = {}) => {
   });
   const weekStart = record.week_start ? periodStart : null;
   const weekEnd = record.week_start ? periodEnd : null;
+
+  const { employed: employedDaysLimit, total: totalWorkDays } = (periodStart && periodEnd)
+    ? countEmployedWorkDays(periodStart, periodEnd, weekendSet, empObj)
+    : { employed: 6, total: 6 };
+  const divisorDays = (useWeeklySalary && totalWorkDays > 0 && employedDaysLimit < totalWorkDays && employedDaysLimit > 0)
+    ? employedDaysLimit
+    : null;
+
   // Use the stored prorated base_salary (not the live employee.salary) so
   // deduction rates match the base they are subtracted from.
-  const { dailyRate, minuteRate } = getRates(Number(record.base_salary || 0), weekendSet, policy, useWeeklySalary, shiftSource);
+  const { dailyRate, minuteRate } = getRates(Number(record.base_salary || 0), weekendSet, policy, useWeeklySalary, shiftSource, divisorDays);
 
   const attendanceRecords = await payrollRepository.getAttendanceForPayroll(
     record.employee_id,
@@ -900,7 +921,7 @@ const updateManualAdjustments = async (id, data = {}) => {
   const regularOvertimeMinutes = Math.max(0, totals.overtime_minutes - weekendOvertimeMinutes);
   const lateWeighted = sumWeightedLateMinutes(attendanceRecords);
   const earlyLeaveMinutes = earlyLeaveChargeMinutes(totals.early_leave_minutes);
-  const absentDays = totals.absent_days + inferredAbsentDays;
+  const absentDays = Math.min(employedDaysLimit, totals.absent_days + inferredAbsentDays);
 
   const autoDeductions = round2(
     ((lateWeighted + earlyLeaveMinutes) * minuteRate) +

@@ -47,4 +47,20 @@ describe('Payroll minuteRate calculation unit tests', () => {
 
     consoleSpy.mockRestore();
   });
+
+  test('calculates correct dailyRate for prorated partial weeks using divisorDays (avoiding double proration)', () => {
+    const weekendSet = new Set([5]); // Friday weekend => 6 standard working days
+    // Employee with full weekly salary 1000, hired mid-week for 2 working days
+    // Prorated base_salary = 1000 * (2 / 6) = 333.33
+    const proratedBase = 333.33;
+    const employedDays = 2;
+    const employee = { id: 2, shift_start: '08:00', shift_end: '17:00' };
+
+    const rates = getRates(proratedBase, weekendSet, policy, true, employee, employedDays);
+
+    // Daily rate must be 333.33 / 2 = 166.665 (which matches the true contract daily rate 1000 / 6)
+    // and NOT 333.33 / 6 = 55.55
+    expect(rates.dailyRate).toBeCloseTo(166.665, 2);
+    expect(rates.dailyRate).not.toBeCloseTo(55.55, 1);
+  });
 });
